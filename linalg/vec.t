@@ -1,5 +1,5 @@
 local S = terralib.require("qs.lib.std")
-local mathlib = terralib.require("utils.mathlib")
+local mlib = terralib.require("qs.lib.tmath")
 
 
 -- Code gen helpers
@@ -38,8 +38,6 @@ end
 -- Methods are defined to operate on Vecs by-value, not by-pointer (since metamethods must be defined this way).
 local Vec
 Vec = S.memoize(function(real, dim, GPU)
-
-	local mlib = mathlib(GPU)
 
 	local struct VecT(S.Object)
 	{

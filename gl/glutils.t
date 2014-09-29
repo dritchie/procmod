@@ -1,5 +1,6 @@
 local S = terralib.require("qs.lib.std")
 local Vec = terralib.require("linalg.vec")
+local Mat = terralib.require("linalg.mat")
 local gl = terralib.require("gl.gl")
 
 
@@ -18,40 +19,53 @@ end)
 
 -- Simple camera class that packages up data needed to establish 3D
 --    viewing / projection transforms
+-- Also provides some camera manipulation primitives
 local Camera = S.memoize(function(real)
 
 	local Vec3 = Vec(real, 3)
+	local Mat4 = Mat(real, 4, 4)
 
 	local struct Camera(S.Object)
 	{
 		eye: Vec3,
 		target: Vec3,
+		forward: Vec3,
 		up: Vec3,
+		absUp: Vec3,
+		left: Vec3,
 		fovy: real,	-- in degrees
 		aspect: real,
 		znear: real,
 		zfar: real
 	}
 
-	-- Default camera is looking down -z
-	terra Camera:__init()
-		self.eye:init(0.0, 0.0, 0.0)
-		self.target:init(0.0, 0.0, -1.0)
-		self.up:init(0.0, 1.0, 0.0)
-		self.fovy = 45.0
-		self.aspect = 1.0
-		self.znear = 1.0
-		self.zfar = 100.0
-	end
-
-	terra Camera:__init(eye: Vec3, target: Vec3, up: Vec3, fovy: real, aspect: real, znear: real, zfar: real)
+	terra Camera:__init(eye: Vec3, target: Vec3, up: Vec3, worldUp: Vec3, fovy: real, aspect: real, znear: real, zfar: real) : {}
 		self.eye = eye
 		self.target = target
 		self.up = up
+		self.absUp = worldUp
 		self.fovy = fovy
 		self.aspect = aspect
 		self.znear = znear
 		self.zfar = zfar
+
+		self.up:normalize()
+		self.forward = (self.target - self.eye); self.forward:normalize()
+		self.left = self.up:cross(self.forward)
+		self.up = self.forward:cross(self.left)
+	end
+
+	-- Default camera is looking down -z
+	terra Camera:__init() : {}
+		self:__init(Vec3.create(0.0, 0.0, 0.0),    -- eye
+				   	Vec3.create(0.0, 0.0, -1.0),   -- target
+				   	Vec3.create(0.0, 1.0, 0.0),    -- up
+				   	Vec3.create(0.0, 1.0, 0.0),    -- world up
+				   	45.0,						   -- fov y
+				   	1.0,						   -- aspect
+				   	1.0,						   -- z near
+				   	100.0						   -- z far
+				   	)
 	end
 
 	-- OpenGL 1.1 style
@@ -64,6 +78,63 @@ local Camera = S.memoize(function(real)
 		gl.glMatrixMode(gl.mGL_PROJECTION())
 		gl.glLoadIdentity()
 		gl.gluPerspective(self.fovy, self.aspect, self.znear, self.zfar)
+	end
+
+	terra Camera:dollyLeft(dist: real)
+		var offset = dist*self.left
+		self.eye = self.eye + offset
+		self.target = self.target + offset
+	end
+
+	terra Camera:dollyForward(dist: real)
+		var offset = dist*self.forward
+		self.eye = self.eye + offset
+		self.target = self.target + offset
+	end
+
+	terra Camera:dollyUp(dist: real)
+		var offset = dist*self.up
+		self.eye = self.eye + offset
+		self.target = self.target + offset
+	end
+
+	terra Camera:zoom(dist: real)
+		var offset = dist*self.forward
+		self.eye = self.eye + offset
+	end
+
+	terra Camera:panLeft(theta: real)
+		var t = Mat4.rotate(self.absUp, theta, self.eye)
+		var fwd = t:transformVector(self.target - self.eye)
+		self.forward = fwd; self.forward:normalize()
+		self.up = t:transformVector(self.up)
+		self.left = t:transformVector(self.left)
+		self.target = self.eye + fwd
+	end
+
+	terra Camera:panUp(theta: real)
+		var t = Mat4.rotate(self.left, theta, self.eye)
+		var fwd = t:transformVector(self.target - self.eye)
+		self.forward = fwd; self.forward:normalize()
+		self.up = t:transformVector(self.up)
+		self.target = self.eye + fwd
+	end
+
+	terra Camera:orbitLeft(theta: real)
+		var t = Mat4.rotate(self.absUp, theta, self.target)
+		var backward = t:transformVector(self.eye - self.target)
+		self.forward = -backward; self.forward:normalize()
+		self.up = t:transformVector(self.up)
+		self.left = t:transformVector(self.left)
+		self.eye = self.target + backward
+	end
+
+	terra Camera:orbitUp(theta: real)
+		var t = Mat4.rotate(self.left, theta, self.target)
+		var backward = t:transformVector(self.eye - self.target)
+		self.forward = -backward; self.forward:normalize()
+		self.up = t:transformVector(self.up)
+		self.eye = self.target + backward
 	end
 
 	return Camera

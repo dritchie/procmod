@@ -1,6 +1,6 @@
 local S = terralib.require("qs.lib.std")
-local mathlib = terralib.require("utils.mathlib")
-local Vec = terralib.require("utils.linalg.vec")
+local mlib = terralib.require("qs.lib.tmath")
+local Vec = terralib.require("linalg.vec")
 
 
 -- Code gen helpers
@@ -39,8 +39,6 @@ end
 -- Methods are defined to operate on Mats by-value, not by-pointer (since metamethods must be defined this way).
 local Mat
 Mat = S.memoize(function(real, rowdim, coldim, GPU)
-
-	local mlib = mathlib(GPU)
 
 	local numelems = rowdim*coldim
 	local struct MatT(S.Object)
