@@ -224,7 +224,7 @@ local Material = S.memoize(function(real)
 
 	local Color4 = Vec(real, 4)
 
-	struct Material
+	local struct Material(S.Object)
 	{
 		ambient: Color4,
 		diffuse: Color4,
