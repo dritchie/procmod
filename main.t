@@ -1,6 +1,7 @@
 local S = terralib.require("qs.lib.std")
 local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
+local draw = terralib.require("draw")
 
 
 gl.exposeConstants({
@@ -39,17 +40,6 @@ local terra init()
 	camera:init()
 	light:init()
 	material:init()
-end
-
-
-local terra draw()
-	-- TEST drawing
-	gl.glBegin(gl.mGL_QUADS())
-		gl.glVertex3f(-1.0, -1.0, -3.0)
-		gl.glVertex3f(1.0, -1.0, -3.0)
-		gl.glVertex3f(1.0, 1.0, -3.0)
-		gl.glVertex3f(-1.0, 1.0, -3.0)
-	gl.glEnd()
 end
 
 
