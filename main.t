@@ -3,7 +3,9 @@ local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
 local Mesh = terralib.require("mesh")
 local generate = terralib.require("generate")
+local Vec = terralib.require("linalg.vec")
 
+local Vec3 = Vec(double, 3)
 
 gl.exposeConstants({
 	"GLUT_LEFT_BUTTON",
@@ -37,7 +39,7 @@ local prevbutton = global(int)
 local terra init()
 	gl.glClearColor(0.2, 0.2, 0.2, 1.0)
 	gl.glEnable(gl.mGL_DEPTH_TEST())
-	-- gl.glEnable(gl.mGL_CULL_FACE())
+	gl.glEnable(gl.mGL_CULL_FACE())
 	gl.glEnable(gl.mGL_NORMALIZE())
 
 	mesh:init()
