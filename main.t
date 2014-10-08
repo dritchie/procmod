@@ -1,7 +1,8 @@
 local S = terralib.require("qs.lib.std")
 local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
-local draw = terralib.require("draw")
+local Mesh = terralib.require("mesh")
+local generate = terralib.require("generate")
 
 
 gl.exposeConstants({
@@ -23,6 +24,7 @@ local LINE_WIDTH = 2.0
 
 
 -- Globals
+local mesh = global(Mesh(double))
 local camera = global(glutils.Camera(double))
 local light = global(glutils.Light(double))
 local material = global(glutils.Material(double))
@@ -31,15 +33,24 @@ local prevy = global(int)
 local prevbutton = global(int)
 
 
+
 local terra init()
 	gl.glClearColor(0.2, 0.2, 0.2, 1.0)
 	gl.glEnable(gl.mGL_DEPTH_TEST())
-	gl.glEnable(gl.mGL_CULL_FACE())
+	-- gl.glEnable(gl.mGL_CULL_FACE())
 	gl.glEnable(gl.mGL_NORMALIZE())
 
+	mesh:init()
 	camera:init()
 	light:init()
 	material:init()
+
+	generate(&mesh)
+end
+
+
+local terra draw()
+	mesh:draw()
 end
 
 
