@@ -1,4 +1,3 @@
-local S = terralib.require("qs.lib.std")
 local Mesh = terralib.require("mesh")
 local Vec = terralib.require("linalg.vec")
 local Shapes = terralib.require("shapes")

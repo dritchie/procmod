@@ -171,7 +171,7 @@ local Light = S.memoize(function(real)
 
 	terra Light:__init()
 		self.type = Directional
-		self.dir:init(1.0, 1.0, 1.0)
+		self.dir:init(-1.0, 1.0, 1.0)
 		self.ambient:init(0.3, 0.3, 0.3, 1.0)
 		self.diffuse:init(1.0, 1.0, 1.0, 1.0)
 		self.specular:init(1.0, 1.0, 1.0, 1.0)
