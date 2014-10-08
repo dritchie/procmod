@@ -2,7 +2,6 @@ local S = terralib.require("qs.lib.std")
 local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
 local Mesh = terralib.require("mesh")
-local generate = terralib.require("generate")
 local Vec = terralib.require("linalg.vec")
 
 local Vec3 = Vec(double, 3)
@@ -18,6 +17,7 @@ gl.exposeConstants({
 
 
 -- Constants
+local generateFile = "generate.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
@@ -26,6 +26,7 @@ local LINE_WIDTH = 2.0
 
 
 -- Globals
+local generate = global({&Mesh(double)}->{})
 local mesh = global(Mesh(double))
 local camera = global(glutils.Camera(double))
 local light = global(glutils.Light(double))
@@ -34,6 +35,30 @@ local prevx = global(int)
 local prevy = global(int)
 local prevbutton = global(int)
 
+
+-- Lua callback to reload and 'hot swap' the procedural generation code.
+local function reloadCode()
+	local modulefn, err = terralib.loadfile(generateFile)
+	if not modulefn then
+		error(string.format("Error loading procedural modeling code: %s", err))
+	else
+		local genfn = modulefn()
+		-- TODO: Any way to ensure this doesn't leak?
+		generate:set(genfn:getpointer())
+	end
+end
+
+
+local terra regen()
+	generate(&mesh)
+	gl.glutPostRedisplay()
+end
+
+
+local terra reloadCodeAndRegen()
+	reloadCode()
+	regen()
+end
 
 
 local terra init()
@@ -47,7 +72,7 @@ local terra init()
 	light:init()
 	material:init()
 
-	generate(&mesh)
+	reloadCodeAndRegen()
 end
 
 
@@ -133,13 +158,10 @@ end
 
 local char = macro(function(str) return `str[0] end)
 local terra keyboard(key: uint8, x: int, y: int)
-	var doRedisplay = false
 	if key == char('r') then
-		generate(&mesh)
-		doRedisplay = true
-	end
-	if doRedisplay then
-		gl.glutPostRedisplay()
+		regen()
+	elseif key == char('l') then
+		reloadCodeAndRegen()
 	end
 end
 
