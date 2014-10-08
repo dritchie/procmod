@@ -131,6 +131,18 @@ local terra motion(x: int, y: int)
 	gl.glutPostRedisplay()
 end
 
+local char = macro(function(str) return `str[0] end)
+local terra keyboard(key: uint8, x: int, y: int)
+	var doRedisplay = false
+	if key == char('r') then
+		generate(&mesh)
+		doRedisplay = true
+	end
+	if doRedisplay then
+		gl.glutPostRedisplay()
+	end
+end
+
 
 local terra main()
 
@@ -144,6 +156,7 @@ local terra main()
 	gl.glutDisplayFunc(display)
 	gl.glutMouseFunc(mouse)
 	gl.glutMotionFunc(motion)
+	gl.glutKeyboardFunc(keyboard)
 
 	init()
 	gl.glutMainLoop()
