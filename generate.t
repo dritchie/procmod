@@ -1,24 +1,12 @@
 local Mesh = terralib.require("mesh")
 local Vec = terralib.require("linalg.vec")
 local Shapes = terralib.require("shapes")
+local qs = terralib.require("qs")
 
 
 -- Main will call the function returned by this module
 
 
--- local Vec3 = Vec(double, 3)
--- local Shape = Shapes(double)
--- return terra(mesh: &Mesh(double))
--- 	mesh:clear()
--- 	-- Shape.addQuad(mesh, Vec3.create(-1.0, -1.0, -3.0),
--- 	-- 					Vec3.create(1.0, -1.0, -3.0),
--- 	-- 					Vec3.create(1.0, 1.0, -3.0),
--- 	-- 					Vec3.create(-1.0, 1.0, -3.0))
--- 	Shape.addBox(mesh, Vec3.create(0.0, 0.0, -4.0), 2.0, 2.0, 2.0)
--- end
-
-
-local qs = terralib.require("qs")
 local p = qs.program(function()
 	local Vec3 = Vec(qs.real, 3)
 	local Shape = Shapes(qs.real)
