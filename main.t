@@ -26,7 +26,7 @@ local LINE_WIDTH = 2.0
 
 
 -- Globals
-local generate = global({&Mesh(double)}->{})
+local generate = global({&Mesh(double)}->{}, 0)
 local mesh = global(Mesh(double))
 local camera = global(glutils.Camera(double))
 local light = global(glutils.Light(double))
@@ -40,24 +40,37 @@ local prevbutton = global(int)
 local function reloadCode()
 	local modulefn, err = terralib.loadfile(generateFile)
 	if not modulefn then
-		error(string.format("Error loading procedural modeling code: %s", err))
+		print(string.format("Error loading procedural modeling code: %s", err))
 	else
-		local genfn = modulefn()
-		-- TODO: Any way to ensure this doesn't leak?
-		generate:set(genfn:getpointer())
+		local function compile()
+			local genfn = modulefn()
+			-- TODO: Any way to ensure this doesn't leak?
+			generate:set(genfn:getpointer())
+		end
+		local ok, maybeerr = pcall(compile)
+		if not ok then
+			print(string.format("Error compiling procedural modeling code: %s", maybeerr))
+			return false
+		end
+		print("Procedural modeling code reloaded.")
+		return true
+	end
+end
+local reload = terralib.cast({}->bool, reloadCode)
+
+
+local terra regen()
+	-- Only generate if the generate fn pointer is not nil.
+	if generate ~= nil then
+		S.printf("Regenerating.\n")
+		generate(&mesh)
+		gl.glutPostRedisplay()
 	end
 end
 
 
-local terra regen()
-	generate(&mesh)
-	gl.glutPostRedisplay()
-end
-
-
 local terra reloadCodeAndRegen()
-	reloadCode()
-	regen()
+	if reload() then regen() end
 end
 
 
