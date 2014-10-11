@@ -12,14 +12,26 @@ local p = qs.program(function()
 	local Shape = Shapes(qs.real)
 	local MeshT = Mesh(qs.real)
 
+	local lerp = macro(function(lo, hi, t)
+		return `(1.0-t)*lo + t*hi
+	end)
+	-- So ranges stay synced during MH proposals.
+	local uniform = macro(function(lo, hi)
+		return quote
+			var u = qs.uniform(0.0, 1.0, {struc=false})
+		in
+			lerp(lo, hi, u)
+		end
+	end)
+
+	-- Wings are just a horizontally-symmetric stack of boxes
 	local genWing = qs.func(terra(mesh: &MeshT, xbase: qs.real, zlo: qs.real, zhi: qs.real)
 		var nboxes = qs.poisson(5) + 1
 		for i=0,nboxes do
-			-- TODO: ranges stay synced during MH proposals???
-			var zbase = qs.uniform(zlo, zhi, {struc=false})
-			var xlen = qs.uniform(0.25, 2.0, {struc=false})
-			var ylen = qs.uniform(0.25, 2.0, {struc=false})
-			var zlen = qs.uniform(0.5, 4.0, {struc=false})
+			var zbase = uniform(zlo, zhi)
+			var xlen = uniform(0.25, 2.0)
+			var ylen = uniform(0.25, 2.0)
+			var zlen = uniform(0.5, 4.0)
 			Shape.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
 			Shape.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
 			xbase = xbase + xlen
@@ -28,8 +40,12 @@ local p = qs.program(function()
 		end
 	end)
 
+	-- The ship body is a forward-protruding stack of boxes
+	local genBody = qs.func(terra(mesh: &MeshT, rearz: qs.real)
+
+	end)
+
 	return terra()
-		-- Stack some random, horizontally-symmetric boxes
 		var mesh : MeshT
 		mesh:init()
 		var xbase = 0.0
