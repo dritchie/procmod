@@ -28,8 +28,8 @@ local BBox = S.memoize(function(VecT)
 		escape
 			for i=0,VecT.Dimension-1 do
 				emit quote
-					self.mins[i] = self.mins[i] - amount
-					self.maxs[i] = self.maxs[i] - amount
+					self.mins(i) = self.mins(i) - amount
+					self.maxs(i) = self.maxs(i) - amount
 				end
 			end
 		end

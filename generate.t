@@ -81,7 +81,7 @@ local p = qs.program(function()
 
 	-- The ship body is a forward-protruding stack of boxes
 	-- Wings and fins are randomly attached to different body segments
-	local genBody = qs.func(terra(mesh: &MeshT, rearz: qs.real)
+	local genShip = qs.func(terra(mesh: &MeshT, rearz: qs.real)
 		var nboxes = qs.poisson(4) + 1
 		for i in qs.range(0,nboxes) do
 			var xlen = uniform(1.0, 3.0)
@@ -90,8 +90,7 @@ local p = qs.program(function()
 			Shape.addBox(mesh, Vec3.create(0.0, 0.0, rearz + 0.5*zlen), xlen, ylen, zlen)
 			rearz = rearz + zlen
 			-- Gen wing?
-			var wingprob = lerp(0.4, 0.0, i/qs.real(nboxes))
-			-- var wingprob = 0.25
+			var wingprob = lerp(0.4, 0.0, i/qs.real(nboxes)) -- var wingprob = 0.25
 			if qs.flip(wingprob) then
 				var xbase = 0.5*xlen
 				var zlo = rearz - zlen
@@ -111,21 +110,39 @@ local p = qs.program(function()
 	end)
 
 	return terra()
+		-- Generate ship mesh
 		var mesh : MeshT
 		mesh:init()
-		var xbase = 0.0
-		var zlo = -5.0
-		var zhi = 5.0
-		-- genWing(&mesh, xbase, zlo, zhi)
-		genBody(&mesh, -5.0)
+		genShip(&mesh, -5.0)
+
+		-- Compute bounding box, enforce desired dimensions
+		var bbox = mesh:bbox()
+		var dims = bbox:extents()
+		-- var targetWidth = 4.0
+		-- var targetLength = 25.0
+		var targetWidth = 10.0
+		var targetLength = 10.0
+		qs.factor(qs.softeq(dims(0), targetWidth, 0.25))
+		qs.factor(qs.softeq(dims(2), targetLength, 0.25))
+
 		return mesh
 	end
 end)
-local gen = p:compile()
+
+-- -- Forward sampling
+-- local gen = p:compile()
+-- return terra(mesh: &Mesh(double))
+-- 	mesh:destruct()
+-- 	@mesh = gen()
+-- end
+
+-- Constrained sampling with MCMC
+local query = qs.infer(p, qs.MAP, qs.MCMC(qs.TraceMHKernel(), {numsamps=2000, verbose=true}))
 return terra(mesh: &Mesh(double))
 	mesh:destruct()
-	@mesh = gen()
+	@mesh = query()
 end
+
 
 
 

@@ -2,6 +2,7 @@ local S = terralib.require("qs.lib.std")
 local gl = terralib.require("gl.gl")
 local Vec = terralib.require("linalg.vec")
 local Mat = terralib.require("linalg.mat")
+local BBox = terralib.require("bbox")
 
 
 -- Super simple mesh struct that can accumulate geometry and draw itself
@@ -13,6 +14,7 @@ local Mesh = S.memoize(function(real)
 
 	local Vec3 = Vec(real, 3)
 	local Mat4 = Mat(real, 4, 4)
+	local BBox3 = BBox(Vec3)
 
 	local glVertex = real == float and gl.glVertex3fv or gl.glVertex3dv
 	local glNormal = real == float and gl.glNormal3fv or gl.glNormal3dv
@@ -63,6 +65,15 @@ local Mesh = S.memoize(function(real)
 		for i=0,self.normals:size() do
 			self.normals(i) = xform:transformVector(self.normals(i))
 		end
+	end
+
+	terra Mesh:bbox()
+		var bbox : BBox3
+		bbox:init()
+		for v in self.vertices do
+			bbox:expand(v)
+		end
+		return bbox
 	end
 
 	return Mesh
