@@ -38,23 +38,22 @@ local prevbutton = global(int)
 
 -- Lua callback to reload and 'hot swap' the procedural generation code.
 local function reloadCode()
-	local modulefn, err = terralib.loadfile(generateFile)
-	if not modulefn then
-		print(string.format("Error loading procedural modeling code: %s", err))
-	else
-		local function compile()
-			local genfn = modulefn()
-			-- TODO: Any way to ensure this doesn't leak?
-			generate:set(genfn:getpointer())
+	local function doReload()
+		local modulefn, err = terralib.loadfile(generateFile)
+		if not modulefn then
+			error(string.format("Error loading procedural modeling code: %s", err))
 		end
-		local ok, maybeerr = pcall(compile)
-		if not ok then
-			print(string.format("Error compiling procedural modeling code: %s", maybeerr))
-			return false
-		end
-		print("Procedural modeling code reloaded.")
-		return true
+		local genfn = modulefn()
+		-- TODO: Any way to ensure this doesn't leak?
+		generate:set(genfn:getpointer())
 	end
+	local ok, maybeerr = pcall(doReload)
+	if not ok then
+		print(string.format("Error compiling procedural modeling code: %s", maybeerr))
+		return false
+	end
+	print("Procedural modeling code reloaded.")
+	return true
 end
 local reload = terralib.cast({}->bool, reloadCode)
 

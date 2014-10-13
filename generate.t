@@ -27,10 +27,10 @@ local p = qs.program(function()
 	-- Wings are just a horizontally-symmetric stack of boxes
 	local genWing = qs.func(terra(mesh: &MeshT, xbase: qs.real, zlo: qs.real, zhi: qs.real)
 		var nboxes = qs.poisson(5) + 1
-		for i=0,nboxes do
+		for i in qs.range(0,nboxes) do
 			var zbase = uniform(zlo, zhi)
 			var xlen = uniform(0.25, 2.0)
-			var ylen = uniform(0.25, 2.0)
+			var ylen = uniform(0.25, 1.25)
 			var zlen = uniform(0.5, 4.0)
 			Shape.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
 			Shape.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
@@ -41,8 +41,25 @@ local p = qs.program(function()
 	end)
 
 	-- The ship body is a forward-protruding stack of boxes
+	-- Wings are randomly attached to different body segments
 	local genBody = qs.func(terra(mesh: &MeshT, rearz: qs.real)
-
+		var nboxes = qs.poisson(4) + 1
+		for i in qs.range(0,nboxes) do
+			var xlen = uniform(1.0, 3.0)
+			var ylen = uniform(0.5, 1.0) * xlen
+			var zlen = uniform(2.0, 5.0)
+			Shape.addBox(mesh, Vec3.create(0.0, 0.0, rearz + 0.5*zlen), xlen, ylen, zlen)
+			rearz = rearz + zlen
+			-- Gen wing?
+			var genprob = lerp(0.4, 0.0, i/qs.real(nboxes))
+			-- if qs.flip(0.25) then
+			if qs.flip(genprob) then
+				var xbase = 0.5*xlen
+				var zlo = rearz - zlen
+				var zhi = rearz
+				genWing(mesh, xbase, zlo, zhi)
+			end
+		end
 	end)
 
 	return terra()
@@ -51,7 +68,8 @@ local p = qs.program(function()
 		var xbase = 0.0
 		var zlo = -5.0
 		var zhi = 5.0
-		genWing(&mesh, xbase, zlo, zhi)
+		-- genWing(&mesh, xbase, zlo, zhi)
+		genBody(&mesh, -5.0)
 		return mesh
 	end
 end)
