@@ -365,7 +365,7 @@ Vec = S.memoize(function(real, dim, GPU)
 		return self:distSq(proj)
 	end
 
-	-- Min/max/abs
+	-- Min/max/abs/floor/ceil
 	terra VecT:maxInPlace(other: VecT)
 		[entryList(self)] = [zip(entryList(self), entryList(other),
 			function(a,b) return `mlib.fmax(a, b) end)]
@@ -401,6 +401,28 @@ Vec = S.memoize(function(real, dim, GPU)
 		return v
 	end
 	VecT.methods.abs:setinlined(true)
+	terra VecT:floorInPlace()
+		[entryList(self)] = [wrap(entryList(self), function(a) return `mlib.floor(a) end)]
+	end
+	VecT.methods.floorInPlace:setinlined(true)
+	terra VecT:floor()
+		var v : VecT
+		S.copy(v, @self)
+		v:floorInPlace()
+		return v
+	end
+	VecT.methods.floor:setinlined(true)
+	terra VecT:ceilInPlace()
+		[entryList(self)] = [wrap(entryList(self), function(a) return `mlib.ceil(a) end)]
+	end
+	VecT.methods.ceilInPlace:setinlined(true)
+	terra VecT:ceil()
+		var v : VecT
+		S.copy(v, @self)
+		v:ceilInPlace()
+		return v
+	end
+	VecT.methods.ceil:setinlined(true)
 
 	-- Check for nans
 	terra VecT:isnan()

@@ -1,32 +1,34 @@
 local S = terralib.require("qs.lib.std")
+local Intersections = terralib.require("intersection")
 
-local BBox = S.memoize(function(VecT)
+local BBox = S.memoize(function(Vec)
 
-	local real = VecT.RealType
+	local real = Vec.RealType
+	local Intersection = Intersections(real)
 
-	local struct BBoxT(S.Object)
+	local struct BBox(S.Object)
 	{
-		mins: VecT,
-		maxs: VecT
+		mins: Vec,
+		maxs: Vec
 	}
 
-	terra BBoxT:__init(mins: VecT, maxs: VecT) : {}
+	terra BBox:__init(mins: Vec, maxs: Vec) : {}
 		self.mins = mins
 		self.maxs = maxs
 	end
 
-	terra BBoxT:__init() : {}
-		self:__init(VecT.create([math.huge]), VecT.create([-math.huge]))
+	terra BBox:__init() : {}
+		self:__init(Vec.create([math.huge]), Vec.create([-math.huge]))
 	end
 
-	terra BBoxT:expand(point: VecT)
+	terra BBox:expand(point: Vec)
 		self.mins:minInPlace(point)
 		self.maxs:maxInPlace(point)
 	end
 
-	terra BBoxT:expand(amount: real)
+	terra BBox:expand(amount: real)
 		escape
-			for i=0,VecT.Dimension-1 do
+			for i=0,Vec.Dimension-1 do
 				emit quote
 					self.mins(i) = self.mins(i) - amount
 					self.maxs(i) = self.maxs(i) - amount
@@ -35,25 +37,33 @@ local BBox = S.memoize(function(VecT)
 		end
 	end
 
-	terra BBoxT:contains(point: VecT)
+	terra BBox:contains(point: Vec)
 		return point > self.mins and point < self.maxs
 	end
 
-	terra BBoxT:unionWith(other: &BBoxT)
+	terra BBox:unionWith(other: &BBox)
 		self.mins:minInPlace(other.mins)
 		self.maxs:maxInPlace(other.maxs)
 	end
 
-	terra BBoxT:intersectWith(other: &BBoxT)
+	terra BBox:intersectWith(other: &BBox)
 		self.mins:maxInPlace(other.mins)
 		self.maxs:minInPlace(other.maxs)
 	end
 
-	terra BBoxT:extents()
+	terra BBox:extents()
 		return self.maxs - self.mins
 	end
 
-	return BBoxT
+	terra BBox:intersects(bbox: &BBox)
+		return self.mins < bbox.maxs and bbox.mins < self.maxs
+	end
+
+	terra BBox:intersects(p0: Vec, p1: Vec, p2: Vec)
+		return Intersection.intersectTriangleBBox(self.mins, self.maxs, p0, p1, p2)
+	end
+
+	return BBox
 
 end)
 
