@@ -98,7 +98,7 @@ local p = qs.program(function()
 				genWing(mesh, xbase, zlo, zhi)
 			end
 			-- Gen fin?
-			var finprob = 0.25
+			var finprob = 0.7
 			if qs.flip(finprob) then
 				var ybase = 0.5*ylen
 				var zlo = rearz - zlen
