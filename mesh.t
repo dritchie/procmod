@@ -91,6 +91,7 @@ local Mesh = S.memoize(function(real)
 		-- Take care to ensure that we don't loop over any voxels that are outside the actual grid.
 		minI:maxInPlace(Vec3.create(0.0))
 		maxI:minInPlace(Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices)))
+		-- S.printf("===========================\n")
 		-- S.printf("mins: %g, %g, %g   |   maxs: %g, %g, %g\n",
 		-- 	tribb.mins(0), tribb.mins(1), tribb.mins(2), tribb.maxs(0), tribb.maxs(1), tribb.maxs(2))
 		-- S.printf("minI: %g, %g, %g   |   maxi: %g, %g, %g\n",
@@ -104,7 +105,9 @@ local Mesh = S.memoize(function(real)
 						v + Vec3.create(0.5)
 					)
 					-- Triangle has to intersect the voxel
+					-- S.printf("----------------------\n")
 					if voxel:intersects(v0, v1, v2) then
+						-- S.printf("box/tri intersect PASSED\n")
 						-- If we only want a hollow voxelization, then we're done.
 						if not solid then
 							outgrid:setVoxel(i,j,k)
@@ -134,6 +137,9 @@ local Mesh = S.memoize(function(real)
 								end
 							end
 						end
+					-- end
+					else
+						-- S.printf("box/tri intersect FAILED\n")
 					end
 				end
 			end
@@ -141,7 +147,7 @@ local Mesh = S.memoize(function(real)
 	end
 
 	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, xres: uint, yres: uint, zres: uint, solid: bool) : {}
-		outgrid:resize(xres, yres, zres)
+		outgrid:resize(yres, xres, zres)
 		var extents = bounds:extents()
 		var xsize = extents(0)/xres
 		var ysize = extents(1)/yres

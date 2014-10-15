@@ -105,8 +105,10 @@ local Intersection = S.memoize(function(real)
 			pnorm = -pnorm
 		end
 		if intersectBoxPlane(bmins, bmaxs, pdist, pnorm) ~= 1 then
+			-- S.printf("box/plane intersect FAILED\n")
 			return false
 		end
+		-- S.printf("box/plane intersect PASSED\n")
 		var center = 0.5 * (bmins + bmaxs)
 		var extent = bmaxs - center
 		var v1 = (p0 - center)
