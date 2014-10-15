@@ -39,28 +39,28 @@ terra BinaryGrid3D:isVoxelSet(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
 	var baseIdx = linidx / BITS_PER_UINT
 	var localidx = linidx % BITS_PER_UINT
-	return self.data[baseIdx] and (1 << localidx) != 0
+	return (self.data[baseIdx] and (1 << localidx)) ~= 0
 end
 
 terra BinaryGrid3D:setVoxel(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
 	var baseIdx = linidx / BITS_PER_UINT
 	var localidx = linidx % BITS_PER_UINT
-	return self.data[baseIdx] = self.data[baseIdx] or (1 << localidx)
+	self.data[baseIdx] = self.data[baseIdx] or (1 << localidx)
 end
 
 terra BinaryGrid3D:toggleVoxel(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
 	var baseIdx = linidx / BITS_PER_UINT
 	var localidx = linidx % BITS_PER_UINT
-	return self.data[baseIdx] = self.data[baseIdx] ^ (1 << localidx)
+	self.data[baseIdx] = self.data[baseIdx] ^ (1 << localidx)
 end
 
 terra BinaryGrid3D:clearVoxel(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
 	var baseIdx = linidx / BITS_PER_UINT
 	var localidx = linidx % BITS_PER_UINT
-	return self.data[baseIdx] = self.data[baseIdx] and not (1 << localidx)
+	self.data[baseIdx] = self.data[baseIdx] and not (1 << localidx)
 end
 
 -- Write to .binvox file format

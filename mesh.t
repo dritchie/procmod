@@ -80,7 +80,7 @@ local Mesh = S.memoize(function(real)
 
 	local Vec2 = Vec(real, 2)
 	local Intersection = Intersections(real)
-	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool)
+	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool) : {}
 		var diagLenSq = 3.0
 		-- Test triangles only if they are small
 		if (v0-v1):normSq() < diagLenSq and (v0-v2):normSq() < diagLenSq and (v1-v2):normSq() < diagLenSq then
@@ -105,20 +105,21 @@ local Mesh = S.memoize(function(real)
 							else
 								-- First, check that the voxel center even lies within the 2d projection
 								--    of the triangle (early out to try and avoid ray tests)
-								if Intersection.intersectPointTriangle(
+								var pointTriIsect = Intersection.intersectPointTriangle(
 									Vec2.create(v0(0), v0(1)),
 									Vec2.create(v1(0), v1(1)),
 									Vec2.create(v2(0), v2(1)),
 									Vec2.create(v(0), v(1))
-								) then
+								)
+								if pointTriIsect then
 									-- Trace rays (basically, we don't want to fill in a line of internal
 									--    voxels if this triangle only intersects a sliver of this voxel--that
 									--    would 'bloat' our voxelixation and make it inaccurate)
 									var rd0 = Vec3.create(0.0, 0.0, 1.0)
 									var rd1 = Vec3.create(0.0, 0.0, -1.0)
-									var t0 : real, t1 : real, u0 : real, u1 : real, v0 : real, v1 : real
-									var b0 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd0, &t0, &u0, &v0)
-									var b0 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd1, &t1, &u1, &v1)
+									var t0 : real, t1 : real, _u0 : real, _u1 : real, _v0 : real, _v1 : real
+									var b0 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd0, &t0, &_u0, &_v0, 0.0, 1.0)
+									var b1 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd1, &t1, &_u1, &_v1, 0.0, 1.0)
 									if (b0 and t0 <= 0.5) or (b1 and t1 <= 0.5) then
 										for kk=k,outgrid.slices do
 											outgrid:toggleVoxel(i,j,kk)

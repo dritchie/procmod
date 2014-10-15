@@ -55,6 +55,32 @@ local BBox = S.memoize(function(Vec)
 		return self.maxs - self.mins
 	end
 
+	terra BBox:center()
+		return 0.5 * (self.mins + self.maxs)
+	end
+
+	terra BBox:cubify()
+		-- Expand all dims to be the same size as the largest one
+		var maxlen = 0.0
+		var absextends = self:extents():abs()
+		var center = self:center()
+		escape
+			for i=0,Vec.Dimension-1 do
+				emit quote
+					if absextends(i) > maxlen then
+						maxlen = absextends(i)
+					end
+				end
+			end
+			for i=0,Vec.Dimension-1 do
+				emit quote
+					self.mins(i) = center(i) - 0.5*maxlen
+					self.maxs(i) = center(i) + 0.5*maxlen
+				end
+			end
+		end
+	end
+
 	terra BBox:intersects(bbox: &BBox)
 		return self.mins < bbox.maxs and bbox.mins < self.maxs
 	end
@@ -69,3 +95,6 @@ end)
 
 
 return BBox
+
+
+

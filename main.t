@@ -23,6 +23,7 @@ local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
 local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
+local VOXEL_SIZE = 0.1
 
 
 -- Globals
@@ -70,6 +71,18 @@ end
 
 local terra reloadCodeAndRegen()
 	if reload() then regen() end
+end
+
+
+local BinaryGrid = terralib.require("binaryGrid3d")
+local terra voxelizeMesh()
+	S.printf("Voxelizing mesh; saving output.\n")
+	-- Need to use cube bounds, so we'll expand the mesh bounds
+	var bounds = mesh:bbox()
+	bounds:cubify()
+	var grid = BinaryGrid.salloc():init()
+	mesh:voxelize(grid, VOXEL_SIZE, &bounds, true)
+	grid:saveToFile("voxels")
 end
 
 
@@ -174,6 +187,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		regen()
 	elseif key == char('l') then
 		reloadCodeAndRegen()
+	elseif key == char('v') then
+		voxelizeMesh()
 	end
 end
 

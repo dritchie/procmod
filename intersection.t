@@ -22,7 +22,7 @@ local Intersection = S.memoize(function(real)
 		var u = f * s:dot(h)
 		if u < 0.0 or u > 1.0 then return false end
 		var q = s:cross(e1)
-		var v = f * d:dot(q)
+		var v = f * rd:dot(q)
 		if v < 0.0 or v > 1.0 then return false end
 		var t = f * e2:dot(q)
 		if t <= tmax and t >= tmin then
@@ -48,7 +48,7 @@ local Intersection = S.memoize(function(real)
 
 	-- Returns 1 if intersects; 0 if front, -1 if back
 	local BOX_PLANE_EPSILON = 0.00001
-	local terra intersectBoxPlane(bmins: Vec3, bmaxs: Vec3, pdist: Vec3, pnorm: Vec3)
+	local terra intersectBoxPlane(bmins: Vec3, bmaxs: Vec3, pdist: real, pnorm: Vec3)
 		var center = 0.5 * (bmaxs - bmins)
 		var extent = bmaxs - center
 		var fOrigin = pnorm:dot(center)
@@ -85,13 +85,13 @@ local Intersection = S.memoize(function(real)
 		end
 	end)
 	local TEST_CROSS_EDGE_BOX_X_AXIS_MCR = macro(function(edge,absolute_edge,pointa,pointb,extend)
-		return TEST_CROSS_EDGE_BOX_MCR(edge,absolute_edge,pointa,pointb,extend,2,1,1,2)
+		return `TEST_CROSS_EDGE_BOX_MCR(edge,absolute_edge,pointa,pointb,extend,2,1,1,2)
 	end)
 	local TEST_CROSS_EDGE_BOX_Y_AXIS_MCR = macro(function(edge,absolute_edge,pointa,pointb,extend)
-		return TEST_CROSS_EDGE_BOX_MCR(edge,absolute_edge,pointa,pointb,extend,0,2,2,0)
+		return `TEST_CROSS_EDGE_BOX_MCR(edge,absolute_edge,pointa,pointb,extend,0,2,2,0)
 	end)
 	local TEST_CROSS_EDGE_BOX_Z_AXIS_MCR = macro(function(edge,absolute_edge,pointa,pointb,extend)
-		return TEST_CROSS_EDGE_BOX_MCR(edge,absolute_edge,pointa,pointb,extend,1,0,0,1)
+		return `TEST_CROSS_EDGE_BOX_MCR(edge,absolute_edge,pointa,pointb,extend,1,0,0,1)
 	end)
 
 	terra Intersection.intersectTriangleBBox(bmins: Vec3, bmaxs: Vec3, p0: Vec3, p1: Vec3, p2: Vec3)
@@ -101,7 +101,7 @@ local Intersection = S.memoize(function(real)
 			pdist = -pdist
 			pnorm = -pnorm
 		end
-		if intersectBoxPlane(bmins, bmaxs, p0, pdist, pnorm) ~= 1 then
+		if intersectBoxPlane(bmins, bmaxs, pdist, pnorm) ~= 1 then
 			return false
 		end
 		var center = 0.5 * (bmins + bmaxs)
@@ -130,6 +130,8 @@ local Intersection = S.memoize(function(real)
 
 		return true
 	end
+
+	return Intersection
 
 end)
 
