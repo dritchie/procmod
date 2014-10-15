@@ -24,7 +24,7 @@ local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
 local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
-local VOXEL_SIZE = 0.1
+local VOXEL_SIZE = 0.3
 
 
 -- Globals
