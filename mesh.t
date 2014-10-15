@@ -81,49 +81,55 @@ local Mesh = S.memoize(function(real)
 	local Vec2 = Vec(real, 2)
 	local Intersection = Intersections(real)
 	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool) : {}
-		var diagLenSq = 3.0
-		-- Test triangles only if they are small
-		if (v0-v1):normSq() < diagLenSq and (v0-v2):normSq() < diagLenSq and (v1-v2):normSq() < diagLenSq then
-			var tribb = BBox3.salloc():init()
-			tribb:expand(v0); tribb:expand(v1); tribb:expand(v2)
-			var minI = tribb.mins:floor()
-			var maxI = tribb.maxs:ceil()
-			for i=uint(minI(0)),uint(maxI(0)) do
-				for j=uint(minI(1)),uint(maxI(1)) do
-					for k=uint(minI(2)),uint(maxI(2)) do
-						var v = Vec3.create(real(i), real(j), real(k))
-						var voxel = BBox3.salloc():init()
-						var eps = 0.0000
-						voxel:expand(v - Vec3.create(0.5-eps))
-						voxel:expand(v + Vec3.create(0.5+eps))
-						-- Triangle has to intersect the voxel
-						if voxel:intersects(v0, v1, v2) then
-							-- If we only want a hollow voxelization, then we're done.
-							if not solid then
-								outgrid:setVoxel(i,j,k)
-							-- Otherwise, we need to 'line trace' to fill in internal voxels.
-							else
-								-- First, check that the voxel center even lies within the 2d projection
-								--    of the triangle (early out to try and avoid ray tests)
-								var pointTriIsect = Intersection.intersectPointTriangle(
-									Vec2.create(v0(0), v0(1)),
-									Vec2.create(v1(0), v1(1)),
-									Vec2.create(v2(0), v2(1)),
-									Vec2.create(v(0), v(1))
-								)
-								if pointTriIsect then
-									-- Trace rays (basically, we don't want to fill in a line of internal
-									--    voxels if this triangle only intersects a sliver of this voxel--that
-									--    would 'bloat' our voxelixation and make it inaccurate)
-									var rd0 = Vec3.create(0.0, 0.0, 1.0)
-									var rd1 = Vec3.create(0.0, 0.0, -1.0)
-									var t0 : real, t1 : real, _u0 : real, _u1 : real, _v0 : real, _v1 : real
-									var b0 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd0, &t0, &_u0, &_v0, 0.0, 1.0)
-									var b1 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd1, &t1, &_u1, &_v1, 0.0, 1.0)
-									if (b0 and t0 <= 0.5) or (b1 and t1 <= 0.5) then
-										for kk=k,outgrid.slices do
-											outgrid:toggleVoxel(i,j,kk)
-										end
+		var tribb = BBox3.salloc():init()
+		tribb:expand(v0); tribb:expand(v1); tribb:expand(v2)
+		-- If a triangle is perfectly axis-aligned, it will 'span' zero voxels, so the loops below
+		--    will do nothing. To get around this, we expand the bbox a little bit.
+		tribb:expand(0.000001)
+		var minI = tribb.mins:floor()
+		var maxI = tribb.maxs:ceil()
+		-- Take care to ensure that we don't loop over any voxels that are outside the actual grid.
+		minI:maxInPlace(Vec3.create(0.0))
+		maxI:minInPlace(Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices)))
+		-- S.printf("mins: %g, %g, %g   |   maxs: %g, %g, %g\n",
+		-- 	tribb.mins(0), tribb.mins(1), tribb.mins(2), tribb.maxs(0), tribb.maxs(1), tribb.maxs(2))
+		-- S.printf("minI: %g, %g, %g   |   maxi: %g, %g, %g\n",
+		-- 	minI(0), minI(1), minI(2), maxI(0), maxI(1), maxI(2))
+		for i=uint(minI(1)),uint(maxI(1)) do
+			for j=uint(minI(0)),uint(maxI(0)) do
+				for k=uint(minI(2)),uint(maxI(2)) do
+					var v = Vec3.create(real(j), real(i), real(k))
+					var voxel = BBox3.salloc():init(
+						v - Vec3.create(0.5),
+						v + Vec3.create(0.5)
+					)
+					-- Triangle has to intersect the voxel
+					if voxel:intersects(v0, v1, v2) then
+						-- If we only want a hollow voxelization, then we're done.
+						if not solid then
+							outgrid:setVoxel(i,j,k)
+						-- Otherwise, we need to 'line trace' to fill in internal voxels.
+						else
+							-- First, check that the voxel center even lies within the 2d projection
+							--    of the triangle (early out to try and avoid ray tests)
+							var pointTriIsect = Intersection.intersectPointTriangle(
+								Vec2.create(v0(0), v0(1)),
+								Vec2.create(v1(0), v1(1)),
+								Vec2.create(v2(0), v2(1)),
+								Vec2.create(v(0), v(1))
+							)
+							if pointTriIsect then
+								-- Trace rays (basically, we don't want to fill in a line of internal
+								--    voxels if this triangle only intersects a sliver of this voxel--that
+								--    would 'bloat' our voxelixation and make it inaccurate)
+								var rd0 = Vec3.create(0.0, 0.0, 1.0)
+								var rd1 = Vec3.create(0.0, 0.0, -1.0)
+								var t0 : real, t1 : real, _u0 : real, _u1 : real, _v0 : real, _v1 : real
+								var b0 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd0, &t0, &_u0, &_v0, 0.0, 1.0)
+								var b1 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd1, &t1, &_u1, &_v1, 0.0, 1.0)
+								if (b0 and t0 <= 0.5) or (b1 and t1 <= 0.5) then
+									for kk=k,outgrid.slices do
+										outgrid:toggleVoxel(i,j,kk)
 									end
 								end
 							end
@@ -131,23 +137,16 @@ local Mesh = S.memoize(function(real)
 					end
 				end
 			end
-		-- Otherwise, recursively subdivide
-		else
-			var e0 = 0.5*(v0+v1)
-			var e1 = 0.5*(v1+v2)
-			var e2 = 0.5*(v2+v0)
-			voxelizeTriangle(outgrid, v0, e0, e2, solid)
-			voxelizeTriangle(outgrid, e0, v1, e1, solid)
-			voxelizeTriangle(outgrid, e1, v2, e2, solid)
-			voxelizeTriangle(outgrid, e0, e1, e2, solid)
 		end
 	end
 
-	terra Mesh:voxelize(outgrid: &BinaryGrid, voxelSize: real, bounds: &BBox3, solid: bool) : {}
-		outgrid:destruct()
-		var numvox = bounds:extents() / voxelSize
-		outgrid:init(uint(numvox(1)), uint(numvox(0)), uint(numvox(2)))
-		var worldtovox = Mat4.scale(1.0 / voxelSize)
+	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, xres: uint, yres: uint, zres: uint, solid: bool) : {}
+		outgrid:resize(xres, yres, zres)
+		var extents = bounds:extents()
+		var xsize = extents(0)/xres
+		var ysize = extents(1)/yres
+		var zsize = extents(2)/zres
+		var worldtovox = Mat4.scale(1.0/xsize, 1.0/ysize, 1.0/zsize) * Mat4.translate(-bounds.mins)
 		var numtris = self.indices:size() / 3
 		var gridbounds = BBox3.salloc():init(
 			Vec3.create(0.0),
@@ -160,15 +159,26 @@ local Mesh = S.memoize(function(real)
 			var tribb = BBox3.salloc():init()
 			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
 			if tribb:intersects(gridbounds) then
+				-- S.printf("0\n")
 				voxelizeTriangle(outgrid, p0, p1, p2, solid)
 			end
 		end
 	end
 
+	-- Find xres,yres,zres given a target voxel size
+	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, voxelSize: real, solid: bool) : {}
+		var numvox = (bounds:extents() / voxelSize):ceil()
+		self:voxelize(outgrid, bounds, uint(numvox(0)), uint(numvox(1)), uint(numvox(2)), solid)
+	end
+
 	-- Use mesh's bounding box as bounds for voxelization
+	terra Mesh:voxelize(outgrid: &BinaryGrid, xres: uint, yres: uint, zres: uint, solid: bool) : {}
+		var bounds = self:bbox()
+		self:voxelize(outgrid, &bounds, xres, yres, zres, solid)
+	end
 	terra Mesh:voxelize(outgrid: &BinaryGrid, voxelSize: real, solid: bool) : {}
 		var bounds = self:bbox()
-		self:voxelize(outgrid, voxelSize, &bounds, solid)
+		self:voxelize(outgrid, &bounds, voxelSize, solid)
 	end
 
 	return Mesh

@@ -24,7 +24,7 @@ local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
 local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
-local VOXEL_SIZE = 0.1
+local VOXEL_SIZE = 0.3
 
 
 -- Globals
@@ -76,11 +76,11 @@ end
 
 
 local terra voxelizeMeshAndDisplay()
-	S.printf("Voxelizing mesh; saving output.\n")
+	S.printf("Voxelizing mesh and displaying.\n")
 	var bounds = mesh:bbox()
 	var grid = BinaryGrid.salloc():init()
-	mesh:voxelize(grid, VOXEL_SIZE, &bounds, false)
-	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds, VOXEL_SIZE)
+	mesh:voxelize(grid, &bounds, VOXEL_SIZE, false)
+	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
 	gl.glutPostRedisplay()
 end
 

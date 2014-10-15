@@ -31,14 +31,14 @@ local BBox = S.memoize(function(Vec)
 			for i=0,Vec.Dimension-1 do
 				emit quote
 					self.mins(i) = self.mins(i) - amount
-					self.maxs(i) = self.maxs(i) - amount
+					self.maxs(i) = self.maxs(i) + amount
 				end
 			end
 		end
 	end
 
 	terra BBox:contains(point: Vec)
-		return point > self.mins and point < self.maxs
+		return point >= self.mins and point <= self.maxs
 	end
 
 	terra BBox:unionWith(other: &BBox)
@@ -82,7 +82,7 @@ local BBox = S.memoize(function(Vec)
 	end
 
 	terra BBox:intersects(bbox: &BBox)
-		return self.mins < bbox.maxs and bbox.mins < self.maxs
+		return self.mins <= bbox.maxs and bbox.mins <= self.maxs
 	end
 
 	terra BBox:intersects(p0: Vec, p1: Vec, p2: Vec)

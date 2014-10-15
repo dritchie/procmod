@@ -21,19 +21,39 @@ terra BinaryGrid3D:__init()
 end
 
 terra BinaryGrid3D:__init(rows: uint, cols: uint, slices: uint)
-	self.rows = rows
-	self.cols = cols
-	self.slices = slices
-	var numentries = rows*cols*slices
-	var numuints = (numentries + BITS_PER_UINT - 1) / BITS_PER_UINT
-	-- TODO: Make also work on CUDA?
-	self.data = [&uint](S.malloc(numuints*sizeof(uint)))
+	self:resize(rows, cols, slices)
 end
 
 terra BinaryGrid3D:__destruct()
 	-- TODO: Make also work on CUDA?
-	if self.data ~= nil then S.free(self.data) end
+	if self.data ~= nil then
+		S.free(self.data)
+	end
 end
+
+terra BinaryGrid3D:resize(rows: uint, cols: uint, slices: uint)
+	self.rows = rows
+	self.cols = cols
+	self.slices = slices
+	if self.data ~= nil then
+		S.free(self.data)
+	end
+	-- TODO: Make also work on CUDA?
+	self.data = [&uint](S.malloc(self:numuints()*sizeof(uint)))
+	self:clear()
+end
+
+terra BinaryGrid3D:clear()
+	for i=0,self:numuints() do
+		self.data[i] = 0
+	end
+end
+
+terra BinaryGrid3D:numuints()
+	var numentries = self.rows*self.cols*self.slices
+	return (numentries + BITS_PER_UINT - 1) / BITS_PER_UINT
+end
+BinaryGrid3D.methods.numuints:setinlined(true)
 
 terra BinaryGrid3D:isVoxelSet(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
@@ -69,8 +89,12 @@ BinaryGrid3D.toMesh = S.memoize(function(real)
 	local BBox3 = terralib.require("bbox")(Vec3)
 	local Shape = terralib.require("shapes")(real)
 	local lerp = macro(function(lo, hi, t) return `(1.0-t)*lo + t*hi end)
-	return terra(grid: &BinaryGrid3D, mesh: &Mesh, bounds: &BBox3, voxelSize: real)
+	return terra(grid: &BinaryGrid3D, mesh: &Mesh, bounds: &BBox3)
 		mesh:clear()
+		var extents = bounds:extents()
+		var xsize = extents(0)/grid.cols
+		var ysize = extents(1)/grid.rows
+		var zsize = extents(2)/grid.slices
 		for i=0,grid.rows do
 			var y = lerp(bounds.mins(1), bounds.maxs(1), (i+0.5)/grid.rows)
 			for j=0,grid.cols do
@@ -78,7 +102,7 @@ BinaryGrid3D.toMesh = S.memoize(function(real)
 				for k=0,grid.slices do
 					var z = lerp(bounds.mins(2), bounds.maxs(2), (k+0.5)/grid.slices)
 					if grid:isVoxelSet(i,j,k) then
-						Shape.addBox(mesh, Vec3.create(x,y,z), voxelSize, voxelSize, voxelSize)
+						Shape.addBox(mesh, Vec3.create(x,y,z), xsize, ysize, zsize)
 					end
 				end
 			end

@@ -110,20 +110,25 @@ local p = qs.program(function()
 	end)
 
 	return terra()
-		-- Generate ship mesh
 		var mesh : MeshT
 		mesh:init()
-		genShip(&mesh, -5.0)
 
-		-- Compute bounding box, enforce desired dimensions
-		var bbox = mesh:bbox()
-		var dims = bbox:extents()
-		-- var targetWidth = 4.0
-		-- var targetLength = 25.0
-		var targetWidth = 10.0
-		var targetLength = 10.0
-		qs.factor(qs.softeq(dims(0), targetWidth, 0.25))
-		qs.factor(qs.softeq(dims(2), targetLength, 0.25))
+		-- -- Generate ship mesh
+		-- genShip(&mesh, -5.0)
+
+		-- -- Compute bounding box, enforce desired dimensions
+		-- var bbox = mesh:bbox()
+		-- var dims = bbox:extents()
+		-- -- var targetWidth = 4.0
+		-- -- var targetLength = 25.0
+		-- var targetWidth = 10.0
+		-- var targetLength = 10.0
+		-- qs.factor(qs.softeq(dims(0), targetWidth, 0.25))
+		-- qs.factor(qs.softeq(dims(2), targetLength, 0.25))
+
+		-- DEBUGGING: Just make a single box
+		var dummy = uniform(0.0, 1.0)
+		Shape.addBox(&mesh, Vec3.create(0.0, 0.0, 0.0), 2.0, 2.0, 2.0)
 
 		return mesh
 	end
