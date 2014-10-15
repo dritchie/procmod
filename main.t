@@ -4,8 +4,10 @@ local glutils = terralib.require("gl.glutils")
 local Mesh = terralib.require("mesh")
 local Vec = terralib.require("linalg.vec")
 local BinaryGrid = terralib.require("binaryGrid3d")
+local BBox = terralib.require("bbox")
 
 local Vec3 = Vec(double, 3)
+local BBox3 = BBox(Vec3)
 
 gl.exposeConstants({
 	"GLUT_LEFT_BUTTON",
@@ -25,6 +27,7 @@ local DOLLY_SPEED = 0.01
 local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
 local VOXEL_SIZE = 0.3
+local BOUNDS_EXPAND = 0.1
 
 
 -- Globals
@@ -36,6 +39,8 @@ local material = global(glutils.Material(double))
 local prevx = global(int)
 local prevy = global(int)
 local prevbutton = global(int)
+local bounds = global(BBox3)
+local shouldDrawGrid = global(bool, 0)
 
 
 -- Lua callback to reload and 'hot swap' the procedural generation code.
@@ -65,6 +70,8 @@ local terra regen()
 	if generate ~= nil then
 		S.printf("Regenerating.\n")
 		generate(&mesh)
+		bounds = mesh:bbox()
+		bounds:expand(BOUNDS_EXPAND)
 		gl.glutPostRedisplay()
 	end
 end
@@ -77,8 +84,6 @@ end
 
 local terra voxelizeMeshAndDisplay()
 	S.printf("Voxelizing mesh and displaying.\n")
-	var bounds = mesh:bbox()
-	bounds:expand(0.1)
 	var grid = BinaryGrid.salloc():init()
 	mesh:voxelize(grid, &bounds, VOXEL_SIZE, false)
 	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
@@ -89,24 +94,20 @@ end
 local terra init()
 	gl.glClearColor(0.2, 0.2, 0.2, 1.0)
 	gl.glEnable(gl.mGL_DEPTH_TEST())
-	gl.glEnable(gl.mGL_CULL_FACE())
+	-- gl.glEnable(gl.mGL_CULL_FACE())
 	gl.glEnable(gl.mGL_NORMALIZE())
 
 	mesh:init()
 	camera:init()
 	light:init()
 	material:init()
+	bounds:init()
 
 	reloadCodeAndRegen()
 end
 
 
-local terra draw()
-	mesh:draw()
-end
-
-
-local terra shadingDrawPass()
+local terra shadingMeshDrawPass()
 	gl.glEnable(gl.mGL_LIGHTING())
 	gl.glShadeModel(gl.mGL_FLAT())
 	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_FILL())
@@ -117,26 +118,88 @@ local terra shadingDrawPass()
 	light:setupGLLight(0)
 	material:setupGLMaterial()
 
-	draw()
+	mesh:draw()
 end
 
 
-local terra wireframeDrawPass()
+local terra wireframeMeshDrawPass()
 	gl.glDisable(gl.mGL_POLYGON_OFFSET_FILL())
 	gl.glDisable(gl.mGL_LIGHTING())
 	gl.glColor4d(0.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
 
-	draw()
+	mesh:draw()
+end
+
+local terra drawGrid()
+	gl.glDisable(gl.mGL_POLYGON_OFFSET_FILL())
+	gl.glDisable(gl.mGL_LIGHTING())
+	gl.glColor4d(1.0, 0.0, 0.0, 1.0)
+	gl.glLineWidth(LINE_WIDTH)
+	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
+	var extents = bounds:extents()
+	var numvox = (extents / VOXEL_SIZE):ceil()
+	var xsize = extents(0) / numvox(0)
+	var ysize = extents(1) / numvox(1)
+	var zsize = extents(2) / numvox(2)
+	gl.glMatrixMode(gl.mGL_MODELVIEW())
+	gl.glPushMatrix()
+	gl.glTranslated(bounds.mins(0), bounds.mins(1), bounds.mins(2))
+	gl.glScaled(xsize, ysize, zsize)
+	for xi=0,uint(numvox(0)) do
+		var x = double(xi)
+		for yi=0,uint(numvox(1)) do
+			var y = double(yi)
+			for zi=0,uint(numvox(1)) do
+				var z = double(zi)
+				gl.glBegin(gl.mGL_QUADS())
+					-- Face
+					gl.glVertex3d(x, y, z)
+					gl.glVertex3d(x, y, z+1)
+					gl.glVertex3d(x, y+1, z+1)
+					gl.glVertex3d(x, y+1, z)
+					-- Face
+					gl.glVertex3d(x, y, z)
+					gl.glVertex3d(x, y, z+1)
+					gl.glVertex3d(x+1, y, z+1)
+					gl.glVertex3d(x+1, y, z)
+					-- Face
+					gl.glVertex3d(x, y, z)
+					gl.glVertex3d(x, y+1, z)
+					gl.glVertex3d(x+1, y+1, z)
+					gl.glVertex3d(x+1, y, z)
+					-- Face
+					gl.glVertex3d(x+1, y+1, z+1)
+					gl.glVertex3d(x+1, y+1, z)
+					gl.glVertex3d(x+1, y, z)
+					gl.glVertex3d(x+1, y, z+1)
+					-- Face
+					gl.glVertex3d(x+1, y+1, z+1)
+					gl.glVertex3d(x+1, y+1, z)
+					gl.glVertex3d(x, y+1, z)
+					gl.glVertex3d(x, y+1, z+1)
+					-- Face
+					gl.glVertex3d(x+1, y+1, z+1)
+					gl.glVertex3d(x+1, y, z+1)
+					gl.glVertex3d(x, y, z+1)
+					gl.glVertex3d(x, y+1, z+1)
+				gl.glEnd()
+			end
+		end
+	end
+	gl.glPopMatrix()
 end
 
 
 local terra display()
 	gl.glClear(gl.mGL_COLOR_BUFFER_BIT() or gl.mGL_DEPTH_BUFFER_BIT())
 
-	shadingDrawPass()
-	wireframeDrawPass()
+	shadingMeshDrawPass()
+	wireframeMeshDrawPass()
+	if shouldDrawGrid then
+		drawGrid()
+	end
 
 	gl.glutSwapBuffers()
 end
@@ -189,6 +252,9 @@ local terra keyboard(key: uint8, x: int, y: int)
 		reloadCodeAndRegen()
 	elseif key == char('v') then
 		voxelizeMeshAndDisplay()
+	elseif key == char('g') then
+		shouldDrawGrid = not shouldDrawGrid
+		gl.glutPostRedisplay()
 	end
 end
 
