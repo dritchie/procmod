@@ -49,17 +49,20 @@ local Intersection = S.memoize(function(real)
 	-- Returns 1 if intersects; 0 if front, -1 if back
 	local BOX_PLANE_EPSILON = 0.00001
 	local terra intersectBoxPlane(bmins: Vec3, bmaxs: Vec3, pdist: real, pnorm: Vec3)
-		var center = 0.5 * (bmaxs - bmins)
+		var center = 0.5 * (bmaxs + bmins)
 		var extent = bmaxs - center
 		var fOrigin = pnorm:dot(center)
 		var fMaxExtent = extent:dot(pnorm:abs())
 		var fmin = fOrigin - fMaxExtent
 		var fmax = fOrigin + fMaxExtent
 		if pdist > fmax + BOX_PLANE_EPSILON then
+			-- S.printf("-1\n")
 			return -1
 		elseif pdist + BOX_PLANE_EPSILON >= fmin then
+			-- S.printf("1\n")
 			return 1
 		else
+			-- S.printf("0\n")
 			return 0
 		end
 	end
