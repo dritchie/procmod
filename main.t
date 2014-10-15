@@ -3,6 +3,7 @@ local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
 local Mesh = terralib.require("mesh")
 local Vec = terralib.require("linalg.vec")
+local BinaryGrid = terralib.require("binaryGrid3d")
 
 local Vec3 = Vec(double, 3)
 
@@ -74,15 +75,13 @@ local terra reloadCodeAndRegen()
 end
 
 
-local BinaryGrid = terralib.require("binaryGrid3d")
-local terra voxelizeMesh()
+local terra voxelizeMeshAndDisplay()
 	S.printf("Voxelizing mesh; saving output.\n")
-	-- Need to use cube bounds, so we'll expand the mesh bounds
 	var bounds = mesh:bbox()
-	bounds:cubify()
 	var grid = BinaryGrid.salloc():init()
-	mesh:voxelize(grid, VOXEL_SIZE, &bounds, true)
-	grid:saveToFile("voxels")
+	mesh:voxelize(grid, VOXEL_SIZE, &bounds, false)
+	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds, VOXEL_SIZE)
+	gl.glutPostRedisplay()
 end
 
 
@@ -188,7 +187,7 @@ local terra keyboard(key: uint8, x: int, y: int)
 	elseif key == char('l') then
 		reloadCodeAndRegen()
 	elseif key == char('v') then
-		voxelizeMesh()
+		voxelizeMeshAndDisplay()
 	end
 end
 

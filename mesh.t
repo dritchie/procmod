@@ -165,7 +165,7 @@ local Mesh = S.memoize(function(real)
 		end
 	end
 
-	-- Use mesh's bounding box as bounds
+	-- Use mesh's bounding box as bounds for voxelization
 	terra Mesh:voxelize(outgrid: &BinaryGrid, voxelSize: real, solid: bool) : {}
 		var bounds = self:bbox()
 		self:voxelize(outgrid, voxelSize, &bounds, solid)
