@@ -59,7 +59,9 @@ local shapes = S.memoize(function(real)
 		finalshapes[string.format("make%s", name)] = macro(function(...)
 			local args = {...}
 			return quote
-				var mesh = [Mesh(real)].salloc():init()
+				-- Caller assumes ownership of mesh's memory
+				var mesh : Mesh(real)
+				mesh:init()
 				func(mesh, [args])
 			in
 				mesh
