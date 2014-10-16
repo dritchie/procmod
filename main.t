@@ -41,7 +41,6 @@ local material = global(glutils.Material(double))
 local prevx = global(int)
 local prevy = global(int)
 local prevbutton = global(int)
-local bounds = global(BBox3)
 local shouldDrawGrid = global(bool, 0)
 local targetMesh = global(Mesh(double))
 
@@ -73,8 +72,6 @@ local terra regen()
 	if generate ~= nil then
 		S.printf("Regenerating.\n")
 		generate(&mesh)
-		bounds = mesh:bbox()
-		bounds:expand(BOUNDS_EXPAND)
 		gl.glutPostRedisplay()
 	end
 end
@@ -85,9 +82,17 @@ local terra reloadCodeAndRegen()
 end
 
 
+local terra getBounds()
+	var bounds = mesh:bbox()
+	bounds:expand(BOUNDS_EXPAND)
+	return bounds
+end
+
+
 local terra voxelizeMeshAndDisplay()
 	S.printf("Voxelizing mesh and displaying.\n")
 	var grid = BinaryGrid.salloc():init()
+	var bounds = getBounds()
 	mesh:voxelize(grid, &bounds, VOXEL_SIZE, SOLID_VOXELIZE)
 	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
 	gl.glutPostRedisplay()
@@ -104,7 +109,6 @@ local terra init()
 	camera:init()
 	light:init()
 	material:init()
-	bounds:init()
 	targetMesh:init(); targetMesh:loadOBJ(TARGET_MESH)
 
 	reloadCodeAndRegen()
@@ -142,6 +146,7 @@ local terra drawGrid()
 	gl.glColor4d(1.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
+	var bounds = getBounds()
 	var extents = bounds:extents()
 	var numvox = (extents / VOXEL_SIZE):ceil()
 	var xsize = extents(0) / numvox(0)
