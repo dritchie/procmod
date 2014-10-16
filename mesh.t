@@ -21,19 +21,36 @@ local Mesh = S.memoize(function(real)
 	local glVertex = real == float and gl.glVertex3fv or gl.glVertex3dv
 	local glNormal = real == float and gl.glNormal3fv or gl.glNormal3dv
 
+	local struct Index { vertex: uint, normal: uint }
+
 	local struct Mesh(S.Object)
 	{
 		vertices: S.Vector(Vec3),
 		normals: S.Vector(Vec3),
-		indices: S.Vector(uint)
+		indices: S.Vector(Index)
 	}
+
+	terra Mesh:addVertex(vert: Vec3)
+		self.vertices:insert(vert)
+	end
+	Mesh.methods.addVertex:setinlined(true)
+
+	terra Mesh:addNormal(norm: Vec3)
+		self.normals:insert(norm)
+	end
+	Mesh.methods.addNormal:setinlined(true)
+
+	terra Mesh:addIndex(vind: uint, nind: uint)
+		self.indices:insert(Index{vind,nind})
+	end
+	Mesh.methods.addIndex:setinlined(true)
 
 	terra Mesh:draw()
 		-- Just simple immediate mode drawing for now
 		gl.glBegin(gl.mGL_TRIANGLES())
 		for i in self.indices do
-			glNormal(&(self.normals(i).entries[0]))
-			glVertex(&(self.vertices(i).entries[0]))
+			glNormal(&(self.normals(i.normal).entries[0]))
+			glVertex(&(self.vertices(i.vertex).entries[0]))
 		end
 		gl.glEnd()
 	end
@@ -46,14 +63,15 @@ local Mesh = S.memoize(function(real)
 
 	terra Mesh:append(other: &Mesh)
 		var nverts = self.vertices:size()
+		var nnorms = self.normals:size()
 		for ov in other.vertices do
-			self.vertices:insert(ov)
+			self:addVertex(ov)
 		end
 		for on in other.normals do
-			self.normals:insert(on)
+			self:addNormal(on)
 		end
 		for oi in other.indices do
-			self.indices:insert(oi + nverts)
+			self:addIndex(Index{oi.vertex + nverts, oi.normal + nnorms})
 		end
 	end
 
@@ -121,9 +139,9 @@ local Mesh = S.memoize(function(real)
 			Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices))
 		)
 		for i=0,numtris do
-			var p0 = worldtovox:transformPoint(self.vertices(self.indices(3*i)))
-			var p1 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 1)))
-			var p2 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 2)))
+			var p0 = worldtovox:transformPoint(self.vertices(self.indices(3*i).vertex))
+			var p1 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 1).vertex))
+			var p2 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 2).vertex))
 			var tribb = BBox3.salloc():init()
 			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
 			if tribb:intersects(gridbounds) then
@@ -150,6 +168,30 @@ local Mesh = S.memoize(function(real)
 		var bounds = self:bbox()
 		self:voxelize(outgrid, &bounds, voxelSize, solid)
 	end
+
+	-- -- Super simple: only handles triangular faces, doesn't handle UVs or normals
+	-- local C = terralib.includec("string.h")
+	-- terra Mesh:loadOBJ(filename: rawstring)
+	-- 	var f = S.fopen(filename, "r")
+	-- 	if f == nil then
+	-- 		S.printf("Mesh:loadOBJ - could not open file '%s'\n", filename)
+	-- 		S.assert(false)
+	-- 	end
+	-- 	var line : int8[1024]
+	-- 	while not S.feof(f) do
+	-- 		S.fgets(line, 1024, f)
+	-- 		var cmd = C.strtok(line, " ")
+	-- 		-- Skip empty lines and lines starting with #
+	-- 		if cmd ~= nil and C.strcmp(cmd, "#") ~= 0 then
+	-- 			if C.strcmp(cmd, "f") == 0 then
+	-- 				self.indices:insert(S.atoi(C.strtok(nil, " ")))
+	-- 			elseif C.strcmp(cmd, "v") == 0 then
+	-- 				--
+	-- 			end
+	-- 		end
+	-- 	end
+	-- 	S.fclose(f)
+	-- end
 
 	return Mesh
 
