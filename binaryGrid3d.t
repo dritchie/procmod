@@ -95,12 +95,12 @@ BinaryGrid3D.toMesh = S.memoize(function(real)
 		var xsize = extents(0)/grid.cols
 		var ysize = extents(1)/grid.rows
 		var zsize = extents(2)/grid.slices
-		for i=0,grid.rows do
-			var y = lerp(bounds.mins(1), bounds.maxs(1), (i+0.5)/grid.rows)
-			for j=0,grid.cols do
-				var x = lerp(bounds.mins(0), bounds.maxs(0), (j+0.5)/grid.cols)
-				for k=0,grid.slices do
-					var z = lerp(bounds.mins(2), bounds.maxs(2), (k+0.5)/grid.slices)
+		for k=0,grid.slices do
+			var z = lerp(bounds.mins(2), bounds.maxs(2), (k+0.5)/grid.slices)
+			for i=0,grid.rows do
+				var y = lerp(bounds.mins(1), bounds.maxs(1), (i+0.5)/grid.rows)
+				for j=0,grid.cols do
+					var x = lerp(bounds.mins(0), bounds.maxs(0), (j+0.5)/grid.cols)
 					if grid:isVoxelSet(i,j,k) then
 						Shape.addBox(mesh, Vec3.create(x,y,z), xsize, ysize, zsize)
 					end
