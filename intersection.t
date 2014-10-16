@@ -105,7 +105,12 @@ local Intersection = S.memoize(function(real)
 			pnorm = -pnorm
 		end
 		if intersectBoxPlane(bmins, bmaxs, pdist, pnorm) ~= 1 then
+			-- S.printf("-------------------------------\n")
 			-- S.printf("box/plane intersect FAILED\n")
+			-- S.printf("plane: p = (%g, %g, %g), n = (%g, %g, %g)\n",
+			-- 	p0(0), p0(1), p0(2), pnorm(0), pnorm(1), pnorm(2))
+			-- S.printf("box: (%g, %g, %g) to (%g, %g, %g)\n",
+			-- 	bmins(0), bmins(1), bmins(2), bmaxs(0), bmaxs(1), bmaxs(2))
 			return false
 		end
 		-- S.printf("box/plane intersect PASSED\n")

@@ -151,7 +151,7 @@ local terra drawGrid()
 		var x = double(xi)
 		for yi=0,uint(numvox(1)) do
 			var y = double(yi)
-			for zi=0,uint(numvox(1)) do
+			for zi=0,uint(numvox(2)) do
 				var z = double(zi)
 				gl.glBegin(gl.mGL_QUADS())
 					-- Face

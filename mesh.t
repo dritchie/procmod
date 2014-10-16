@@ -101,8 +101,8 @@ local Mesh = S.memoize(function(real)
 				for k=uint(minI(2)),uint(maxI(2)) do
 					var v = Vec3.create(real(j), real(i), real(k))
 					var voxel = BBox3.salloc():init(
-						v - Vec3.create(0.5),
-						v + Vec3.create(0.5)
+						v,
+						v + Vec3.create(1.0)
 					)
 					-- Triangle has to intersect the voxel
 					-- S.printf("----------------------\n")
@@ -165,7 +165,6 @@ local Mesh = S.memoize(function(real)
 			var tribb = BBox3.salloc():init()
 			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
 			if tribb:intersects(gridbounds) then
-				-- S.printf("0\n")
 				voxelizeTriangle(outgrid, p0, p1, p2, solid)
 			end
 		end
