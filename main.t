@@ -85,7 +85,7 @@ end
 local terra voxelizeMeshAndDisplay()
 	S.printf("Voxelizing mesh and displaying.\n")
 	var grid = BinaryGrid.salloc():init()
-	mesh:voxelize(grid, &bounds, VOXEL_SIZE, false)
+	mesh:voxelize(grid, &bounds, VOXEL_SIZE, true)
 	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
 	gl.glutPostRedisplay()
 end

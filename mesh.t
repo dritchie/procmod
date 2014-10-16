@@ -139,10 +139,33 @@ local Mesh = S.memoize(function(real)
 				voxelizeTriangle(outgrid, p0, p1, p2, solid)
 			end
 		end
-		-- If we asked for a solid voxelization, then we do a simple parity count / flood fill
+		-- If we asked for a solid voxelization, then we do a simple parity count method
 		--    to fill in the interior voxels.
 		-- This is not robust to a whole host of things, but the meshes I'm working with should
 		--    be well-behaved enough for it not to matter.
+		if solid then
+			for k=0,outgrid.slices do
+				for i=0,outgrid.rows do
+					-- Parity bit starts out false (outside)
+					var parity = false
+					var lastCellVal = false
+					for j=0,outgrid.cols do
+						var currCellVal = outgrid:isVoxelSet(i,j,k)
+						-- If we transition from an empty to a filled voxel,
+						--    then we flip the parity bit
+						if currCellVal and not lastCellVal then
+							parity = not parity
+						end
+						-- If we're at an empty voxel and the parity bit is on (inside),
+						--    then we fill that voxel
+						if not currCellVal and parity then
+							outgrid:setVoxel(i,j,k)
+						end
+						lastCellVal = currCellVal
+					end
+				end
+			end
+		end
 	end
 
 	-- Find xres,yres,zres given a target voxel size
