@@ -72,7 +72,7 @@ local Mesh = S.memoize(function(real)
 			self:addNormal(on)
 		end
 		for oi in other.indices do
-			self:addIndex(Index{oi.vertex + nverts, oi.normal + nnorms})
+			self:addIndex(oi.vertex + nverts, oi.normal + nnorms)
 		end
 	end
 

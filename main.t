@@ -20,7 +20,7 @@ gl.exposeConstants({
 
 
 -- Constants
-local generateFile = "generate.t"
+local GENERATE_FILE = "generate.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
@@ -29,6 +29,7 @@ local LINE_WIDTH = 2.0
 local VOXEL_SIZE = 0.25
 local BOUNDS_EXPAND = 0.1
 local SOLID_VOXELIZE = true
+local TARGET_MESH = "geom/shipProxy1.obj"
 
 
 -- Globals
@@ -42,12 +43,13 @@ local prevy = global(int)
 local prevbutton = global(int)
 local bounds = global(BBox3)
 local shouldDrawGrid = global(bool, 0)
+local targetMesh = global(Mesh(double))
 
 
 -- Lua callback to reload and 'hot swap' the procedural generation code.
 local function reloadCode()
 	local function doReload()
-		local modulefn, err = terralib.loadfile(generateFile)
+		local modulefn, err = terralib.loadfile(GENERATE_FILE)
 		if not modulefn then
 			error(string.format("Error loading procedural modeling code: %s", err))
 		end
@@ -103,10 +105,9 @@ local terra init()
 	light:init()
 	material:init()
 	bounds:init()
+	targetMesh:init(); targetMesh:loadOBJ(TARGET_MESH)
 
-	-- reloadCodeAndRegen()
-
-	mesh:loadOBJ("geom/shipProxy1.obj")
+	reloadCodeAndRegen()
 end
 
 
@@ -195,6 +196,13 @@ local terra drawGrid()
 end
 
 
+local terra loadTargetMesh()
+	mesh:clear()
+	mesh:append(&targetMesh)
+	gl.glutPostRedisplay()
+end
+
+
 local terra display()
 	gl.glClear(gl.mGL_COLOR_BUFFER_BIT() or gl.mGL_DEPTH_BUFFER_BIT())
 
@@ -258,6 +266,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 	elseif key == char('g') then
 		shouldDrawGrid = not shouldDrawGrid
 		gl.glutPostRedisplay()
+	elseif key == char('t') then
+		loadTargetMesh()
 	end
 end
 
