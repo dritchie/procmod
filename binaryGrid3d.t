@@ -83,6 +83,15 @@ terra BinaryGrid3D:clearVoxel(row: uint, col: uint, slice: uint)
 	self.data[baseIdx] = self.data[baseIdx] and not (1 << localidx)
 end
 
+terra BinaryGrid3D:unionWith(other: &BinaryGrid3D)
+	S.assert(self.rows == other.rows and
+			 self.cols == other.cols and
+			 self.slices == other.slices)
+	for i=0,self:numuints() do
+		self.data[i] = self.data[i] or other.data[i]
+	end
+end
+
 BinaryGrid3D.toMesh = S.memoize(function(real)
 	local Mesh = terralib.require("mesh")(real)
 	local Vec3 = terralib.require("linalg.vec")(real, 3)
