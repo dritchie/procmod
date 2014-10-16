@@ -104,7 +104,9 @@ local terra init()
 	material:init()
 	bounds:init()
 
-	reloadCodeAndRegen()
+	-- reloadCodeAndRegen()
+
+	mesh:loadOBJ("geom/shipProxy1.obj")
 end
 
 

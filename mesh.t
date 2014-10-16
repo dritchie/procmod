@@ -30,20 +30,21 @@ local Mesh = S.memoize(function(real)
 		indices: S.Vector(Index)
 	}
 
+	terra Mesh:numVertices() return self.vertices:size() end
+	terra Mesh:numNormals() return self.normals:size() end
+	terra Mesh:numIndices() return self.indices:size() end
+
 	terra Mesh:addVertex(vert: Vec3)
 		self.vertices:insert(vert)
 	end
-	Mesh.methods.addVertex:setinlined(true)
 
 	terra Mesh:addNormal(norm: Vec3)
 		self.normals:insert(norm)
 	end
-	Mesh.methods.addNormal:setinlined(true)
 
 	terra Mesh:addIndex(vind: uint, nind: uint)
 		self.indices:insert(Index{vind,nind})
 	end
-	Mesh.methods.addIndex:setinlined(true)
 
 	terra Mesh:draw()
 		-- Just simple immediate mode drawing for now
@@ -169,29 +170,47 @@ local Mesh = S.memoize(function(real)
 		self:voxelize(outgrid, &bounds, voxelSize, solid)
 	end
 
-	-- -- Super simple: only handles triangular faces, doesn't handle UVs or normals
-	-- local C = terralib.includec("string.h")
-	-- terra Mesh:loadOBJ(filename: rawstring)
-	-- 	var f = S.fopen(filename, "r")
-	-- 	if f == nil then
-	-- 		S.printf("Mesh:loadOBJ - could not open file '%s'\n", filename)
-	-- 		S.assert(false)
-	-- 	end
-	-- 	var line : int8[1024]
-	-- 	while not S.feof(f) do
-	-- 		S.fgets(line, 1024, f)
-	-- 		var cmd = C.strtok(line, " ")
-	-- 		-- Skip empty lines and lines starting with #
-	-- 		if cmd ~= nil and C.strcmp(cmd, "#") ~= 0 then
-	-- 			if C.strcmp(cmd, "f") == 0 then
-	-- 				self.indices:insert(S.atoi(C.strtok(nil, " ")))
-	-- 			elseif C.strcmp(cmd, "v") == 0 then
-	-- 				--
-	-- 			end
-	-- 		end
-	-- 	end
-	-- 	S.fclose(f)
-	-- end
+	-- Super simple: only handles triangular faces, doesn't handle UVs.
+	-- f directives are assumed to be of the form vi//ni (i.e. requires normals).
+	local C = terralib.includec("string.h")
+	local delim = " /\n"
+	terra Mesh:loadOBJ(filename: rawstring)
+		var f = S.fopen(filename, "r")
+		if f == nil then
+			S.printf("Mesh:loadOBJ - could not open file '%s'\n", filename)
+			S.assert(false)
+		end
+		var line : int8[1024]
+		var numlines = 0
+		while S.fgets(line, 1024, f) ~= nil do
+			var cmd = C.strtok(line, delim)
+			-- Skip empty lines and lines starting with #
+			if cmd ~= nil and C.strcmp(cmd, "#") ~= 0 then
+				if C.strcmp(cmd, "f") == 0 then
+					var vi = S.atoi(C.strtok(nil, delim)) - 1
+					var ni = S.atoi(C.strtok(nil, delim)) - 1
+					self:addIndex(vi, ni)
+					vi = S.atoi(C.strtok(nil, delim)) - 1
+					ni = S.atoi(C.strtok(nil, delim)) - 1
+					self:addIndex(vi, ni)
+					vi = S.atoi(C.strtok(nil, delim)) - 1 
+					ni = S.atoi(C.strtok(nil, delim)) - 1
+					self:addIndex(vi, ni)
+				elseif C.strcmp(cmd, "v") == 0 then
+					var x = S.atof(C.strtok(nil, delim))
+					var y = S.atof(C.strtok(nil, delim))
+					var z = S.atof(C.strtok(nil, delim))
+					self:addVertex(Vec3.create(x,y,z))
+				elseif C.strcmp(cmd, "vn") == 0 then
+					var x = S.atof(C.strtok(nil, delim))
+					var y = S.atof(C.strtok(nil, delim))
+					var z = S.atof(C.strtok(nil, delim))
+					self:addNormal(Vec3.create(x,y,z))
+				end
+			end
+		end
+		S.fclose(f)
+	end
 
 	return Mesh
 

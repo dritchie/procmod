@@ -10,8 +10,8 @@ local shapes = S.memoize(function(real)
 	local shapes = {}
 
 	terra shapes.Quad(mesh: &MeshT, v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3)
-		var baseVertIndex = mesh.vertices:size()
-		var normIndex = mesh.normals:size()
+		var baseVertIndex = mesh:numVertices()
+		var normIndex = mesh:numNormals()
 		mesh:addVertex(v0)
 		mesh:addVertex(v1)
 		mesh:addVertex(v2)
@@ -39,6 +39,10 @@ local shapes = S.memoize(function(real)
 		var x1y0z1 = center + Vec3.create(xh, -yh, zh)
 		var x1y1z0 = center + Vec3.create(xh, yh, -zh)
 		var x1y1z1 = center + Vec3.create(xh, yh, zh)
+
+		-- TODO: Unnecessary duplication of vertices by using shapes.Quad.
+		--    I could manually build it, if the efficiency ever become needed...
+
 		-- CCW order
 		shapes.Quad(mesh, x0y1z0, x1y1z0, x1y0z0, x0y0z0) -- Back
 		shapes.Quad(mesh, x0y0z1, x1y0z1, x1y1z1, x0y1z1) -- Front
