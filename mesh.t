@@ -91,11 +91,6 @@ local Mesh = S.memoize(function(real)
 		-- Take care to ensure that we don't loop over any voxels that are outside the actual grid.
 		minI:maxInPlace(Vec3.create(0.0))
 		maxI:minInPlace(Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices)))
-		-- S.printf("===========================\n")
-		-- S.printf("mins: %g, %g, %g   |   maxs: %g, %g, %g\n",
-		-- 	tribb.mins(0), tribb.mins(1), tribb.mins(2), tribb.maxs(0), tribb.maxs(1), tribb.maxs(2))
-		-- S.printf("minI: %g, %g, %g   |   maxi: %g, %g, %g\n",
-		-- 	minI(0), minI(1), minI(2), maxI(0), maxI(1), maxI(2))
 		for k=uint(minI(2)),uint(maxI(2)) do
 			for i=uint(minI(1)),uint(maxI(1)) do
 				for j=uint(minI(0)),uint(maxI(0)) do
@@ -105,38 +100,8 @@ local Mesh = S.memoize(function(real)
 						v + Vec3.create(1.0)
 					)
 					-- Triangle has to intersect the voxel
-					-- S.printf("----------------------\n")
 					if voxel:intersects(v0, v1, v2) then
 						outgrid:setVoxel(i,j,k)
-						-- If we only want a hollow voxelization, then we're done.
-						-- Otherwise, we need to 'line trace' to fill in internal voxels.
-						if solid then
-							-- First, check that the voxel center even lies within the 2d projection
-							--    of the triangle (early out to try and avoid ray tests)
-							var pointTriIsect = Intersection.intersectPointTriangle(
-								Vec2.create(v0(0), v0(1)),
-								Vec2.create(v1(0), v1(1)),
-								Vec2.create(v2(0), v2(1)),
-								Vec2.create(v(0), v(1))
-							)
-							if pointTriIsect then
-								-- Trace rays (basically, we don't want to fill in a line of internal
-								--    voxels if this triangle only intersects a sliver of this voxel--that
-								--    would 'bloat' our voxelixation and make it inaccurate)
-								var rd0 = Vec3.create(0.0, 0.0, 1.0)
-								var rd1 = Vec3.create(0.0, 0.0, -1.0)
-								var t0 : real, t1 : real, _u0 : real, _u1 : real, _v0 : real, _v1 : real
-								var b0 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd0, &t0, &_u0, &_v0, 0.0, 1.0)
-								var b1 = Intersection.intersectRayTriangle(v0, v1, v2, v, rd1, &t1, &_u1, &_v1, 0.0, 1.0)
-								if (b0 and t0 <= 0.5) or (b1 and t1 <= 0.5) then
-									for kk=k+1,outgrid.slices do
-										outgrid:toggleVoxel(i,j,kk)
-									end
-								end
-							end
-						end
-					else
-						-- S.printf("box/tri intersect FAILED\n")
 					end
 				end
 			end
@@ -165,33 +130,9 @@ local Mesh = S.memoize(function(real)
 				voxelizeTriangle(outgrid, p0, p1, p2, solid)
 			end
 		end
-		-- -- If we asked for a solid voxelization, then we do a simple parity count method
-		-- --    to fill in the interior voxels.
-		-- -- This is not robust to a whole host of things, but the meshes I'm working with should
-		-- --    be well-behaved enough for it not to matter.
-		-- if solid then
-		-- 	for k=0,outgrid.slices do
-		-- 		for i=0,outgrid.rows do
-		-- 			-- Parity bit starts out false (outside)
-		-- 			var parity = false
-		-- 			var lastCellVal = false
-		-- 			for j=0,outgrid.cols do
-		-- 				var currCellVal = outgrid:isVoxelSet(i,j,k)
-		-- 				-- If we transition from an empty to a filled voxel,
-		-- 				--    then we flip the parity bit
-		-- 				if currCellVal and not lastCellVal then
-		-- 					parity = not parity
-		-- 				end
-		-- 				-- If we're at an empty voxel and the parity bit is on (inside),
-		-- 				--    then we fill that voxel
-		-- 				if not currCellVal and parity then
-		-- 					outgrid:setVoxel(i,j,k)
-		-- 				end
-		-- 				lastCellVal = currCellVal
-		-- 			end
-		-- 		end
-		-- 	end
-		-- end
+		if solid then
+			outgrid:fillInterior()
+		end
 	end
 
 	-- Find xres,yres,zres given a target voxel size

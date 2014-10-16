@@ -1,5 +1,7 @@
 local S = terralib.require("qs.lib.std")
-
+local C = terralib.includecstring [[
+#include <string.h>
+]]
 
 -- Design inspired by mLib's binaryGrid3d.h
 
@@ -13,15 +15,21 @@ local struct BinaryGrid3D(S.Object)
 	slices: uint
 }
 
-terra BinaryGrid3D:__init()
+terra BinaryGrid3D:__init() : {}
 	self.rows = 0
 	self.cols = 0
 	self.slices = 0
 	self.data = nil
 end
 
-terra BinaryGrid3D:__init(rows: uint, cols: uint, slices: uint)
+terra BinaryGrid3D:__init(rows: uint, cols: uint, slices: uint) : {}
+	self:__init()
 	self:resize(rows, cols, slices)
+end
+
+terra BinaryGrid3D:__copy(other: &BinaryGrid3D)
+	self:__init(other.rows, other.cols, other.slices)
+	C.memcpy(self.data, other.data, self:numuints()*sizeof(uint))
 end
 
 terra BinaryGrid3D:__destruct()
@@ -89,6 +97,62 @@ terra BinaryGrid3D:unionWith(other: &BinaryGrid3D)
 			 self.slices == other.slices)
 	for i=0,self:numuints() do
 		self.data[i] = self.data[i] or other.data[i]
+	end
+end
+
+local struct Voxel { i: uint, j: uint, k: uint }
+terra BinaryGrid3D:fillInterior()
+	var visited = BinaryGrid3D.salloc():copy(self)
+	var frontier = BinaryGrid3D.salloc():init(self.rows, self.cols, self.slices)
+	var fringe = [S.Vector(Voxel)].salloc():init()
+	-- Start expanding from every cell we haven't yet visited (already filled
+	--    cells count as visited)
+	for k=0,self.slices do
+		for i=0,self.rows do
+			for j=0,self.cols do
+				if not visited:isVoxelSet(i,j,k) then
+					var isoutside = false
+					fringe:insert(Voxel{i,j,k})
+					while fringe:size() ~= 0 do
+						var v = fringe:remove()
+						frontier:setVoxel(v.i, v.j, v.k)
+						-- If we expanded to the edge of the grid, then this region is outside
+						if v.i == 0 or v.i == self.rows-1 or
+						   v.j == 0 or v.j == self.cols-1 or
+						   v.k == 0 or v.k == self.slices-1 then
+							isoutside = true
+						-- Otherwise, expand to the neighbors
+						else
+							visited:setVoxel(v.i, v.j, v.k)
+							if not visited:isVoxelSet(v.i-1, v.j, v.k) then
+								fringe:insert(Voxel{v.i-1, v.j, v.k})
+							end
+							if not visited:isVoxelSet(v.i+1, v.j, v.k) then
+								fringe:insert(Voxel{v.i+1, v.j, v.k})
+							end
+							if not visited:isVoxelSet(v.i, v.j-1, v.k) then
+								fringe:insert(Voxel{v.i, v.j-1, v.k})
+							end
+							if not visited:isVoxelSet(v.i, v.j+1, v.k) then
+								fringe:insert(Voxel{v.i, v.j+1, v.k})
+							end
+							if not visited:isVoxelSet(v.i, v.j, v.k-1) then
+								fringe:insert(Voxel{v.i, v.j, v.k-1})
+							end
+							if not visited:isVoxelSet(v.i, v.j, v.k+1) then
+								fringe:insert(Voxel{v.i, v.j, v.k+1})
+							end
+						end
+					end
+					-- Once we've grown this region to completion, check whether it is
+					--    inside or outside. If inside, add it to self
+					if not isoutside then
+						self:unionWith(frontier)
+					end
+					frontier:clear()
+				end
+			end
+		end
 	end
 end
 

@@ -28,6 +28,7 @@ local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
 local VOXEL_SIZE = 0.25
 local BOUNDS_EXPAND = 0.1
+local SOLID_VOXELIZE = true
 
 
 -- Globals
@@ -85,7 +86,7 @@ end
 local terra voxelizeMeshAndDisplay()
 	S.printf("Voxelizing mesh and displaying.\n")
 	var grid = BinaryGrid.salloc():init()
-	mesh:voxelize(grid, &bounds, VOXEL_SIZE, true)
+	mesh:voxelize(grid, &bounds, VOXEL_SIZE, SOLID_VOXELIZE)
 	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
 	gl.glutPostRedisplay()
 end

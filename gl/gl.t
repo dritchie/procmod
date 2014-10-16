@@ -1,8 +1,10 @@
 local util = terralib.require("util")
 
 -- Mac OSX only, for now
-if not (util.osName() == "Darwin\n") then
-	error("GLUT/OpenGL module currently only supported on OSX.")
+local osname = util.osName()
+if not (osname == "Darwin\n") then
+	error(string.format("GLUT/OpenGL module currently only supported on OSX; osName is %s",
+		osname))
 end
 
 -- Automatically generate functions that return commonly-used macro constants
