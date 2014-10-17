@@ -32,6 +32,9 @@ local LINE_WIDTH = 2.0
 -- Globals
 local generate = global({&Mesh(double)}->{}, 0)
 local mesh = global(Mesh(double))
+local voxelMesh = global(Mesh(double))
+local displayMesh = global(&Mesh(double))
+local bounds = global(BBox3)
 local camera = global(glutils.Camera(double))
 local light = global(glutils.Light(double))
 local material = global(glutils.Material(double))
@@ -39,6 +42,39 @@ local prevx = global(int)
 local prevy = global(int)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
+
+
+local terra updateBounds()
+	bounds = displayMesh:bbox()
+	bounds:expand(globals.BOUNDS_EXPAND)
+end
+
+
+local terra displayTargetMesh()
+	displayMesh = &globals.targetMesh
+	updateBounds()
+	gl.glutPostRedisplay()
+end
+
+
+local terra displayNormalMesh()
+	displayMesh = &mesh
+	updateBounds()
+	gl.glutPostRedisplay()
+end
+
+
+local terra displayVoxelMesh()
+	-- Don't do this if the voxel mesh is currently displayed, because
+	--    that would lead to wonky double voxelization
+	if displayMesh ~= &voxelMesh then
+		var grid = BinaryGrid.salloc():init()
+		mesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &bounds)
+		displayMesh = &voxelMesh
+		gl.glutPostRedisplay()
+	end
+end
 
 
 -- Lua callback to reload and 'hot swap' the procedural generation code.
@@ -57,7 +93,7 @@ local function reloadCode()
 		print(string.format("Error compiling procedural modeling code: %s", maybeerr))
 		return false
 	end
-	print("Procedural modeling code reloaded.")
+	-- print("Procedural modeling code reloaded.")
 	return true
 end
 local reload = terralib.cast({}->bool, reloadCode)
@@ -66,32 +102,15 @@ local reload = terralib.cast({}->bool, reloadCode)
 local terra regen()
 	-- Only generate if the generate fn pointer is not nil.
 	if generate ~= nil then
-		S.printf("Regenerating.\n")
+		-- S.printf("Regenerating.\n")
 		generate(&mesh)
-		gl.glutPostRedisplay()
+		displayNormalMesh()
 	end
 end
 
 
 local terra reloadCodeAndRegen()
 	if reload() then regen() end
-end
-
-
-local terra getBounds()
-	var bounds = mesh:bbox()
-	bounds:expand(globals.BOUNDS_EXPAND)
-	return bounds
-end
-
-
-local terra voxelizeMeshAndDisplay()
-	S.printf("Voxelizing mesh and displaying.\n")
-	var grid = BinaryGrid.salloc():init()
-	var bounds = getBounds()
-	mesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
-	gl.glutPostRedisplay()
 end
 
 
@@ -102,6 +121,7 @@ local terra init()
 	gl.glEnable(gl.mGL_NORMALIZE())
 
 	mesh:init()
+	voxelMesh:init()
 	camera:init()
 	light:init()
 	material:init()
@@ -121,7 +141,7 @@ local terra shadingMeshDrawPass()
 	light:setupGLLight(0)
 	material:setupGLMaterial()
 
-	mesh:draw()
+	displayMesh:draw()
 end
 
 
@@ -132,7 +152,7 @@ local terra wireframeMeshDrawPass()
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
 
-	mesh:draw()
+	displayMesh:draw()
 end
 
 local terra drawGrid()
@@ -141,7 +161,6 @@ local terra drawGrid()
 	gl.glColor4d(1.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
-	var bounds = getBounds()
 	var extents = bounds:extents()
 	var numvox = (extents / globals.VOXEL_SIZE):ceil()
 	var xsize = extents(0) / numvox(0)
@@ -193,13 +212,6 @@ local terra drawGrid()
 		end
 	end
 	gl.glPopMatrix()
-end
-
-
-local terra loadTargetMesh()
-	mesh:clear()
-	mesh:append(&globals.targetMesh)
-	gl.glutPostRedisplay()
 end
 
 
@@ -261,13 +273,15 @@ local terra keyboard(key: uint8, x: int, y: int)
 		regen()
 	elseif key == char('l') then
 		reloadCodeAndRegen()
-	elseif key == char('v') then
-		voxelizeMeshAndDisplay()
 	elseif key == char('g') then
 		shouldDrawGrid = not shouldDrawGrid
 		gl.glutPostRedisplay()
+	elseif key == char('n') then
+		displayNormalMesh()
+	elseif key == char('v') then
+		displayVoxelMesh()
 	elseif key == char('t') then
-		loadTargetMesh()
+		displayTargetMesh()
 	end
 end
 

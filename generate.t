@@ -144,7 +144,7 @@ local p = qs.program(function()
 			end
 		end
 		var percentsame = qs.real(numsame)/(grid.rows*grid.cols*grid.slices)
-		qs.factor(qs.softeq(percentsame, 1.0, 0.05))
+		qs.factor(qs.softeq(percentsame, 1.0, 0.01))
 	end
 
 	return terra()
