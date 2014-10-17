@@ -33,7 +33,7 @@ local LINE_WIDTH = 2.0
 local generate = global({&Mesh(double)}->{}, 0)
 local mesh = global(Mesh(double))
 local voxelMesh = global(Mesh(double))
-local displayMesh = global(&Mesh(double))
+local displayMesh = global(&Mesh(double), 0)
 local bounds = global(BBox3)
 local camera = global(glutils.Camera(double))
 local light = global(glutils.Light(double))
@@ -65,9 +65,10 @@ end
 
 
 local terra displayVoxelMesh()
+	-- Don't do this if the display mesh is nil.
 	-- Don't do this if the voxel mesh is currently displayed, because
 	--    that would lead to wonky double voxelization
-	if displayMesh ~= &voxelMesh then
+	if displayMesh ~= nil and displayMesh ~= &voxelMesh then
 		var grid = BinaryGrid.salloc():init()
 		mesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &bounds)
@@ -126,7 +127,8 @@ local terra init()
 	light:init()
 	material:init()
 
-	reloadCodeAndRegen()
+	-- reloadCodeAndRegen()
+	reload()
 end
 
 
@@ -215,11 +217,21 @@ local terra drawGrid()
 end
 
 
+local terra toggleGrid()
+	if displayMesh ~= nil then
+		shouldDrawGrid = not shouldDrawGrid
+		gl.glutPostRedisplay()
+	end
+end
+
+
 local terra display()
 	gl.glClear(gl.mGL_COLOR_BUFFER_BIT() or gl.mGL_DEPTH_BUFFER_BIT())
 
-	shadingMeshDrawPass()
-	wireframeMeshDrawPass()
+	if displayMesh ~= nil then
+		shadingMeshDrawPass()
+		wireframeMeshDrawPass()
+	end
 	if shouldDrawGrid then
 		drawGrid()
 	end
@@ -274,8 +286,7 @@ local terra keyboard(key: uint8, x: int, y: int)
 	elseif key == char('l') then
 		reloadCodeAndRegen()
 	elseif key == char('g') then
-		shouldDrawGrid = not shouldDrawGrid
-		gl.glutPostRedisplay()
+		toggleGrid()
 	elseif key == char('n') then
 		displayNormalMesh()
 	elseif key == char('v') then
