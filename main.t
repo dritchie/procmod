@@ -1,4 +1,5 @@
 local S = terralib.require("qs.lib.std")
+local globals = terralib.require("globals")
 local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
 local Mesh = terralib.require("mesh")
@@ -26,10 +27,6 @@ local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
 local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
-local VOXEL_SIZE = 0.25
-local BOUNDS_EXPAND = 0.1
-local SOLID_VOXELIZE = true
-local TARGET_MESH = "geom/shipProxy1.obj"
 
 
 -- Globals
@@ -42,7 +39,6 @@ local prevx = global(int)
 local prevy = global(int)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
-local targetMesh = global(Mesh(double))
 
 
 -- Lua callback to reload and 'hot swap' the procedural generation code.
@@ -84,7 +80,7 @@ end
 
 local terra getBounds()
 	var bounds = mesh:bbox()
-	bounds:expand(BOUNDS_EXPAND)
+	bounds:expand(globals.BOUNDS_EXPAND)
 	return bounds
 end
 
@@ -93,7 +89,7 @@ local terra voxelizeMeshAndDisplay()
 	S.printf("Voxelizing mesh and displaying.\n")
 	var grid = BinaryGrid.salloc():init()
 	var bounds = getBounds()
-	mesh:voxelize(grid, &bounds, VOXEL_SIZE, SOLID_VOXELIZE)
+	mesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 	[BinaryGrid.toMesh(double)](grid, &mesh, &bounds)
 	gl.glutPostRedisplay()
 end
@@ -109,7 +105,6 @@ local terra init()
 	camera:init()
 	light:init()
 	material:init()
-	targetMesh:init(); targetMesh:loadOBJ(TARGET_MESH)
 
 	reloadCodeAndRegen()
 end
@@ -148,7 +143,7 @@ local terra drawGrid()
 	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
 	var bounds = getBounds()
 	var extents = bounds:extents()
-	var numvox = (extents / VOXEL_SIZE):ceil()
+	var numvox = (extents / globals.VOXEL_SIZE):ceil()
 	var xsize = extents(0) / numvox(0)
 	var ysize = extents(1) / numvox(1)
 	var zsize = extents(2) / numvox(2)
@@ -203,7 +198,7 @@ end
 
 local terra loadTargetMesh()
 	mesh:clear()
-	mesh:append(&targetMesh)
+	mesh:append(&globals.targetMesh)
 	gl.glutPostRedisplay()
 end
 

@@ -34,17 +34,9 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:numNormals() return self.normals:size() end
 	terra Mesh:numIndices() return self.indices:size() end
 
-	terra Mesh:addVertex(vert: Vec3)
-		self.vertices:insert(vert)
-	end
-
-	terra Mesh:addNormal(norm: Vec3)
-		self.normals:insert(norm)
-	end
-
-	terra Mesh:addIndex(vind: uint, nind: uint)
-		self.indices:insert(Index{vind,nind})
-	end
+	terra Mesh:addVertex(vert: Vec3) self.vertices:insert(vert) end
+	terra Mesh:addNormal(norm: Vec3) self.normals:insert(norm) end
+	terra Mesh:addIndex(vind: uint, nind: uint) self.indices:insert(Index{vind,nind}) end
 
 	terra Mesh:draw()
 		-- Just simple immediate mode drawing for now
