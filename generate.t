@@ -2,6 +2,9 @@ local Mesh = terralib.require("mesh")
 local Vec = terralib.require("linalg.vec")
 local Shapes = terralib.require("shapes")
 local qs = terralib.require("qs")
+local globals = terralib.require("globals")
+local BinaryGrid = terralib.require("binaryGrid3d")
+local BBox = terralib.require("bbox")
 
 
 -- Main will call the function returned by this module
@@ -11,6 +14,7 @@ local p = qs.program(function()
 	local Vec3 = Vec(qs.real, 3)
 	local Shape = Shapes(qs.real)
 	local MeshT = Mesh(qs.real)
+	local BBox3 = BBox(Vec3)
 
 	local lerp = macro(function(lo, hi, t)
 		return `(1.0-t)*lo + t*hi
@@ -109,6 +113,40 @@ local p = qs.program(function()
 		end
 	end)
 
+	-- Factor that enforces a desired aspect ratio
+	local terra aspectFactor(mesh: &MeshT, targetWidth: qs.real, targetLength: qs.real)
+		-- Compute bounding box, enforce desired dimensions
+		var bbox = mesh:bbox()
+		var dims = bbox:extents()
+		qs.factor(qs.softeq(dims(0), targetWidth, 0.25))
+		qs.factor(qs.softeq(dims(2), targetLength, 0.25))
+	end
+
+	-- Factor that compares voxelization of generated mesh against a target voxelization
+	local targetGrid = global(BinaryGrid)
+	local targetBounds = global(BBox3)
+	local terra inittarget()
+		targetGrid:init()
+		targetBounds = globals.targetMesh:bbox()
+		targetBounds:expand(globals.BOUNDS_EXPAND)
+		globals.targetMesh:voxelize(&targetGrid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+	end
+	inittarget()
+	local terra voxelFactor(mesh: &MeshT)
+		var grid = BinaryGrid.salloc():init(targetGrid.rows, targetGrid.cols, targetGrid.slices)
+		mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+		var numsame = 0
+		for k=0,grid.slices do
+			for i=0,grid.rows do
+				for j=0,grid.cols do
+					numsame = numsame + int(grid:isVoxelSet(i,j,k) == targetGrid:isVoxelSet(i,j,k))
+				end
+			end
+		end
+		var percentsame = qs.real(numsame)/(grid.rows*grid.cols*grid.slices)
+		qs.factor(qs.softeq(percentsame, 1.0, 0.05))
+	end
+
 	return terra()
 		var mesh : MeshT
 		mesh:init()
@@ -116,19 +154,10 @@ local p = qs.program(function()
 		-- Generate ship mesh
 		genShip(&mesh, -5.0)
 
-		-- Compute bounding box, enforce desired dimensions
-		var bbox = mesh:bbox()
-		var dims = bbox:extents()
-		-- var targetWidth = 4.0
-		-- var targetLength = 25.0
-		var targetWidth = 10.0
-		var targetLength = 10.0
-		qs.factor(qs.softeq(dims(0), targetWidth, 0.25))
-		qs.factor(qs.softeq(dims(2), targetLength, 0.25))
-
-		-- -- DEBUGGING: Just make a single box
-		-- var dummy = uniform(0.0, 1.0)
-		-- Shape.addBox(&mesh, Vec3.create(0.0, 0.0, 0.0), 2.0, 2.0, 2.0)
+		-- Enforce some constraint
+		voxelFactor(&mesh)
+		-- aspectFactor(&mesh, 10.0, 10.0)
+		-- aspectFactor(&mesh, 4.0, 25.0)
 
 		return mesh
 	end
