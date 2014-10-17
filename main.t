@@ -237,8 +237,9 @@ local terra toggleGrid()
 	end
 end
 
-local terra displayString(font: &opaque, str: rawstring)
+local terra displayString(font: &opaque, str: rawstring, x: int, y: int)
 	if str ~= nil and C.strlen(str) > 0 then
+		gl.glRasterPos2f(x, y)
 		while @str ~= 0 do
 			gl.glutBitmapCharacter(font, @str)
 			str = str + 1
@@ -257,9 +258,9 @@ local terra drawText()
 	gl.glMatrixMode(gl.mGL_MODELVIEW())
 	gl.glPushMatrix()
 	gl.glLoadIdentity()
-	gl.glColor3f([TEXT_COLOR])
-	-- Put it in the top left
-	gl.glRasterPos2f(10, viewport[1] + viewport[3] - 25)
+	-- Prep some convenient 'local' coordinates
+	var xstart = 10
+	var ystart = viewport[1] + viewport[3] - 25
 	-- Display the mesh index
 	var str : int8[64]
 	if displayMesh == &globals.targetMesh then
@@ -271,7 +272,8 @@ local terra drawText()
 	else
 		S.sprintf(str, "Sample %d/%u", currMeshIndex+1, meshes:size())
 	end
-	displayString(TEXT_FONT, str)
+	gl.glColor3f([TEXT_COLOR])
+	displayString(TEXT_FONT, str, xstart, ystart)
 	gl.glPopMatrix()
 	gl.glMatrixMode(gl.mGL_PROJECTION())
 	gl.glPopMatrix()
