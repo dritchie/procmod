@@ -104,7 +104,6 @@ local struct Voxel { i: uint, j: uint, k: uint }
 terra BinaryGrid3D:fillInterior()
 	var visited = BinaryGrid3D.salloc():copy(self)
 	var frontier = BinaryGrid3D.salloc():init(self.rows, self.cols, self.slices)
-	var fringe = [S.Vector(Voxel)].salloc():init()
 	-- Start expanding from every cell we haven't yet visited (already filled
 	--    cells count as visited)
 	for k=0,self.slices do
@@ -112,6 +111,7 @@ terra BinaryGrid3D:fillInterior()
 			for j=0,self.cols do
 				if not visited:isVoxelSet(i,j,k) then
 					var isoutside = false
+					var fringe = [S.Vector(Voxel)].salloc():init()
 					fringe:insert(Voxel{i,j,k})
 					while fringe:size() ~= 0 do
 						var v = fringe:remove()
