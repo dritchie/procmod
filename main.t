@@ -10,6 +10,10 @@ local BBox = terralib.require("bbox")
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
 
+local C = terralib.includecstring [[
+#include <string.h>
+]]
+
 gl.exposeConstants({
 	"GLUT_LEFT_BUTTON",
 	"GLUT_MIDDLE_BUTTON",
@@ -20,7 +24,8 @@ gl.exposeConstants({
 	"GLUT_ACTIVE_ALT",
 	"GL_VIEWPORT",
 	"GLUT_KEY_LEFT",
-	"GLUT_KEY_RIGHT"
+	"GLUT_KEY_RIGHT",
+	{"GLUT_BITMAP_HELVETICA_18", "void*"}
 })
 
 
@@ -31,12 +36,14 @@ local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
 local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
+local TEXT_FONT = gl.mGLUT_BITMAP_HELVETICA_18()
+local TEXT_COLOR = {1.0, 1.0, 1.0}
 
 
 -- Globals
 local generate = global({&S.Vector(Mesh(double))}->{int}, 0)
 local meshes = global(S.Vector(Mesh(double)))
-local currMeshIndex = global(int)
+local currMeshIndex = global(int, 0)
 local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
 local bounds = global(BBox3)
@@ -48,6 +55,7 @@ local prevy = global(int)
 local alt = global(bool, 0)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
+local shouldDrawText = global(bool, 1)
 
 
 local terra updateBounds()
@@ -229,6 +237,52 @@ local terra toggleGrid()
 	end
 end
 
+local terra displayString(font: &opaque, str: rawstring)
+	if str ~= nil and C.strlen(str) > 0 then
+		while @str ~= 0 do
+			gl.glutBitmapCharacter(font, @str)
+			str = str + 1
+		end
+	end
+end
+
+local terra drawText()
+	-- Set up the viewing transform
+	gl.glMatrixMode(gl.mGL_PROJECTION())
+	gl.glPushMatrix()
+	gl.glLoadIdentity()
+	var viewport : int[4]
+	gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
+	gl.gluOrtho2D(double(viewport[0]), double(viewport[2]), double(viewport[1]), double(viewport[3]))
+	gl.glMatrixMode(gl.mGL_MODELVIEW())
+	gl.glPushMatrix()
+	gl.glLoadIdentity()
+	gl.glColor3f([TEXT_COLOR])
+	-- Put it in the top left
+	gl.glRasterPos2f(10, viewport[1] + viewport[3] - 25)
+	-- Display the mesh index
+	var str : int8[64]
+	if displayMesh == &globals.targetMesh then
+		S.sprintf(str, "Target Shape")
+	elseif displayMesh == &voxelMesh then
+		S.sprintf(str, "Voxelization")
+	elseif meshes:size() == 0 then
+		S.sprintf(str, "<No Active Mesh>")
+	else
+		S.sprintf(str, "Sample %d/%u", currMeshIndex+1, meshes:size())
+	end
+	displayString(TEXT_FONT, str)
+	gl.glPopMatrix()
+	gl.glMatrixMode(gl.mGL_PROJECTION())
+	gl.glPopMatrix()
+end
+
+
+local terra toggleText()
+	shouldDrawText = not shouldDrawText
+	gl.glutPostRedisplay()
+end
+
 
 local terra display()
 	gl.glClear(gl.mGL_COLOR_BUFFER_BIT() or gl.mGL_DEPTH_BUFFER_BIT())
@@ -239,6 +293,9 @@ local terra display()
 	end
 	if shouldDrawGrid then
 		drawGrid()
+	end
+	if shouldDrawText then
+		drawText()
 	end
 
 	gl.glutSwapBuffers()
@@ -289,7 +346,6 @@ end
 local terra setMeshIndex(i: int)
 	if i < 0 then i = 0 end
 	if i >= meshes:size() then i = meshes:size()-1 end
-	S.printf("mesh index: %d\n", i)
 	currMeshIndex = i
 	displayNormalMesh()
 end
