@@ -183,56 +183,38 @@ BinaryGrid3D.toMesh = S.memoize(function(real)
 	end
 end)
 
--- -- TODO: Debug this!?!?
--- -- Write to .binvox file format
--- --    .binvox data runs y (rows) fastest, then z (slices), then x (cols)
--- BinaryGrid3D.methods.binvoxSpatialToLinear = macro(function(self, i, j, k)
--- 	return `j*self.rows*self.slices + k*self.rows + i
--- end)
--- BinaryGrid3D.methods.binvoxLinearToSpatial = macro(function(self, index)
--- 	return quote
--- 		var j = index % self.cols
--- 		var k = (index / self.cols) % self.slices
--- 		var i = index / (self.cols*self.slices)
--- 	in
--- 		i, j, k
--- 	end
--- end)
--- terra BinaryGrid3D:saveToFile(filebasename: rawstring)
--- 	if not ((self.rows == self.cols) and
--- 			(self.cols == self.slices) and
--- 			(self.slices == self.rows)) then
--- 		S.printf("BinaryGrid3D:saveToFile - .binvox requires all grid dimensions to be the same\n")
--- 		S.assert(false)
--- 	end
--- 	var fname : int8[512]
--- 	S.sprintf(fname, "%s.binvox", filebasename)
--- 	var f = S.fopen(fname, "w")
--- 	-- Write header
--- 	S.fprintf(f, "#binvox 1\n")
--- 	S.fprintf(f, "dim %u %u %u\n", self.slices, self.cols, self.rows)
--- 	S.fprintf(f, "translate 0.0 0.0 0.0\n")
--- 	S.fprintf(f, "scale 1.0\n")
--- 	S.fprintf(f, "data\n")
--- 	-- Write data
--- 	--    Data uses run-length encoding: a 0/1 byte, followed by a 'number of repetitions' byte
--- 	var numvox = self.rows*self.cols*self.slices
--- 	var index = 0
--- 	while index < numvox do
--- 		var i, j, k = self:binvoxLinearToSpatial(index)
--- 		var val = self:isVoxelSet(i, j, k)
--- 		var num = uint(0)
--- 		repeat
--- 			num = num + 1
--- 			index = index + 1
--- 			i, j, k = self:binvoxLinearToSpatial(index)
--- 		until num == 255 or index == numvox or self:isVoxelSet(i, j, k) ~= val
--- 		var byteval = uint8(val)
--- 		S.fwrite(&byteval, 1, 1, f)
--- 		S.fwrite(&num, 1, 1, f)
--- 	end
--- 	S.fclose(f)
--- end
+-- Fast population count, from https://github.com/BartMassey/popcount
+local terra popcount(x: uint)
+	var m1 = 0x55555555U
+	var m2 = 0xc30c30c3U
+	x = x - ((x >> 1) and m1)
+	x = (x and m2) + ((x >> 2) and m2) + ((x >> 4) and m2)
+	x = x + (x >> 6)
+	return (x + (x >> 12) + (x >> 24)) and 0x3f
+end
+popcount:setinlined(true)
+
+-- NOTE: This will return a value *higher* than if we compute this quanity by looping over all cells,
+--    because we may have extra padding in self.data (i.e. up to 31 extra cells). These cells will
+--    always be zero, so this function returns a slight upper bound on the actual number of equal cells.
+--    For sufficiently high-res grids, this shouldn't make a difference.
+terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D)
+	S.assert(self.rows == other.rows and
+			 self.cols == other.cols and
+			 self.slices == other.slices)
+	var num = 0
+	for i=0,self:numuints() do
+		var x = not (self.data[i] ^ other.data[i])
+		num = num + popcount(x)
+	end
+	return num
+end
+
+terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D)
+	var num = self:numCellsEqual(other)
+	return double(num)/(self.rows*self.cols*self.slices)
+end
+
 
 return BinaryGrid3D
 

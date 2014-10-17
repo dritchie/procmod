@@ -136,15 +136,7 @@ local p = qs.program(function()
 	local terra voxelFactor(mesh: &MeshT)
 		var grid = BinaryGrid.salloc():init(targetGrid.rows, targetGrid.cols, targetGrid.slices)
 		mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-		var numsame = 0
-		for k=0,grid.slices do
-			for i=0,grid.rows do
-				for j=0,grid.cols do
-					numsame = numsame + int(grid:isVoxelSet(i,j,k) == targetGrid:isVoxelSet(i,j,k))
-				end
-			end
-		end
-		var percentsame = qs.real(numsame)/(grid.rows*grid.cols*grid.slices)
+		var percentsame = grid:percentCellsEqual(&targetGrid)
 		qs.factor(qs.softeq(percentsame, 1.0, 0.01))
 	end
 
