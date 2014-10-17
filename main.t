@@ -16,7 +16,11 @@ gl.exposeConstants({
 	"GLUT_RIGHT_BUTTON",
 	"GLUT_UP",
 	"GLUT_DOWN",
-	"GL_POLYGON_OFFSET_FILL"
+	"GL_POLYGON_OFFSET_FILL",
+	"GLUT_ACTIVE_ALT",
+	"GL_VIEWPORT",
+	"GLUT_KEY_LEFT",
+	"GLUT_KEY_RIGHT"
 })
 
 
@@ -30,8 +34,9 @@ local LINE_WIDTH = 2.0
 
 
 -- Globals
-local generate = global({&Mesh(double)}->{}, 0)
-local mesh = global(Mesh(double))
+local generate = global({&S.Vector(Mesh(double))}->{int}, 0)
+local meshes = global(S.Vector(Mesh(double)))
+local currMeshIndex = global(int)
 local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
 local bounds = global(BBox3)
@@ -40,6 +45,7 @@ local light = global(glutils.Light(double))
 local material = global(glutils.Material(double))
 local prevx = global(int)
 local prevy = global(int)
+local alt = global(bool, 0)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
 
@@ -58,7 +64,7 @@ end
 
 
 local terra displayNormalMesh()
-	displayMesh = &mesh
+	displayMesh = meshes:get(currMeshIndex)
 	updateBounds()
 	gl.glutPostRedisplay()
 end
@@ -70,7 +76,7 @@ local terra displayVoxelMesh()
 	--    that would lead to wonky double voxelization
 	if displayMesh ~= nil and displayMesh ~= &voxelMesh then
 		var grid = BinaryGrid.salloc():init()
-		mesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+		displayMesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &bounds)
 		displayMesh = &voxelMesh
 		gl.glutPostRedisplay()
@@ -103,8 +109,8 @@ local reload = terralib.cast({}->bool, reloadCode)
 local terra regen()
 	-- Only generate if the generate fn pointer is not nil.
 	if generate ~= nil then
-		-- S.printf("Regenerating.\n")
-		generate(&mesh)
+		meshes:clear()
+		currMeshIndex = generate(&meshes)
 		displayNormalMesh()
 	end
 end
@@ -121,13 +127,12 @@ local terra init()
 	-- gl.glEnable(gl.mGL_CULL_FACE())
 	gl.glEnable(gl.mGL_NORMALIZE())
 
-	mesh:init()
+	meshes:init()
 	voxelMesh:init()
 	camera:init()
 	light:init()
 	material:init()
 
-	-- reloadCodeAndRegen()
 	reload()
 end
 
@@ -253,11 +258,12 @@ local terra mouse(button: int, state: int, x: int, y: int)
 		prevbutton = button
 		prevx = x
 		prevy = y
+		alt = (gl.glutGetModifiers() == gl.mGLUT_ACTIVE_ALT())
 	end
 end
 
 
-local terra motion(x: int, y: int)
+local terra cameraMotion(x: int, y: int)
 	var dx = x - prevx
 	var dy = y - prevy
 	if prevbutton == gl.mGLUT_LEFT_BUTTON() then
@@ -279,6 +285,41 @@ local terra motion(x: int, y: int)
 	gl.glutPostRedisplay()
 end
 
+
+local terra setMeshIndex(i: int)
+	if i < 0 then i = 0 end
+	if i >= meshes:size() then i = meshes:size()-1 end
+	S.printf("mesh index: %d\n", i)
+	currMeshIndex = i
+	displayNormalMesh()
+end
+
+
+local terra meshIndexScrub(x: int, y: int)
+	if prevbutton == gl.mGLUT_LEFT_BUTTON() and meshes:size() > 0 then
+		var viewport : int[4]
+		gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
+		var w = viewport[2]
+		if x < 0 then x = 0 end
+		if x >= w then x = w-1 end
+		var t = double(x)/w
+		var i = uint(t*meshes:size())
+		setMeshIndex(i)
+	end
+end
+
+
+local terra motion(x: int, y: int)
+	-- If Alt is down, then we use horizontal position to select
+	--    currMeshIndex.
+	if alt then
+		meshIndexScrub(x, y)
+	-- Otherwise, we do mouse movement
+	else
+		cameraMotion(x, y)
+	end
+end
+
 local char = macro(function(str) return `str[0] end)
 local terra keyboard(key: uint8, x: int, y: int)
 	if key == char('r') then
@@ -297,6 +338,15 @@ local terra keyboard(key: uint8, x: int, y: int)
 end
 
 
+local terra special(key: int, x: int, y: int)
+	if key == gl.mGLUT_KEY_LEFT() then
+		setMeshIndex(currMeshIndex - 1)
+	elseif key == gl.mGLUT_KEY_RIGHT() then
+		setMeshIndex(currMeshIndex + 1)
+	end
+end
+
+
 local terra main()
 
 	var argc = 0
@@ -310,6 +360,7 @@ local terra main()
 	gl.glutMouseFunc(mouse)
 	gl.glutMotionFunc(motion)
 	gl.glutKeyboardFunc(keyboard)
+	gl.glutSpecialFunc(special)
 
 	init()
 	gl.glutMainLoop()

@@ -1,3 +1,4 @@
+local S = terralib.require("qs.lib.std")
 local Mesh = terralib.require("mesh")
 local Vec = terralib.require("linalg.vec")
 local Shapes = terralib.require("shapes")
@@ -165,16 +166,29 @@ end)
 
 -- -- Forward sampling
 -- local gen = p:compile()
--- return terra(mesh: &Mesh(double))
--- 	mesh:destruct()
--- 	@mesh = gen()
+-- return terra(meshes: &S.Vector(Mesh(double)))
+-- 	meshes:insert(gen())
+-- 	return 0
 -- end
 
 -- Constrained sampling with MCMC
-local query = qs.infer(p, qs.MAP, qs.MCMC(qs.TraceMHKernel(), {numsamps=2000, verbose=true}))
-return terra(mesh: &Mesh(double))
-	mesh:destruct()
-	@mesh = query()
+local query = qs.infer(p, qs.Samples, qs.MCMC(qs.TraceMHKernel(), {numsamps=2000, verbose=true}))
+return terra(meshes: &S.Vector(Mesh(double)))
+	var samps = query()
+	-- Generate a bunch of samples, return the index of the MAP sample.
+	var bestlp = [-math.huge]
+	var besti = -1
+	for i=0,samps:size() do
+		var s = samps:get(i)
+		if s.logprob > bestlp then
+			bestlp = s.logprob
+			besti = i
+		end
+		var mesh = meshes:insert()
+		mesh:copy(&s.value)
+	end
+	samps:destruct()
+	return besti
 end
 
 
