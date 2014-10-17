@@ -156,32 +156,18 @@ local p = qs.program(function()
 	end
 end)
 
--- -- Forward sampling
--- local gen = p:compile()
--- return terra(meshes: &S.Vector(Mesh(double)))
--- 	meshes:insert(gen())
--- 	return 0
--- end
 
--- Constrained sampling with MCMC
-local query = qs.infer(p, qs.Samples, qs.MCMC(qs.TraceMHKernel(), {numsamps=2000, verbose=true}))
-return terra(meshes: &S.Vector(Mesh(double)))
-	var samps = query()
-	-- Generate a bunch of samples, return the index of the MAP sample.
-	var bestlp = [-math.huge]
-	var besti = -1
-	for i=0,samps:size() do
-		var s = samps:get(i)
-		if s.logprob > bestlp then
-			bestlp = s.logprob
-			besti = i
-		end
-		var mesh = meshes:insert()
-		mesh:copy(&s.value)
-	end
-	samps:destruct()
-	return besti
+local Sample = qs.Sample(Mesh(double))
+local Samples = S.Vector(Sample)
+
+
+-- local gen = qs.infer(p, qs.Samples, qs.ForwardSample(1))
+local gen = qs.infer(p, qs.Samples, qs.MCMC(qs.TraceMHKernel(), {numsamps=2000, verbose=true}))
+return terra(samples: &Samples)
+	samples:destruct()
+	@samples = gen()
 end
+
 
 
 

@@ -1,4 +1,5 @@
 local S = terralib.require("qs.lib.std")
+local qs = terralib.require("qs")
 local globals = terralib.require("globals")
 local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
@@ -7,8 +8,6 @@ local Vec = terralib.require("linalg.vec")
 local BinaryGrid = terralib.require("binaryGrid3d")
 local BBox = terralib.require("bbox")
 
-local Vec3 = Vec(double, 3)
-local BBox3 = BBox(Vec3)
 
 local C = terralib.includecstring [[
 #include <string.h>
@@ -29,6 +28,12 @@ gl.exposeConstants({
 })
 
 
+-- Typedefs
+local Vec3 = Vec(double, 3)
+local BBox3 = BBox(Vec3)
+local Sample = qs.Sample(Mesh(double))
+local Samples = S.Vector(Sample)
+
 -- Constants
 local GENERATE_FILE = "generate.t"
 local INITIAL_RES = 800
@@ -39,11 +44,10 @@ local LINE_WIDTH = 2.0
 local TEXT_FONT = gl.mGLUT_BITMAP_HELVETICA_18()
 local TEXT_COLOR = {1.0, 1.0, 1.0}
 
-
 -- Globals
-local generate = global({&S.Vector(Mesh(double))}->{int}, 0)
-local meshes = global(S.Vector(Mesh(double)))
-local currMeshIndex = global(int, 0)
+local generate = global({&Samples}->{}, 0)
+local samples = global(Samples)
+local currSampleIndex = global(int, 0)
 local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
 local bounds = global(BBox3)
@@ -72,7 +76,7 @@ end
 
 
 local terra displayNormalMesh()
-	displayMesh = meshes:get(currMeshIndex)
+	displayMesh = &(samples(currSampleIndex).value)
 	updateBounds()
 	gl.glutPostRedisplay()
 end
@@ -117,8 +121,17 @@ local reload = terralib.cast({}->bool, reloadCode)
 local terra regen()
 	-- Only generate if the generate fn pointer is not nil.
 	if generate ~= nil then
-		meshes:clear()
-		currMeshIndex = generate(&meshes)
+		samples:clear()
+		generate(&samples)
+		-- Set the curr mesh index to that of the MAP sample
+		var bestscore = [-math.huge]
+		for i=0,samples:size() do
+			var s = samples:get(i)
+			if s.logprob > bestscore then
+				bestscore = s.logprob
+				currSampleIndex = i
+			end
+		end
 		displayNormalMesh()
 	end
 end
@@ -135,7 +148,7 @@ local terra init()
 	-- gl.glEnable(gl.mGL_CULL_FACE())
 	gl.glEnable(gl.mGL_NORMALIZE())
 
-	meshes:init()
+	samples:init()
 	voxelMesh:init()
 	camera:init()
 	light:init()
@@ -267,10 +280,10 @@ local terra drawText()
 		S.sprintf(str, "Target Shape")
 	elseif displayMesh == &voxelMesh then
 		S.sprintf(str, "Voxelization")
-	elseif meshes:size() == 0 then
+	elseif samples:size() == 0 then
 		S.sprintf(str, "<No Active Mesh>")
 	else
-		S.sprintf(str, "Sample %d/%u", currMeshIndex+1, meshes:size())
+		S.sprintf(str, "Sample %d/%u", currSampleIndex+1, samples:size())
 	end
 	gl.glColor3f([TEXT_COLOR])
 	displayString(TEXT_FONT, str, xstart, ystart)
@@ -345,33 +358,33 @@ local terra cameraMotion(x: int, y: int)
 end
 
 
-local terra setMeshIndex(i: int)
+local terra setSampleIndex(i: int)
 	if i < 0 then i = 0 end
-	if i >= meshes:size() then i = meshes:size()-1 end
-	currMeshIndex = i
+	if i >= samples:size() then i = samples:size()-1 end
+	currSampleIndex = i
 	displayNormalMesh()
 end
 
 
-local terra meshIndexScrub(x: int, y: int)
-	if prevbutton == gl.mGLUT_LEFT_BUTTON() and meshes:size() > 0 then
+local terra sampleIndexScrub(x: int, y: int)
+	if prevbutton == gl.mGLUT_LEFT_BUTTON() and samples:size() > 0 then
 		var viewport : int[4]
 		gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
 		var w = viewport[2]
 		if x < 0 then x = 0 end
 		if x >= w then x = w-1 end
 		var t = double(x)/w
-		var i = uint(t*meshes:size())
-		setMeshIndex(i)
+		var i = uint(t*samples:size())
+		setSampleIndex(i)
 	end
 end
 
 
 local terra motion(x: int, y: int)
 	-- If Alt is down, then we use horizontal position to select
-	--    currMeshIndex.
+	--    currSampleIndex.
 	if alt then
-		meshIndexScrub(x, y)
+		sampleIndexScrub(x, y)
 	-- Otherwise, we do mouse movement
 	else
 		cameraMotion(x, y)
@@ -398,9 +411,9 @@ end
 
 local terra special(key: int, x: int, y: int)
 	if key == gl.mGLUT_KEY_LEFT() then
-		setMeshIndex(currMeshIndex - 1)
+		setSampleIndex(currSampleIndex - 1)
 	elseif key == gl.mGLUT_KEY_RIGHT() then
-		setMeshIndex(currMeshIndex + 1)
+		setSampleIndex(currSampleIndex + 1)
 	end
 end
 
