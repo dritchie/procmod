@@ -275,6 +275,19 @@ local terra isDisplayingSample()
 		   displayMesh ~= &voxelMesh
 end
 
+local terra colorForScore(score: double)
+	var t = (score - minScore)/(maxScore-minScore)
+	return (1.0-t)*Vec3.create([MIN_SCORE_COLOR]) + t*Vec3.create([MAX_SCORE_COLOR])
+end
+
+local terra screenQuad(x: double, y: double, w: double, h: double)
+	gl.glBegin(gl.mGL_QUADS())
+		gl.glVertex2d(x, y)
+		gl.glVertex2d(x+w, y)
+		gl.glVertex2d(x+w, y+h)
+		gl.glVertex2d(x, y+h)
+	gl.glEnd()
+end
 local terra drawOverlay()
 	-- Set up the viewing transform
 	gl.glDisable(gl.mGL_DEPTH_TEST())
@@ -283,14 +296,18 @@ local terra drawOverlay()
 	gl.glLoadIdentity()
 	var viewport : int[4]
 	gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
+	var vxstart = viewport[0]
+	var vystart = viewport[1]
+	var vwidth = viewport[2]
+	var vheight = viewport[3]
 	gl.gluOrtho2D(double(viewport[0]), double(viewport[2]), double(viewport[1]), double(viewport[3]))
 	gl.glMatrixMode(gl.mGL_MODELVIEW())
 	gl.glPushMatrix()
 	gl.glLoadIdentity()
 
 	-- Prep some convenient 'local' coordinates
-	var xstart = 10
-	var ystart = viewport[1] + viewport[3] - 25
+	var xleft = 10
+	var ytop = vystart + vheight - 25
 
 	-- Display the sample index
 	var str : int8[64]
@@ -304,21 +321,41 @@ local terra drawOverlay()
 		S.sprintf(str, "Sample %d/%u", currSampleIndex+1, samples:size())
 	end
 	gl.glColor3f([TEXT_COLOR])
-	displayString(TEXT_FONT, str, xstart, ystart)
+	displayString(TEXT_FONT, str, xleft, ytop)
 
 	-- Display the score (logprob), if applicable
 	if isDisplayingSample() then
 		gl.glColor3f([TEXT_COLOR])
 		S.sprintf(str, "Score: ")
-		displayString(TEXT_FONT, str, xstart, ystart - 25)
+		displayString(TEXT_FONT, str, xleft, ytop - 25)
 		var score = samples(currSampleIndex).logprob
-		if samples:size() > 0 then
-			var t = (score - minScore)/(maxScore-minScore)
-			var color = (1.0-t)*Vec3.create([MIN_SCORE_COLOR]) + t*Vec3.create([MAX_SCORE_COLOR])
+		if samples:size() > 1 then
+			var color = colorForScore(score)
 			gl.glColor3dv(&(color(0)))
 		end
 		S.sprintf(str, "%g", score)
-		displayString(TEXT_FONT, str, xstart + 65, ystart - 25)
+		displayString(TEXT_FONT, str, xleft + 65, ytop - 25)
+	end
+
+	-- Draw a little 'navigation bar' at the bottom
+	if samples:size() > 1 and isDisplayingSample() then
+		gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_FILL())
+		-- First, draw a bar across the screen colored by score
+		var height = 20.0
+		var width = vwidth / double(samples:size())
+		var start = 0.0
+		for i=0,samples:size() do
+			var color = colorForScore(samples(i).logprob)
+			gl.glColor3dv(&(color(0)))
+			screenQuad(start, 0.0, width, height)
+			start = start + width
+		end
+		-- Then, draw a notch for the MAP sample.
+		gl.glColor3d(1.0, 1.0, 1.0)
+		screenQuad(MAPIndex*width, 0.0, 5.0, height+5)
+		-- Finally, draw a notch for where we are now.
+		gl.glColor3d(0.0, 0.0, 0.0)
+		screenQuad(currSampleIndex*width, 0.0, 5.0, height+5)
 	end
 
 	gl.glPopMatrix()
