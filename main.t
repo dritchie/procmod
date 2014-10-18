@@ -43,11 +43,14 @@ local ZOOM_SPEED = 0.02
 local LINE_WIDTH = 2.0
 local TEXT_FONT = gl.mGLUT_BITMAP_HELVETICA_18()
 local TEXT_COLOR = {1.0, 1.0, 1.0}
+local MIN_SCORE_COLOR = {1.0, 0.0, 0.0}
+local MAX_SCORE_COLOR = {0.0, 1.0, 0.0}
 
 -- Globals
 local generate = global({&Samples}->{}, 0)
 local samples = global(Samples)
 local currSampleIndex = global(int, 0)
+local MAPIndex = global(int)
 local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
 local bounds = global(BBox3)
@@ -59,7 +62,8 @@ local prevy = global(int)
 local alt = global(bool, 0)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
-local shouldDrawText = global(bool, 1)
+local minScore = global(double)
+local maxScore = global(double)
 
 
 local terra updateBounds()
@@ -124,14 +128,19 @@ local terra regen()
 		samples:clear()
 		generate(&samples)
 		-- Set the curr mesh index to that of the MAP sample
-		var bestscore = [-math.huge]
+		maxScore = [-math.huge]
+		minScore = [math.huge]
 		for i=0,samples:size() do
 			var s = samples:get(i)
-			if s.logprob > bestscore then
-				bestscore = s.logprob
+			if s.logprob > maxScore then
+				maxScore = s.logprob
 				currSampleIndex = i
 			end
+			if s.logprob < minScore then
+				minScore = s.logprob
+			end
 		end
+		MAPIndex = currSampleIndex
 		displayNormalMesh()
 	end
 end
@@ -260,8 +269,15 @@ local terra displayString(font: &opaque, str: rawstring, x: int, y: int)
 	end
 end
 
-local terra drawText()
+local terra isDisplayingSample()
+	return displayMesh ~= nil and
+		   displayMesh ~= &globals.targetMesh and
+		   displayMesh ~= &voxelMesh
+end
+
+local terra drawOverlay()
 	-- Set up the viewing transform
+	gl.glDisable(gl.mGL_DEPTH_TEST())
 	gl.glMatrixMode(gl.mGL_PROJECTION())
 	gl.glPushMatrix()
 	gl.glLoadIdentity()
@@ -271,10 +287,12 @@ local terra drawText()
 	gl.glMatrixMode(gl.mGL_MODELVIEW())
 	gl.glPushMatrix()
 	gl.glLoadIdentity()
+
 	-- Prep some convenient 'local' coordinates
 	var xstart = 10
 	var ystart = viewport[1] + viewport[3] - 25
-	-- Display the mesh index
+
+	-- Display the sample index
 	var str : int8[64]
 	if displayMesh == &globals.targetMesh then
 		S.sprintf(str, "Target Shape")
@@ -287,17 +305,27 @@ local terra drawText()
 	end
 	gl.glColor3f([TEXT_COLOR])
 	displayString(TEXT_FONT, str, xstart, ystart)
+
+	-- Display the score (logprob), if applicable
+	if isDisplayingSample() then
+		gl.glColor3f([TEXT_COLOR])
+		S.sprintf(str, "Score: ")
+		displayString(TEXT_FONT, str, xstart, ystart - 25)
+		var score = samples(currSampleIndex).logprob
+		if samples:size() > 0 then
+			var t = (score - minScore)/(maxScore-minScore)
+			var color = (1.0-t)*Vec3.create([MIN_SCORE_COLOR]) + t*Vec3.create([MAX_SCORE_COLOR])
+			gl.glColor3dv(&(color(0)))
+		end
+		S.sprintf(str, "%g", score)
+		displayString(TEXT_FONT, str, xstart + 65, ystart - 25)
+	end
+
 	gl.glPopMatrix()
 	gl.glMatrixMode(gl.mGL_PROJECTION())
 	gl.glPopMatrix()
+	gl.glEnable(gl.mGL_DEPTH_TEST())
 end
-
-
-local terra toggleText()
-	shouldDrawText = not shouldDrawText
-	gl.glutPostRedisplay()
-end
-
 
 local terra display()
 	gl.glClear(gl.mGL_COLOR_BUFFER_BIT() or gl.mGL_DEPTH_BUFFER_BIT())
@@ -309,9 +337,7 @@ local terra display()
 	if shouldDrawGrid then
 		drawGrid()
 	end
-	if shouldDrawText then
-		drawText()
-	end
+	drawOverlay()
 
 	gl.glutSwapBuffers()
 end
@@ -405,6 +431,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		displayVoxelMesh()
 	elseif key == char('t') then
 		displayTargetMesh()
+	elseif key == char('m') then
+		setSampleIndex(MAPIndex)
 	end
 end
 
