@@ -67,10 +67,10 @@ terra BinaryGrid3D:numuints()
 end
 BinaryGrid3D.methods.numuints:setinlined(true)
 
-terra BinaryGrid3D:numcellsPadded()
+terra BinaryGrid3D:numCellsPadded()
 	return self:numuints() * BITS_PER_UINT
 end
-BinaryGrid3D.methods.numcellsPadded:setinlined(true)
+BinaryGrid3D.methods.numCellsPadded:setinlined(true)
 
 terra BinaryGrid3D:isVoxelSet(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
@@ -204,6 +204,18 @@ local terra popcount(x: uint)
 end
 popcount:setinlined(true)
 
+terra BinaryGrid3D:numFilledCellsPadded()
+	var n = 0
+	for i=0,self:numuints() do
+		n = n + popcount(self.data[i])
+	end
+	return n
+end
+
+terra BinaryGrid3D:numEmptyCellsPadded()
+	return self:numCellsPadded() - self:numFilledCellsPadded()
+end
+
 -- NOTE: This will return a value *higher* than if we compute this quanity by looping over all cells,
 --    because we may have extra padding in self.data (i.e. up to 31 extra cells). These cells will
 --    always be zero, so this function returns a slight upper bound on the actual number of equal cells.
@@ -221,7 +233,7 @@ terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D)
 end
 terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D)
 	var num = self:numCellsEqual(other)
-	return double(num)/self:numcellsPadded()
+	return double(num)/self:numCellsPadded()
 end
 
 
@@ -236,6 +248,11 @@ terra BinaryGrid3D:numEmptyCellsEqual(other: &BinaryGrid3D)
 	end
 	return num
 end
+-- NOTE: This is one-sided (denominator computed on self)
+terra BinaryGrid3D:percentEmptyCellsEqual(other: &BinaryGrid3D)
+	var num = self:numEmptyCellsEqual(other)
+	return double(num)/self:numEmptyCellsPadded()
+end
 
 terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D)
 	S.assert(self.rows == other.rows and
@@ -247,6 +264,11 @@ terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D)
 		num = num + popcount(x)
 	end
 	return num
+end
+-- NOTE: This is one-sided (denominator computed on self)
+terra BinaryGrid3D:percentFilledCellsEqual(other: &BinaryGrid3D)
+	var num = self:numFilledCellsEqual(other)
+	return double(num)/self:numFilledCellsPadded()
 end
 
 

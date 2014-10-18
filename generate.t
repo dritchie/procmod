@@ -136,7 +136,15 @@ local p = qs.program(function()
 	local terra voxelFactor(mesh: &MeshT)
 		var grid = BinaryGrid.salloc():init(targetGrid.rows, targetGrid.cols, targetGrid.slices)
 		mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-		var percentsame = grid:percentCellsEqual(&targetGrid)
+
+		-- var percentsame = grid:percentCellsEqual(&targetGrid)
+		-- qs.factor(qs.softeq(percentsame, 1.0, 0.01))
+
+		-- NOTE: These percent... comparisons are one-sided--it's critical that the targetGrid
+		--    be the method receiver so that the denominator is correct.
+		var emptyPercentSame = targetGrid:percentEmptyCellsEqual(grid)
+		var filledPercentSame = targetGrid:percentFilledCellsEqual(grid)
+		var percentsame = lerp(filledPercentSame, emptyPercentSame, 0.6)
 		qs.factor(qs.softeq(percentsame, 1.0, 0.01))
 	end
 
