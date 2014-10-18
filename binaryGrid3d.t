@@ -57,11 +57,20 @@ terra BinaryGrid3D:clear()
 	end
 end
 
+terra BinaryGrid3D:numcells()
+	return self.rows*self.cols*self.slices
+end
+BinaryGrid3D.methods.numcells:setinlined(true)
+
 terra BinaryGrid3D:numuints()
-	var numentries = self.rows*self.cols*self.slices
-	return (numentries + BITS_PER_UINT - 1) / BITS_PER_UINT
+	return (self:numcells() + BITS_PER_UINT - 1) / BITS_PER_UINT
 end
 BinaryGrid3D.methods.numuints:setinlined(true)
+
+terra BinaryGrid3D:numcellsPadded()
+	return self:numuints() * BITS_PER_UINT
+end
+BinaryGrid3D.methods.numcellsPadded:setinlined(true)
 
 terra BinaryGrid3D:isVoxelSet(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
@@ -183,6 +192,7 @@ BinaryGrid3D.toMesh = S.memoize(function(real)
 	end
 end)
 
+
 -- Fast population count, from https://github.com/BartMassey/popcount
 local terra popcount(x: uint)
 	var m1 = 0x55555555U
@@ -209,10 +219,34 @@ terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D)
 	end
 	return num
 end
-
 terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D)
 	var num = self:numCellsEqual(other)
-	return double(num)/(self.rows*self.cols*self.slices)
+	return double(num)/self:numcellsPadded()
+end
+
+
+terra BinaryGrid3D:numEmptyCellsEqual(other: &BinaryGrid3D)
+	S.assert(self.rows == other.rows and
+			 self.cols == other.cols and
+			 self.slices == other.slices)
+	var num = 0
+	for i=0,self:numuints() do
+		var x = not (self.data[i] and other.data[i])
+		num = num + popcount(x)
+	end
+	return num
+end
+
+terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D)
+	S.assert(self.rows == other.rows and
+			 self.cols == other.cols and
+			 self.slices == other.slices)
+	var num = 0
+	for i=0,self:numuints() do
+		var x = (self.data[i] and other.data[i])
+		num = num + popcount(x)
+	end
+	return num
 end
 
 
