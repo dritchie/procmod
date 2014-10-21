@@ -64,10 +64,17 @@ local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
 local minScore = global(double)
 local maxScore = global(double)
+local voxelizeUsingTargetBounds = global(bool, 0)
+
+
 
 
 local terra updateBounds()
-	bounds = displayMesh:bbox()
+	if voxelizeUsingTargetBounds then
+		bounds = globals.targetMesh:bbox()
+	else
+		bounds = displayMesh:bbox()
+	end
 	bounds:expand(globals.BOUNDS_EXPAND)
 end
 
@@ -257,6 +264,17 @@ local terra toggleGrid()
 		shouldDrawGrid = not shouldDrawGrid
 		gl.glutPostRedisplay()
 	end
+end
+
+local terra toggleTargetBoundsVoxelization()
+	voxelizeUsingTargetBounds = not voxelizeUsingTargetBounds
+	updateBounds()
+	if voxelizeUsingTargetBounds then
+		S.printf("Voxelize will now use target mesh bounds\n")
+	else
+		S.printf("Voxelize will now use display mesh bounds\n")
+	end
+	gl.glutPostRedisplay()
 end
 
 local terra displayString(font: &opaque, str: rawstring, x: int, y: int)
@@ -479,6 +497,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		displayTargetMesh()
 	elseif key == char('m') then
 		setSampleIndex(MAPIndex)
+	elseif key == char('b') then
+		toggleTargetBoundsVoxelization()
 	end
 end
 

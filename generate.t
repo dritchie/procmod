@@ -141,8 +141,8 @@ local p = qs.program(function()
 		genShip(&mesh, -5.0)
 
 		-- Encourage some shape
-		-- voxelFactor(&mesh)
-		aspectFactor(&mesh, 10.0, 10.0)
+		voxelFactor(&mesh)
+		-- aspectFactor(&mesh, 10.0, 10.0)
 		-- aspectFactor(&mesh, 4.0, 25.0)
 
 		-- Forbid self-intersection

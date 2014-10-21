@@ -35,6 +35,7 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:numVertices() return self.vertices:size() end
 	terra Mesh:numNormals() return self.normals:size() end
 	terra Mesh:numIndices() return self.indices:size() end
+	terra Mesh:numTris() return self:numIndices()/3 end
 
 	terra Mesh:addVertex(vert: Vec3) self.vertices:insert(vert) end
 	terra Mesh:addNormal(norm: Vec3) self.normals:insert(norm) end
@@ -173,7 +174,8 @@ local Mesh = S.memoize(function(real)
 		end
 	end
 
-	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, xres: uint, yres: uint, zres: uint, solid: bool) : {}
+	-- Returns the number of triangles that fell outside the bounds
+	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, xres: uint, yres: uint, zres: uint, solid: bool) : uint
 		outgrid:resize(yres, xres, zres)
 		var extents = bounds:extents()
 		var xsize = extents(0)/xres
@@ -185,6 +187,7 @@ local Mesh = S.memoize(function(real)
 			Vec3.create(0.0),
 			Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices))
 		)
+		var numOutsideTris = 0
 		for i=0,numtris do
 			var p0 = worldtovox:transformPoint(self.vertices(self.indices(3*i).vertex))
 			var p1 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 1).vertex))
@@ -193,27 +196,30 @@ local Mesh = S.memoize(function(real)
 			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
 			if tribb:intersects(gridbounds) then
 				voxelizeTriangle(outgrid, p0, p1, p2, solid)
+			else
+				numOutsideTris = numOutsideTris + 1
 			end
 		end
 		if solid then
 			outgrid:fillInterior()
 		end
+		return numOutsideTris
 	end
 
 	-- Find xres,yres,zres given a target voxel size
-	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, voxelSize: real, solid: bool) : {}
+	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, voxelSize: real, solid: bool) : uint
 		var numvox = (bounds:extents() / voxelSize):ceil()
-		self:voxelize(outgrid, bounds, uint(numvox(0)), uint(numvox(1)), uint(numvox(2)), solid)
+		return self:voxelize(outgrid, bounds, uint(numvox(0)), uint(numvox(1)), uint(numvox(2)), solid)
 	end
 
 	-- Use mesh's bounding box as bounds for voxelization
-	terra Mesh:voxelize(outgrid: &BinaryGrid, xres: uint, yres: uint, zres: uint, solid: bool) : {}
+	terra Mesh:voxelize(outgrid: &BinaryGrid, xres: uint, yres: uint, zres: uint, solid: bool) : uint
 		var bounds = self:bbox()
-		self:voxelize(outgrid, &bounds, xres, yres, zres, solid)
+		return self:voxelize(outgrid, &bounds, xres, yres, zres, solid)
 	end
-	terra Mesh:voxelize(outgrid: &BinaryGrid, voxelSize: real, solid: bool) : {}
+	terra Mesh:voxelize(outgrid: &BinaryGrid, voxelSize: real, solid: bool) : uint
 		var bounds = self:bbox()
-		self:voxelize(outgrid, &bounds, voxelSize, solid)
+		return self:voxelize(outgrid, &bounds, voxelSize, solid)
 	end
 
 	-- Super simple: only handles triangular faces, doesn't handle UVs.
