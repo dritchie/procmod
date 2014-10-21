@@ -140,10 +140,13 @@ local p = qs.program(function()
 		-- Generate ship mesh
 		genShip(&mesh, -5.0)
 
-		-- Enforce some constraint
+		-- Encourage some shape
 		-- voxelFactor(&mesh)
 		aspectFactor(&mesh, 10.0, 10.0)
 		-- aspectFactor(&mesh, 4.0, 25.0)
+
+		-- Forbid self-intersection
+		qs.condition(not mesh:selfIntersects())
 
 		return mesh
 	end
