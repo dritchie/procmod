@@ -128,9 +128,13 @@ local p = qs.program(function()
 	inittarget()
 	local terra voxelFactor(mesh: &MeshT)
 		var grid = BinaryGrid.salloc():init(targetGrid.rows, targetGrid.cols, targetGrid.slices)
-		mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+		var numOutsideTris = mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 		var percentsame = grid:percentCellsEqual(&targetGrid)
+		-- Penalize difference in voxelization
 		qs.factor(qs.softeq(percentsame, 1.0, 0.01))
+		-- Also penalize the percentage of tris that fell outside the bounds of the voxelization
+		var percentOutside = qs.real(numOutsideTris) / mesh:numTris()
+		qs.factor(qs.softeq(percentOutside, 0.0, 0.01))
 	end
 
 	return terra()
