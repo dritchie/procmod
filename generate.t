@@ -177,7 +177,24 @@ local Samples = S.Vector(Sample)
 
 
 -- local gen = qs.infer(p, qs.Samples, qs.ForwardSample(1))
-local gen = qs.infer(p, qs.Samples, qs.MCMC(qs.TraceMHKernel(), {numsamps=2000, verbose=true}))
+local kernel = qs.TraceMHKernel()
+-- local kernel = qs.MixtureKernel(
+-- 	{
+-- 		-------- Non-structural kernel ---------
+-- 		qs.TraceMHKernel({doStruct=false}),
+-- 		-- qs.HARMKernel(),
+-- 		-- qs.DriftKernel({doScaleAdapt=false, scale=0.05}),
+
+-- 		-------- Structural kernel ---------
+-- 		qs.TraceMHKernel({doNonstruct=false})
+-- 		-- qs.LARJKernel({
+-- 		-- 	annealKernel = qs.TraceMHKernel({doStruct=false}),
+-- 		-- 	intervals = 20
+-- 		-- })
+-- 	},
+-- 	{0.9, 0.1}
+-- )
+local gen = qs.infer(p, qs.Samples, qs.MCMC(kernel, {numsamps=2000, verbose=true}))
 return terra(samples: &Samples)
 	samples:destruct()
 	@samples = gen()
