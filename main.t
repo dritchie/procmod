@@ -324,6 +324,7 @@ local terra drawOverlay()
 	displayString(TEXT_FONT, str, xleft, ytop)
 
 	-- Display the score (logprob), if applicable
+	-- Also report whether mesh self intersects
 	if isDisplayingSample() then
 		gl.glColor3f([TEXT_COLOR])
 		S.sprintf(str, "Score: ")
@@ -335,6 +336,14 @@ local terra drawOverlay()
 		end
 		S.sprintf(str, "%g", score)
 		displayString(TEXT_FONT, str, xleft + 65, ytop - 25)
+		gl.glColor3f([TEXT_COLOR])
+		-- if displayMesh:selfIntersects() then
+		-- 	S.sprintf(str, "Self-intersects: YES")
+		-- else
+		-- 	S.sprintf(str, "Self-intersects: NO")
+		-- end
+		S.sprintf(str, "Num self-intersections: %u\n", displayMesh:numSelfIntersectingTris())
+		displayString(TEXT_FONT, str, xleft, ytop - 50)
 	end
 
 	-- Draw a little 'navigation bar' at the bottom

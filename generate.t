@@ -53,13 +53,6 @@ local p = qs.program(function()
 			var xlen = uniform(0.25, 2.0)
 			var ylen = uniform(0.25, 1.25)
 			var zlen = uniform(0.5, 4.0)
-			-- Clip zlen to [zlo, zhi] for the first iteration, which is what attaches to the ship body.
-			if i == 0 then
-				-- Constraints: zbase + 0.5*zlen < zhi 
-				--              zbase - 0.5*zlen > zlo
-				zlen = min(zlen, 2.0*(zhi - zbase))
-				zlen = min(zlen, -2.0*(zlo - zbase))
-			end
 			Shape.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
 			Shape.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
 			xbase = xbase + xlen
@@ -98,8 +91,8 @@ local p = qs.program(function()
 			var wingprob = lerp(0.4, 0.0, i/qs.real(nboxes)) -- var wingprob = 0.25
 			if qs.flip(wingprob) then
 				var xbase = 0.5*xlen
-				var zlo = rearz - zlen
-				var zhi = rearz
+				var zlo = rearz - zlen + 0.5
+				var zhi = rearz - 0.5
 				genWing(mesh, xbase, zlo, zhi)
 			end
 			-- Gen fin?
@@ -136,15 +129,7 @@ local p = qs.program(function()
 	local terra voxelFactor(mesh: &MeshT)
 		var grid = BinaryGrid.salloc():init(targetGrid.rows, targetGrid.cols, targetGrid.slices)
 		mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-
-		-- var percentsame = grid:percentCellsEqual(&targetGrid)
-		-- qs.factor(qs.softeq(percentsame, 1.0, 0.01))
-
-		-- NOTE: These percent... comparisons are one-sided--it's critical that the targetGrid
-		--    be the method receiver so that the denominator is correct.
-		var emptyPercentSame = targetGrid:percentEmptyCellsEqual(grid)
-		var filledPercentSame = targetGrid:percentFilledCellsEqual(grid)
-		var percentsame = lerp(filledPercentSame, emptyPercentSame, 0.6)
+		var percentsame = grid:percentCellsEqual(&targetGrid)
 		qs.factor(qs.softeq(percentsame, 1.0, 0.01))
 	end
 
@@ -156,8 +141,8 @@ local p = qs.program(function()
 		genShip(&mesh, -5.0)
 
 		-- Enforce some constraint
-		voxelFactor(&mesh)
-		-- aspectFactor(&mesh, 10.0, 10.0)
+		-- voxelFactor(&mesh)
+		aspectFactor(&mesh, 10.0, 10.0)
 		-- aspectFactor(&mesh, 4.0, 25.0)
 
 		return mesh

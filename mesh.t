@@ -17,6 +17,8 @@ local Mesh = S.memoize(function(real)
 	local Vec3 = Vec(real, 3)
 	local Mat4 = Mat(real, 4, 4)
 	local BBox3 = BBox(Vec3)
+	local Vec2 = Vec(real, 2)
+	local Intersection = Intersections(real)
 
 	local glVertex = real == float and gl.glVertex3fv or gl.glVertex3dv
 	local glNormal = real == float and gl.glNormal3fv or gl.glNormal3dv
@@ -89,8 +91,60 @@ local Mesh = S.memoize(function(real)
 		return bbox
 	end
 
-	local Vec2 = Vec(real, 2)
-	local Intersection = Intersections(real)
+	-- How many intersections are there between triangles in other and triangles in self?
+	-- Pretty stupid: Just loops over every triangle in other and checks it against every triangle in self
+	--    (doing early out with bounding box tests)
+	-- Contracts both of the triangles by a tiny epsilon so that touching (but not interpentratring)
+	--    faces are not considered intersecting.
+	local contractTri = macro(function(v0, v1, v2)
+		local CONTRACT_EPS = 1e-10
+		return quote
+			var centroid = (v0 + v1 + v2) / 3.0
+			v0 = v0 - (v0 - centroid)*CONTRACT_EPS
+			v1 = v1 - (v1 - centroid)*CONTRACT_EPS
+			v2 = v2 - (v2 - centroid)*CONTRACT_EPS
+		end
+	end)
+	terra Mesh:numIntersectingTris(other: &Mesh)
+		var numIsects = 0
+		var numSelfTris = self.indices:size() / 3
+		var numOtherTris = other.indices:size() / 3
+		for i=0,numOtherTris do
+			var v0 = other.vertices(self.indices(3*i).vertex)
+			var v1 = other.vertices(self.indices(3*i + 1).vertex)
+			var v2 = other.vertices(self.indices(3*i + 2).vertex)
+			contractTri(v0, v1, v2)
+			var otherbbox = BBox3.salloc():init()
+			otherbbox:expand(v0); otherbbox:expand(v1); otherbbox:expand(v2)
+			for j=0,numSelfTris do
+				var u0 = self.vertices(self.indices(3*j).vertex)
+				var u1 = self.vertices(self.indices(3*j + 1).vertex)
+				var u2 = self.vertices(self.indices(3*j + 2).vertex)
+				contractTri(u0, u1, u2)
+				var selfbbox = BBox3.salloc():init()
+				selfbbox:expand(u0); selfbbox:expand(u1); selfbbox:expand(u2)
+				if selfbbox:intersects(otherbbox) then
+					if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
+						numIsects = numIsects + 1
+					end
+				end
+			end
+		end
+		return numIsects
+	end
+
+	terra Mesh:intersects(other: &Mesh)
+		return self:numIntersectingTris(other) > 0
+	end
+
+	terra Mesh:numSelfIntersectingTris()
+		return self:numIntersectingTris(self)
+	end
+
+	terra Mesh:selfIntersects()
+		return self:numSelfIntersectingTris() > 0
+	end
+
 	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool) : {}
 		var tribb = BBox3.salloc():init()
 		tribb:expand(v0); tribb:expand(v1); tribb:expand(v2)
