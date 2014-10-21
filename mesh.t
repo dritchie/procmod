@@ -108,12 +108,12 @@ local Mesh = S.memoize(function(real)
 	end)
 	terra Mesh:numIntersectingTris(other: &Mesh)
 		var numIsects = 0
-		var numSelfTris = self.indices:size() / 3
-		var numOtherTris = other.indices:size() / 3
+		var numSelfTris = self:numTris()
+		var numOtherTris = other:numTris()
 		for i=0,numOtherTris do
-			var v0 = other.vertices(self.indices(3*i).vertex)
-			var v1 = other.vertices(self.indices(3*i + 1).vertex)
-			var v2 = other.vertices(self.indices(3*i + 2).vertex)
+			var v0 = other.vertices(other.indices(3*i).vertex)
+			var v1 = other.vertices(other.indices(3*i + 1).vertex)
+			var v2 = other.vertices(other.indices(3*i + 2).vertex)
 			contractTri(v0, v1, v2)
 			var otherbbox = BBox3.salloc():init()
 			otherbbox:expand(v0); otherbbox:expand(v1); otherbbox:expand(v2)

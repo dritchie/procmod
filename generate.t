@@ -45,6 +45,21 @@ local p = qs.program(function()
 		end
 	end)
 
+	-- Add box to mesh, enforcing no self-intersections as we go
+	local tmpmesh = global(MeshT)
+	local terra inittmpmesh() tmpmesh:init() end
+	inittmpmesh()
+	local terra addBox(mesh: &MeshT, c: Vec3, xlen: qs.real, ylen: qs.real, zlen: qs.real)
+		tmpmesh:clear()
+		Shape.addBox(&tmpmesh, c, xlen, ylen, zlen)
+		qs.condition(not tmpmesh:intersects(mesh))
+		mesh:append(&tmpmesh)
+	end
+
+	-- Which box constructor do we use?
+	-- local box = Shape.addBox
+	local box = addBox
+
 	-- Wings are just a horizontally-symmetric stack of boxes
 	local genWing = qs.func(terra(mesh: &MeshT, xbase: qs.real, zlo: qs.real, zhi: qs.real)
 		var nboxes = qs.poisson(5) + 1
@@ -53,8 +68,8 @@ local p = qs.program(function()
 			var xlen = uniform(0.25, 2.0)
 			var ylen = uniform(0.25, 1.25)
 			var zlen = uniform(0.5, 4.0)
-			Shape.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
-			Shape.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
+			box(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
+			box(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
 			xbase = xbase + xlen
 			zlo = zbase - 0.5*zlen
 			zhi = zbase + 0.5*zlen
@@ -70,7 +85,7 @@ local p = qs.program(function()
 			var ylen = uniform(0.1, 0.5)
 			var zlen = uniform(0.5, 1.0) * (zhi - zlo)
 			var zbase = 0.5*(zlo+zhi)
-			Shape.addBox(mesh, Vec3.create(0.0, ybase + 0.5*ylen, zbase), xlen, ylen, zlen)
+			box(mesh, Vec3.create(0.0, ybase + 0.5*ylen, zbase), xlen, ylen, zlen)
 			ybase = ybase + ylen
 			zlo = zbase - 0.5*zlen
 			zhi = zbase + 0.5*zlen
@@ -85,7 +100,7 @@ local p = qs.program(function()
 			var xlen = uniform(1.0, 3.0)
 			var ylen = uniform(0.5, 1.0) * xlen
 			var zlen = uniform(2.0, 5.0)
-			Shape.addBox(mesh, Vec3.create(0.0, 0.0, rearz + 0.5*zlen), xlen, ylen, zlen)
+			box(mesh, Vec3.create(0.0, 0.0, rearz + 0.5*zlen), xlen, ylen, zlen)
 			rearz = rearz + zlen
 			-- Gen wing?
 			var wingprob = lerp(0.4, 0.0, i/qs.real(nboxes)) -- var wingprob = 0.25
@@ -149,8 +164,8 @@ local p = qs.program(function()
 		-- aspectFactor(&mesh, 10.0, 10.0)
 		-- aspectFactor(&mesh, 4.0, 25.0)
 
-		-- Forbid self-intersection
-		qs.condition(not mesh:selfIntersects())
+		-- -- Forbid self-intersection (this is the slow version...)
+		-- qs.condition(not mesh:selfIntersects())
 
 		return mesh
 	end
