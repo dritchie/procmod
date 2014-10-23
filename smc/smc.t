@@ -163,16 +163,29 @@ local addBox = makeGeoPrim(Shapes.addBox)
 
 -- Need to use Quicksand's Sample type for compatibility with other code
 local Sample = terralib.require("qs").Sample(Mesh)
+local Samples = S.Vector(Sample)
+local Generations = S.Vector(Samples)
+local Particles = S.Vector(Particle)
 
 local flushstdout = terralib.includecstring([[
 #include <stdio.h>
 inline void flushstdout() { fflush(stdout); }
 ]]).flushstdout
 
-local terra run(prog: Program, nParticles: uint, outgenerations: &S.Vector(S.Vector(Sample)), recordHistory: bool, verbose: bool)
+local terra recordCurrMeshes(particles: &Particles, generations: &Generations)
+	var samps = generations:insert()
+	samps:init()
+	for p in particles do
+		var s = samps:insert()
+		s.value:copy(&p.mesh)
+		s.logprob = p.likelihood
+	end
+end
+
+local terra run(prog: Program, nParticles: uint, outgenerations: &Generations, recordHistory: bool, verbose: bool)
 	-- Init particles
-	var particles = [S.Vector(Particle)].salloc():init()
-	var nextParticles = [S.Vector(Particle)].salloc():init()
+	var particles = Particles.salloc():init()
+	var nextParticles = Particles.salloc():init()
 	var weights = [S.Vector(double)].salloc():init()
 	for i=0,nParticles do
 		var p = particles:insert()
@@ -205,19 +218,17 @@ local terra run(prog: Program, nParticles: uint, outgenerations: &S.Vector(S.Vec
 			var newp = nextParticles:insert()
 			newp:copy(particles:get(index))
 		end
+		-- Record meshes *BEFORE* resampling
+		if recordHistory then
+			recordCurrMeshes(particles, outgenerations)
+		end
 		var tmp = particles
 		particles = nextParticles
 		nextParticles = tmp
 		nextParticles:clear()
-		-- Record meshes
+		-- Record meshes *AFTER* resampling
 		if recordHistory or allParticlesFinished then
-			var samps = outgenerations:insert()
-			samps:init()
-			for p in particles do
-				var s = samps:insert()
-				s.value:copy(&p.mesh)
-				s.logprob = p.likelihood
-			end
+			recordCurrMeshes(particles, outgenerations)
 		end
 	until allParticlesFinished
 	if verbose then S.printf("\n") end
