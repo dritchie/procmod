@@ -24,6 +24,8 @@ gl.exposeConstants({
 	"GL_VIEWPORT",
 	"GLUT_KEY_LEFT",
 	"GLUT_KEY_RIGHT",
+	"GLUT_KEY_UP",
+	"GLUT_KEY_DOWN",
 	{"GLUT_BITMAP_HELVETICA_18", "void*"}
 })
 
@@ -51,6 +53,7 @@ local MAX_SCORE_COLOR = {0.0, 1.0, 0.0}
 -- Globals
 local generate = global({&Generations}->{}, 0)
 local generations = global(Generations)
+local currGenIndex = global(int, 0)
 local samples = global(&Samples, 0)
 local currSampleIndex = global(int, 0)
 local MAPIndex = global(int)
@@ -139,6 +142,7 @@ local terra regen()
 		generations:clear()
 		generate(&generations)
 		samples = generations:get(generations:size()-1)
+		currGenIndex = generations:size()-1
 		-- Set the curr mesh index to that of the MAP sample
 		maxScore = [-math.huge]
 		minScore = [math.huge]
@@ -304,6 +308,10 @@ local terra colorForScore(score: double)
 	return (1.0-t)*Vec3.create([MIN_SCORE_COLOR]) + t*Vec3.create([MAX_SCORE_COLOR])
 end
 
+local moveToNewLine = macro(function(y)
+	return quote y = y - 25 end
+end)
+
 local terra screenQuad(x: double, y: double, w: double, h: double)
 	gl.glBegin(gl.mGL_QUADS())
 		gl.glVertex2d(x, y)
@@ -333,7 +341,7 @@ local terra drawOverlay()
 	var xleft = 10
 	var ytop = vystart + vheight - 25
 
-	-- Display the sample index
+	-- Display the sample/generation index
 	var str : int8[64]
 	if displayMesh == &globals.targetMesh then
 		S.sprintf(str, "Target Shape")
@@ -342,10 +350,11 @@ local terra drawOverlay()
 	elseif samples == nil then
 		S.sprintf(str, "<No Active Mesh>")
 	else
-		S.sprintf(str, "Sample %d/%u", currSampleIndex+1, samples:size())
+		S.sprintf(str, "Gen: %d/%u, Samp: %d/%u", currGenIndex+1, generations:size(), currSampleIndex+1, samples:size())
 	end
 	gl.glColor3f([TEXT_COLOR])
 	displayString(TEXT_FONT, str, xleft, ytop)
+	moveToNewLine(ytop)
 
 
 	-- Display the score (logprob), if applicable
@@ -354,20 +363,23 @@ local terra drawOverlay()
 	if isDisplayingSample() then
 		gl.glColor3f([TEXT_COLOR])
 		S.sprintf(str, "Score: ")
-		displayString(TEXT_FONT, str, xleft, ytop - 25)
+		displayString(TEXT_FONT, str, xleft, ytop)
 		var score = samples(currSampleIndex).logprob
 		if samples:size() > 1 then
 			var color = colorForScore(score)
 			gl.glColor3dv(&(color(0)))
 		end
 		S.sprintf(str, "%g", score)
-		displayString(TEXT_FONT, str, xleft + 65, ytop - 25)
+		displayString(TEXT_FONT, str, xleft + 65, ytop)
+		moveToNewLine(ytop)
 		gl.glColor3f([TEXT_COLOR])
 		S.sprintf(str, "Num self-intersections: %u\n", displayMesh:numSelfIntersectingTris())
-		displayString(TEXT_FONT, str, xleft, ytop - 50)
+		displayString(TEXT_FONT, str, xleft, ytop)
+		moveToNewLine(ytop)
 		S.sprintf(str, "Num tris/verts/norms: %u/%u/%u\n",
 			displayMesh:numTris(), displayMesh:numVertices(), displayMesh:numNormals())
-		displayString(TEXT_FONT, str, xleft, ytop - 75)
+		displayString(TEXT_FONT, str, xleft, ytop)
+		moveToNewLine(ytop)
 	end
 
 	-- Draw a little 'navigation bar' at the bottom
@@ -454,11 +466,24 @@ local terra cameraMotion(x: int, y: int)
 end
 
 
+local terra setGenerationIndex(i: int)
+	if generations:size() > 0 then
+		if i < 0 then i = generations:size()-1 end
+		if i >= generations:size() then i = 0 end
+		currGenIndex = i
+		samples = generations:get(i)
+		displayNormalMesh()
+	end
+end
+
+
 local terra setSampleIndex(i: int)
-	if i < 0 then i = 0 end
-	if i >= samples:size() then i = samples:size()-1 end
-	currSampleIndex = i
-	displayNormalMesh()
+	if samples ~= nil then
+		if i < 0 then i = samples:size()-1 end
+		if i >= samples:size() then i = 0 end
+		currSampleIndex = i
+		displayNormalMesh()
+	end
 end
 
 
@@ -514,6 +539,10 @@ local terra special(key: int, x: int, y: int)
 		setSampleIndex(currSampleIndex - 1)
 	elseif key == gl.mGLUT_KEY_RIGHT() then
 		setSampleIndex(currSampleIndex + 1)
+	elseif key == gl.mGLUT_KEY_UP() then
+		setGenerationIndex(currGenIndex - 1)
+	elseif key == gl.mGLUT_KEY_DOWN() then
+		setGenerationIndex(currGenIndex + 1)
 	end
 end
 
