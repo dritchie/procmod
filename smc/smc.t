@@ -164,7 +164,12 @@ local addBox = makeGeoPrim(Shapes.addBox)
 -- Need to use Quicksand's Sample type for compatibility with other code
 local Sample = terralib.require("qs").Sample(Mesh)
 
-local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample))
+local flushstdout = terralib.includecstring([[
+#include <stdio.h>
+inline void flushstdout() { fflush(stdout); }
+]]).flushstdout
+
+local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample), verbose: bool)
 	-- Init particles
 	var particles = [S.Vector(Particle)].salloc():init()
 	var nextParticles = [S.Vector(Particle)].salloc():init()
@@ -176,14 +181,24 @@ local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample))
 	end
 	-- Run particles step-by-step (read: geo prim by geo prim)
 	--   until all particles are finished
+	var generation = 0
 	repeat
-		var allParticlesFinished = true
+		var numFinished = 0
 		for i=0,particles:size() do
 			var p = particles:get(i)
 			p:run(prog)
-			allParticlesFinished = allParticlesFinished and p.finished
+			if p.finished then
+				numFinished = numFinished + 1
+			end
 			weights(i) = tmath.exp(p.likelihood)
 		end
+		var allParticlesFinished = (numFinished == nParticles)
+		if verbose then
+			S.printf(" Generation %u: Finished %u/%u particles.\r",
+				generation, numFinished, nParticles)
+			flushstdout()
+		end
+		generation = generation + 1
 		-- Importance resampling
 		for i=0,nParticles do
 			var index = [distrib.categorical_vector(double)].sample(weights)
@@ -195,6 +210,7 @@ local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample))
 		nextParticles = tmp
 		nextParticles:clear()
 	until allParticlesFinished
+	if verbose then S.printf("\n") end
 	-- Fill in the list of output samples
 	for p in particles do
 		var s = outsamps:insert()

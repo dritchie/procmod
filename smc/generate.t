@@ -88,5 +88,5 @@ end
 local N_PARTICLES = 100
 return terra(samples: &S.Vector(smc.Sample))
 	samples:clear()
-	smc.run(spaceship, N_PARTICLES, samples)
+	smc.run(spaceship, N_PARTICLES, samples, true)
 end
