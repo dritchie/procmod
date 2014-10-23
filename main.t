@@ -33,6 +33,7 @@ local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
 local Sample = qs.Sample(Mesh(double))
 local Samples = S.Vector(Sample)
+local Generations = S.Vector(Samples)
 
 -- Constants
 -- local GENERATE_FILE = "generate.t"
@@ -48,8 +49,9 @@ local MIN_SCORE_COLOR = {1.0, 0.0, 0.0}
 local MAX_SCORE_COLOR = {0.0, 1.0, 0.0}
 
 -- Globals
-local generate = global({&Samples}->{}, 0)
-local samples = global(Samples)
+local generate = global({&Generations}->{}, 0)
+local generations = global(Generations)
+local samples = global(&Samples, 0)
 local currSampleIndex = global(int, 0)
 local MAPIndex = global(int)
 local voxelMesh = global(Mesh(double))
@@ -134,8 +136,9 @@ local reload = terralib.cast({}->bool, reloadCode)
 local terra regen()
 	-- Only generate if the generate fn pointer is not nil.
 	if generate ~= nil then
-		samples:clear()
-		generate(&samples)
+		generations:clear()
+		generate(&generations)
+		samples = generations:get(generations:size()-1)
 		-- Set the curr mesh index to that of the MAP sample
 		maxScore = [-math.huge]
 		minScore = [math.huge]
@@ -166,7 +169,7 @@ local terra init()
 	-- gl.glEnable(gl.mGL_CULL_FACE())
 	gl.glEnable(gl.mGL_NORMALIZE())
 
-	samples:init()
+	generations:init()
 	voxelMesh:init()
 	camera:init()
 	light:init()
@@ -290,7 +293,8 @@ local terra displayString(font: &opaque, str: rawstring, x: int, y: int)
 end
 
 local terra isDisplayingSample()
-	return displayMesh ~= nil and
+	return samples ~= nil and
+		   displayMesh ~= nil and
 		   displayMesh ~= &globals.targetMesh and
 		   displayMesh ~= &voxelMesh
 end
@@ -335,13 +339,14 @@ local terra drawOverlay()
 		S.sprintf(str, "Target Shape")
 	elseif displayMesh == &voxelMesh then
 		S.sprintf(str, "Voxelization")
-	elseif samples:size() == 0 then
+	elseif samples == nil then
 		S.sprintf(str, "<No Active Mesh>")
 	else
 		S.sprintf(str, "Sample %d/%u", currSampleIndex+1, samples:size())
 	end
 	gl.glColor3f([TEXT_COLOR])
 	displayString(TEXT_FONT, str, xleft, ytop)
+
 
 	-- Display the score (logprob), if applicable
 	-- Also report whether mesh self intersects
@@ -366,7 +371,7 @@ local terra drawOverlay()
 	end
 
 	-- Draw a little 'navigation bar' at the bottom
-	if samples:size() > 1 and isDisplayingSample() then
+	if isDisplayingSample() and samples:size() > 1 then
 		gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_FILL())
 		-- First, draw a bar across the screen colored by score
 		var height = 20.0

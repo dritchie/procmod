@@ -179,9 +179,9 @@ local kernel = qs.TraceMHKernel()
 -- 	{0.9, 0.1}
 -- )
 local gen = qs.infer(p, qs.Samples, qs.MCMC(kernel, {numsamps=2000, verbose=true}))
-return terra(samples: &Samples)
-	samples:destruct()
-	@samples = gen()
+return terra(generations: &S.Vector(Samples))
+	generations:clear()
+	generations:insert(gen())
 end
 
 

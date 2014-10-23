@@ -86,7 +86,13 @@ local terra spaceship(mesh: &Mesh)
 end
 
 local N_PARTICLES = 100
-return terra(samples: &S.Vector(smc.Sample))
-	samples:clear()
-	smc.run(spaceship, N_PARTICLES, samples, true)
+local RECORD_HISTORY = true
+return terra(generations: &S.Vector(S.Vector(smc.Sample)))
+	generations:clear()
+	smc.run(spaceship, N_PARTICLES, generations, RECORD_HISTORY, true)
 end
+
+
+
+
+

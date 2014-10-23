@@ -169,7 +169,7 @@ local flushstdout = terralib.includecstring([[
 inline void flushstdout() { fflush(stdout); }
 ]]).flushstdout
 
-local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample), verbose: bool)
+local terra run(prog: Program, nParticles: uint, outgenerations: &S.Vector(S.Vector(Sample)), recordHistory: bool, verbose: bool)
 	-- Init particles
 	var particles = [S.Vector(Particle)].salloc():init()
 	var nextParticles = [S.Vector(Particle)].salloc():init()
@@ -209,14 +209,18 @@ local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample), ve
 		particles = nextParticles
 		nextParticles = tmp
 		nextParticles:clear()
+		-- Record meshes
+		if recordHistory or allParticlesFinished then
+			var samps = outgenerations:insert()
+			samps:init()
+			for p in particles do
+				var s = samps:insert()
+				s.value:copy(&p.mesh)
+				s.logprob = p.likelihood
+			end
+		end
 	until allParticlesFinished
 	if verbose then S.printf("\n") end
-	-- Fill in the list of output samples
-	for p in particles do
-		var s = outsamps:insert()
-		s.value:copy(&p.mesh)
-		s.logprob = p.likelihood
-	end
 end
 
 -----------------------------------------------------------------
