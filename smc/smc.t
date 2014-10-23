@@ -6,6 +6,7 @@ local Vec3 = terralib.require("linalg.vec")(double, 3)
 local BBox3 = terralib.require("bbox")(Vec3)
 local globals = terralib.require("globals")
 local distrib = terralib.require("qs.distrib")
+local tmath = terralib.require("qs.lib.tmath")
 
 -----------------------------------------------------------------
 
@@ -179,7 +180,7 @@ local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample))
 			var p = particles:get(i)
 			p:run(prog)
 			allParticlesFinished = allParticlesFinished and p.finished
-			weights(i) = p.likelihood
+			weights(i) = tmath.exp(p.likelihood)
 		end
 		-- -- Importance resampling
 		-- for i=0,nParticles do

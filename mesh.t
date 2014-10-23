@@ -146,7 +146,10 @@ local Mesh = S.memoize(function(real)
 		return self:numSelfIntersectingTris() > 0
 	end
 
-	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool) : {}
+	-- Returns a bounding box of the voxels touched by this triangle
+	local Vec3u = Vec(uint, 3)
+	local BBox3u = BBox(Vec3u)
+	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool)
 		var tribb = BBox3.salloc():init()
 		tribb:expand(v0); tribb:expand(v1); tribb:expand(v2)
 		-- If a triangle is perfectly axis-aligned, it will 'span' zero voxels, so the loops below
@@ -154,12 +157,13 @@ local Mesh = S.memoize(function(real)
 		tribb:expand(0.000001)
 		var minI = tribb.mins:floor()
 		var maxI = tribb.maxs:ceil()
+		var bb = BBox3u.salloc():init(Vec3u.create(minI(0), minI(1), minI(2)),
+									  Vec3u.create(maxI(0), maxI(1), maxI(2)))
 		-- Take care to ensure that we don't loop over any voxels that are outside the actual grid.
-		minI:maxInPlace(Vec3.create(0.0))
-		maxI:minInPlace(Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices)))
-		for k=uint(minI(2)),uint(maxI(2)) do
-			for i=uint(minI(1)),uint(maxI(1)) do
-				for j=uint(minI(0)),uint(maxI(0)) do
+		bb.maxs:minInPlace(Vec3u.create(outgrid.cols, outgrid.rows, outgrid.slices))
+		for k=bb.mins(2),bb.maxs(2) do
+			for i=bb.mins(1),bb.maxs(1) do
+				for j=bb.mins(0),bb.maxs(0) do
 					var v = Vec3.create(real(j), real(i), real(k))
 					var voxel = BBox3.salloc():init(
 						v,
@@ -172,6 +176,7 @@ local Mesh = S.memoize(function(real)
 				end
 			end
 		end
+		return @bb
 	end
 
 	-- Returns the number of triangles that fell outside the bounds
@@ -188,6 +193,7 @@ local Mesh = S.memoize(function(real)
 			Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices))
 		)
 		var numOutsideTris = 0
+		var touchedbb = BBox3u.salloc():init()
 		for i=0,numtris do
 			var p0 = worldtovox:transformPoint(self.vertices(self.indices(3*i).vertex))
 			var p1 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 1).vertex))
@@ -195,13 +201,14 @@ local Mesh = S.memoize(function(real)
 			var tribb = BBox3.salloc():init()
 			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
 			if tribb:intersects(gridbounds) then
-				voxelizeTriangle(outgrid, p0, p1, p2, solid)
+				var bb = voxelizeTriangle(outgrid, p0, p1, p2, solid)
+				touchedbb:unionWith(&bb)
 			else
 				numOutsideTris = numOutsideTris + 1
 			end
 		end
 		if solid then
-			outgrid:fillInterior()
+			outgrid:fillInterior(touchedbb)
 		end
 		return numOutsideTris
 	end

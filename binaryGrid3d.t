@@ -1,4 +1,6 @@
 local S = terralib.require("qs.lib.std")
+local Vec = terralib.require("linalg.vec")
+local BBox = terralib.require("bbox")
 local C = terralib.includecstring [[
 #include <string.h>
 ]]
@@ -110,14 +112,16 @@ terra BinaryGrid3D:unionWith(other: &BinaryGrid3D)
 end
 
 local struct Voxel { i: uint, j: uint, k: uint }
-terra BinaryGrid3D:fillInterior()
+local Vec3u = Vec(uint, 3)
+local BBox3u = BBox(Vec3u)
+terra BinaryGrid3D:fillInterior(bounds: &BBox3u) : {}
 	var visited = BinaryGrid3D.salloc():copy(self)
 	var frontier = BinaryGrid3D.salloc():init(self.rows, self.cols, self.slices)
 	-- Start expanding from every cell we haven't yet visited (already filled
 	--    cells count as visited)
-	for k=0,self.slices do
-		for i=0,self.rows do
-			for j=0,self.cols do
+	for k=bounds.mins(2),bounds.maxs(2) do
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
 				if not visited:isVoxelSet(i,j,k) then
 					var isoutside = false
 					var fringe = [S.Vector(Voxel)].salloc():init()
@@ -125,10 +129,10 @@ terra BinaryGrid3D:fillInterior()
 					while fringe:size() ~= 0 do
 						var v = fringe:remove()
 						frontier:setVoxel(v.i, v.j, v.k)
-						-- If we expanded to the edge of the grid, then this region is outside
-						if v.i == 0 or v.i == self.rows-1 or
-						   v.j == 0 or v.j == self.cols-1 or
-						   v.k == 0 or v.k == self.slices-1 then
+						-- If we expanded to the edge of the bounds, then this region is outside
+						if v.i == bounds.mins(1) or v.i == bounds.maxs(1)-1 or
+						   v.j == bounds.mins(0) or v.j == bounds.maxs(0)-1 or
+						   v.k == bounds.mins(2) or v.k == bounds.maxs(2)-1 then
 							isoutside = true
 						-- Otherwise, expand to the neighbors
 						else
@@ -165,10 +169,18 @@ terra BinaryGrid3D:fillInterior()
 	end
 end
 
+terra BinaryGrid3D:fillInterior() : {}
+	var bounds = BBox3u.salloc():init(
+		Vec3u.create(0),
+		Vec3u.create(self.cols, self.rows, self.slices)
+	)
+	self:fillInterior(bounds)
+end
+
 BinaryGrid3D.toMesh = S.memoize(function(real)
+	local Vec3 = Vec(real, 3)
+	local BBox3 = BBox(Vec3)
 	local Mesh = terralib.require("mesh")(real)
-	local Vec3 = terralib.require("linalg.vec")(real, 3)
-	local BBox3 = terralib.require("bbox")(Vec3)
 	local Shape = terralib.require("shapes")(real)
 	local lerp = macro(function(lo, hi, t) return `(1.0-t)*lo + t*hi end)
 	return terra(grid: &BinaryGrid3D, mesh: &Mesh, bounds: &BBox3)
