@@ -145,10 +145,8 @@ local function makeGeoPrim(shapefn)
 
 					mesh:append(&gp.tmpmesh)
 
-					-- TODO: Only works if Program has no subroutines. Replace with setjmp/longjmp?
-					--    (Note that this will also require me to explicitly destruct tmpmesh, since longjmp
-					--     won't invoke the deferred destruct statements.)
-					--    (Also, any other heap allocated memory used by the program will leak...)
+					-- TODO: Only works if program has no subroutines. Replace with setjmp/longjmp?
+					--    (Note: any heap allocated memory in use by the program will leak...)
 					-- ALTERNATIVELY: could just run the program through to completion...
 					return false
 				else
@@ -186,16 +184,16 @@ local terra run(prog: Program, nParticles: uint, outsamps: &S.Vector(Sample))
 			allParticlesFinished = allParticlesFinished and p.finished
 			weights(i) = tmath.exp(p.likelihood)
 		end
-		-- -- Importance resampling
-		-- for i=0,nParticles do
-		-- 	var index = [distrib.categorical_vector(double)].sample(weights)
-		-- 	var newp = nextParticles:insert()
-		-- 	newp:copy(particles:get(index))
-		-- end
-		-- var tmp = particles
-		-- particles = nextParticles
-		-- nextParticles = tmp
-		-- nextParticles:clear()
+		-- Importance resampling
+		for i=0,nParticles do
+			var index = [distrib.categorical_vector(double)].sample(weights)
+			var newp = nextParticles:insert()
+			newp:copy(particles:get(index))
+		end
+		var tmp = particles
+		particles = nextParticles
+		nextParticles = tmp
+		nextParticles:clear()
 	until allParticlesFinished
 	-- Fill in the list of output samples
 	for p in particles do
