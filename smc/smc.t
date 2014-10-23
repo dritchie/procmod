@@ -23,6 +23,7 @@ local struct Particle(S.Object)
 	boolindex: uint
 	likelihood: double
 	mesh: Mesh
+	tmpmesh: Mesh
 	grid: BinaryGrid
 	outsideTris: uint
 	geoindex: uint
@@ -122,24 +123,23 @@ local function makeGeoPrim(shapefn)
 			else
 				if gp.geoindex == gp.stopindex then
 					-- S.printf("    geo prim\n")
-					-- shapefn(mesh, [args])
-					var tmpmesh = Mesh.salloc():init()
-					shapefn(tmpmesh, [args])
-					-- var intersects = tmpmesh:intersects(mesh)
-					-- gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
-					-- var n = tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-					-- gp.outsideTris = gp.outsideTris + n
-					mesh:append(tmpmesh)
+					gp.tmpmesh:clear()
+					shapefn(&gp.tmpmesh, [args])
+					var intersects = gp.tmpmesh:intersects(mesh)
+					gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
+					var n = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+					gp.outsideTris = gp.outsideTris + n
+					mesh:append(&gp.tmpmesh)
 
-					-- -- If self-intersections, then set likelihood to -inf
-					-- -- Otherwise, do the voxel stuff
-					-- if intersects then
-					-- 	gp.likelihood = [-math.huge]
-					-- else
-					-- 	var percentSame = gp.grid:percentCellsEqual(&tgrid)
-					-- 	var percentOutside = double(gp.outsideTris) / mesh:numTris()
-					-- 	gp.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
-					-- end
+					-- If self-intersections, then set likelihood to -inf
+					-- Otherwise, do the voxel stuff
+					if intersects then
+						gp.likelihood = [-math.huge]
+					else
+						var percentSame = gp.grid:percentCellsEqual(&tgrid)
+						var percentOutside = double(gp.outsideTris) / mesh:numTris()
+						gp.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
+					end
 
 					-- TODO: Only works if Program has no subroutines. Replace with setjmp/longjmp?
 					-- (Note that this will also require me to explicitly destruct tmpmesh, since longjmp
@@ -155,7 +155,6 @@ local function makeGeoPrim(shapefn)
 end
 
 local addBox = makeGeoPrim(Shapes.addBox)
--- local addBox = Shapes.addBox
 
 -----------------------------------------------------------------
 
