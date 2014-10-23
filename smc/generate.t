@@ -2,6 +2,7 @@ local S = terralib.require("qs.lib.std")
 local smc = terralib.require("smc.smc")
 local Mesh = terralib.require("mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
+local Shapes = terralib.require("shapes")(double)
 
 
 -- NOTE: subroutines are currently not allowed, so helper functions must be macros.
@@ -9,6 +10,13 @@ local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 local lerp = macro(function(lo, hi, t)
 	return `(1.0-t)*lo + t*hi
+end)
+
+local addBox = smc.makeGeoPrim(Shapes.addBox)
+
+local addWingSeg = smc.makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
+	Shapes.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
+	Shapes.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
 end)
 
 -- Wings are just a horizontally-symmetric stack of boxes
@@ -20,8 +28,7 @@ local genWing = macro(function(mesh, xbase, zlo, zhi)
 			var xlen = smc.uniform(0.25, 2.0)
 			var ylen = smc.uniform(0.25, 1.25)
 			var zlen = smc.uniform(0.5, 4.0)
-			smc.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
-			smc.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
+			addWingSeg(mesh, xbase, zbase, xlen, ylen, zlen)
 			xbase = xbase + xlen
 			zlo = zbase - 0.5*zlen
 			zhi = zbase + 0.5*zlen
@@ -39,7 +46,7 @@ local genFin = macro(function(mesh, ybase, zlo, zhi, xmax)
 			var ylen = smc.uniform(0.1, 0.5)
 			var zlen = smc.uniform(0.5, 1.0) * (zhi - zlo)
 			var zbase = 0.5*(zlo+zhi)
-			smc.addBox(mesh, Vec3.create(0.0, ybase + 0.5*ylen, zbase), xlen, ylen, zlen)
+			addBox(mesh, Vec3.create(0.0, ybase + 0.5*ylen, zbase), xlen, ylen, zlen)
 			ybase = ybase + ylen
 			zlo = zbase - 0.5*zlen
 			zhi = zbase + 0.5*zlen
@@ -56,7 +63,7 @@ local genShip = macro(function(mesh, rearz)
 			var xlen = smc.uniform(1.0, 3.0)
 			var ylen = smc.uniform(0.5, 1.0) * xlen
 			var zlen = smc.uniform(2.0, 5.0)
-			smc.addBox(mesh, Vec3.create(0.0, 0.0, rearz + 0.5*zlen), xlen, ylen, zlen)
+			addBox(mesh, Vec3.create(0.0, 0.0, rearz + 0.5*zlen), xlen, ylen, zlen)
 			rearz = rearz + zlen
 			-- Gen wing?
 			var wingprob = lerp(0.4, 0.0, i/double(nboxes))

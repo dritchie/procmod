@@ -1,6 +1,5 @@
 local S = terralib.require("qs.lib.std")
 local Mesh = terralib.require("mesh")(double)
-local Shapes = terralib.require("shapes")(double)
 local BinaryGrid = terralib.require("binaryGrid3d")
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 local BBox3 = terralib.require("bbox")(Vec3)
@@ -157,8 +156,6 @@ local function makeGeoPrim(shapefn)
 	end)
 end
 
-local addBox = makeGeoPrim(Shapes.addBox)
-
 -----------------------------------------------------------------
 
 -- Need to use Quicksand's Sample type for compatibility with other code
@@ -242,7 +239,7 @@ return
 	flip = flip,
 	poisson = poisson,
 	uniform = uniform,
-	addBox = addBox,
+	makeGeoPrim = makeGeoPrim,
 	run = run
 }
 
