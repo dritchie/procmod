@@ -85,7 +85,7 @@ local terra spaceship(mesh: &Mesh)
 	return true
 end
 
-local N_PARTICLES = 1
+local N_PARTICLES = 100
 return terra(samples: &S.Vector(smc.Sample))
 	samples:clear()
 	smc.run(spaceship, N_PARTICLES, samples)

@@ -49,7 +49,6 @@ terra Particle:run(p: Program)
 		self.boolindex = 0
 		self.geoindex = 0
 		gp = self
-		-- S.printf("running\n")
 		if not p(&self.mesh) then
 			self.stopindex = self.stopindex + 1
 		else
@@ -123,29 +122,34 @@ local function makeGeoPrim(shapefn)
 				shapefn(mesh, [args])
 			else
 				if gp.geoindex == gp.stopindex then
-					-- S.printf("    geo prim\n")
 					gp.tmpmesh:clear()
 					shapefn(&gp.tmpmesh, [args])
-					var intersects = gp.tmpmesh:intersects(mesh)
-					gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
-					var n = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-					gp.outsideTris = gp.outsideTris + n
-					mesh:append(&gp.tmpmesh)
 
-					-- If self-intersections, then set likelihood to -inf
-					-- Otherwise, do the voxel stuff
-					if intersects then
-						gp.likelihood = [-math.huge]
-					else
-						var percentSame = gp.grid:percentCellsEqual(&tgrid)
-						var percentOutside = double(gp.outsideTris) / mesh:numTris()
-						gp.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
+					-- If likelihood is already -inf, then leave it that way
+					-- (With resampling enabled, this shouldn't happen--we should always discard these particles)
+					if gp.likelihood ~= [-math.huge] then
+						-- If self-intersections, then set likelihood to -inf
+						if gp.tmpmesh:intersects(mesh) then
+							gp.likelihood = [-math.huge]
+						-- Otherwise, do the voxel stuff
+						else
+							gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
+							var n = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+							gp.outsideTris = gp.outsideTris + n
+							var numTris = mesh:numTris() + gp.tmpmesh:numTris()
+							var percentSame = gp.grid:percentCellsEqual(&tgrid)
+							var percentOutside = double(gp.outsideTris) / numTris
+							gp.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
+						end
 					end
 
+					mesh:append(&gp.tmpmesh)
+
 					-- TODO: Only works if Program has no subroutines. Replace with setjmp/longjmp?
-					-- (Note that this will also require me to explicitly destruct tmpmesh, since longjmp
-					--  won't invoke the deferred destruct statements.)
-					-- (Also, any other heap allocated memory used by the program will leak...)
+					--    (Note that this will also require me to explicitly destruct tmpmesh, since longjmp
+					--     won't invoke the deferred destruct statements.)
+					--    (Also, any other heap allocated memory used by the program will leak...)
+					-- ALTERNATIVELY: could just run the program through to completion...
 					return false
 				else
 					gp.geoindex = gp.geoindex + 1
