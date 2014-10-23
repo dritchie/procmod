@@ -35,7 +35,8 @@ local Sample = qs.Sample(Mesh(double))
 local Samples = S.Vector(Sample)
 
 -- Constants
-local GENERATE_FILE = "generate.t"
+-- local GENERATE_FILE = "generate.t"
+local GENERATE_FILE = "smc/generate.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
@@ -120,6 +121,7 @@ local function reloadCode()
 	end
 	local ok, maybeerr = pcall(doReload)
 	if not ok then
+		print("--------------------------------")
 		print(string.format("Error compiling procedural modeling code: %s", maybeerr))
 		return false
 	end
@@ -343,6 +345,7 @@ local terra drawOverlay()
 
 	-- Display the score (logprob), if applicable
 	-- Also report whether mesh self intersects
+	-- Also report the size of the mesh
 	if isDisplayingSample() then
 		gl.glColor3f([TEXT_COLOR])
 		S.sprintf(str, "Score: ")
@@ -355,13 +358,11 @@ local terra drawOverlay()
 		S.sprintf(str, "%g", score)
 		displayString(TEXT_FONT, str, xleft + 65, ytop - 25)
 		gl.glColor3f([TEXT_COLOR])
-		-- if displayMesh:selfIntersects() then
-		-- 	S.sprintf(str, "Self-intersects: YES")
-		-- else
-		-- 	S.sprintf(str, "Self-intersects: NO")
-		-- end
 		S.sprintf(str, "Num self-intersections: %u\n", displayMesh:numSelfIntersectingTris())
 		displayString(TEXT_FONT, str, xleft, ytop - 50)
+		S.sprintf(str, "Num tris/verts/norms: %u/%u/%u\n",
+			displayMesh:numTris(), displayMesh:numVertices(), displayMesh:numNormals())
+		displayString(TEXT_FONT, str, xleft, ytop - 75)
 	end
 
 	-- Draw a little 'navigation bar' at the bottom

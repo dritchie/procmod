@@ -33,22 +33,22 @@ terra BinaryGrid3D:__copy(other: &BinaryGrid3D)
 end
 
 terra BinaryGrid3D:__destruct()
-	-- TODO: Make also work on CUDA?
 	if self.data ~= nil then
 		S.free(self.data)
 	end
 end
 
 terra BinaryGrid3D:resize(rows: uint, cols: uint, slices: uint)
-	self.rows = rows
-	self.cols = cols
-	self.slices = slices
-	if self.data ~= nil then
-		S.free(self.data)
+	if self.rows ~= rows or self.cols ~= cols or self.slices ~= slices then
+		self.rows = rows
+		self.cols = cols
+		self.slices = slices
+		if self.data ~= nil then
+			S.free(self.data)
+		end
+		self.data = [&uint](S.malloc(self:numuints()*sizeof(uint)))
+		self:clear()
 	end
-	-- TODO: Make also work on CUDA?
-	self.data = [&uint](S.malloc(self:numuints()*sizeof(uint)))
-	self:clear()
 end
 
 terra BinaryGrid3D:clear()

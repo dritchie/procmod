@@ -28,22 +28,6 @@ local p = qs.program(function()
 			lerp(lo, hi, u)
 		end
 	end)
-	local min = macro(function(a, b)
-		return quote
-			var x = a
-			if b < a then x = b end
-		in
-			x
-		end
-	end)
-	local max = macro(function(a, b)
-		return quote
-			var x = a
-			if b > a then x = b end
-		in
-			x
-		end
-	end)
 
 	-- Add box to mesh, enforcing no self-intersections as we go
 	local tmpmesh = global(MeshT)
