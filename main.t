@@ -38,8 +38,8 @@ local Samples = S.Vector(Sample)
 local Generations = S.Vector(Samples)
 
 -- Constants
-local GENERATE_FILE = "generate.t"
--- local GENERATE_FILE = "smc/generate.t"
+-- local GENERATE_FILE = "generate.t"
+local GENERATE_FILE = "smc/generate.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
@@ -113,6 +113,44 @@ local terra displayVoxelMesh()
 end
 
 
+local terra setGenerationIndex(i: int, setSampIndexToMAP: bool)
+	if generations:size() > 0 then
+		if i < 0 then i = generations:size()-1 end
+		if i >= generations:size() then i = 0 end
+		currGenIndex = i
+		samples = generations:get(i)
+
+		-- Set the curr mesh index to that of the MAP sample
+		maxScore = [-math.huge]
+		minScore = [math.huge]
+		for i=0,samples:size() do
+			var s = samples:get(i)
+			if s.logprob > maxScore then
+				maxScore = s.logprob
+				MAPIndex = i
+			end
+			if s.logprob < minScore then
+				minScore = s.logprob
+			end
+		end
+		if setSampIndexToMAP then
+			currSampleIndex = MAPIndex
+		end
+		displayNormalMesh()
+	end
+end
+
+
+local terra setSampleIndex(i: int)
+	if samples ~= nil then
+		if i < 0 then i = samples:size()-1 end
+		if i >= samples:size() then i = 0 end
+		currSampleIndex = i
+		displayNormalMesh()
+	end
+end
+
+
 -- Lua callback to reload and 'hot swap' the procedural generation code.
 local function reloadCode()
 	local function doReload()
@@ -141,23 +179,7 @@ local terra regen()
 	if generate ~= nil then
 		generations:clear()
 		generate(&generations)
-		samples = generations:get(generations:size()-1)
-		currGenIndex = generations:size()-1
-		-- Set the curr mesh index to that of the MAP sample
-		maxScore = [-math.huge]
-		minScore = [math.huge]
-		for i=0,samples:size() do
-			var s = samples:get(i)
-			if s.logprob > maxScore then
-				maxScore = s.logprob
-				currSampleIndex = i
-			end
-			if s.logprob < minScore then
-				minScore = s.logprob
-			end
-		end
-		MAPIndex = currSampleIndex
-		displayNormalMesh()
+		setGenerationIndex(generations:size()-1, true)
 	end
 end
 
@@ -466,27 +488,6 @@ local terra cameraMotion(x: int, y: int)
 end
 
 
-local terra setGenerationIndex(i: int)
-	if generations:size() > 0 then
-		if i < 0 then i = generations:size()-1 end
-		if i >= generations:size() then i = 0 end
-		currGenIndex = i
-		samples = generations:get(i)
-		displayNormalMesh()
-	end
-end
-
-
-local terra setSampleIndex(i: int)
-	if samples ~= nil then
-		if i < 0 then i = samples:size()-1 end
-		if i >= samples:size() then i = 0 end
-		currSampleIndex = i
-		displayNormalMesh()
-	end
-end
-
-
 local terra sampleIndexScrub(x: int, y: int)
 	if prevbutton == gl.mGLUT_LEFT_BUTTON() and samples:size() > 0 then
 		var viewport : int[4]
@@ -540,9 +541,9 @@ local terra special(key: int, x: int, y: int)
 	elseif key == gl.mGLUT_KEY_RIGHT() then
 		setSampleIndex(currSampleIndex + 1)
 	elseif key == gl.mGLUT_KEY_UP() then
-		setGenerationIndex(currGenIndex - 1)
+		setGenerationIndex(currGenIndex - 1, false)
 	elseif key == gl.mGLUT_KEY_DOWN() then
-		setGenerationIndex(currGenIndex + 1)
+		setGenerationIndex(currGenIndex + 1, false)
 	end
 end
 
