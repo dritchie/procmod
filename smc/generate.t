@@ -8,6 +8,9 @@ local Shapes = terralib.require("shapes")(double)
 -- NOTE: subroutines are currently not allowed, so helper functions must be macros.
 
 
+-- terralib.require("qs").initrand()
+
+
 local lerp = macro(function(lo, hi, t)
 	return `(1.0-t)*lo + t*hi
 end)
@@ -89,7 +92,6 @@ end)
 local terra spaceship(mesh: &Mesh)
 	var rearz = -5.0
 	genShip(mesh, rearz)
-	return true
 end
 
 local N_PARTICLES = 100

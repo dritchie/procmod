@@ -160,6 +160,11 @@ end
 local flip = makeERP(distrib.bernoulli(double).sample)
 local poisson = makeERP(distrib.poisson(double).sample)
 local uniform = makeERP(distrib.uniform(double).sample)
+local uniformInt = makeERP(
+	terra(lo: int, hi: int)
+		return int([distrib.uniform(double)].sample(lo, hi))
+	end
+)
 
 -----------------------------------------------------------------
 
@@ -306,6 +311,7 @@ return
 	flip = flip,
 	poisson = poisson,
 	uniform = uniform,
+	uniformInt = uniformInt,
 	makeGeoPrim = makeGeoPrim,
 	run = run
 }
