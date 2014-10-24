@@ -79,7 +79,7 @@ terra Particle:run(p: Program)
 
 		-- How we run the program depends on the implementation strategy
 		escape
-			if IMPLEMENTATION == Impl.RETURN then
+			if IMPLEMENTATION == Impl.RETURN or IMPLEMENTATION == Impl.FULLRUN then
 				emit quote
 					p(&self.mesh)
 					if self.geoindex < self.stopindex then
@@ -96,8 +96,6 @@ terra Particle:run(p: Program)
 					end
 					self.stopindex = self.stopindex + 1
 				end
-			elseif IMPLEMENTATION == Impl.FULLRUN then
-				-- TODO: FILL IN
 			end
 		end
 
@@ -121,6 +119,7 @@ initglobals()
 
 local function makeERP(sampler)
 	local T = sampler:gettype().returntype
+	-- Figure out which vector of random choices we should look into
 	local indexq, choiceq
 	if T == bool then
 		indexq = `gp.boolindex
@@ -138,7 +137,14 @@ local function makeERP(sampler)
 		local args = {...}
 		return quote
 			var res: T
-			if indexq < choiceq:size() then
+			if gp.geoindex > gp.stopindex then
+				-- The only time this happens is if we're in FULLRUN mode and we're just
+				--    finishing out the program. In this case, just sample something but
+				--    don't record it--we haven't "officially" gotten to this random choice yet
+				-- TODO: Try to sample values that will lead to shorter completion runs
+				--    (perhaps by providing domains/bounds?)
+				res = sampler([args])
+			elseif indexq < choiceq:size() then
 				res = choiceq(indexq)
 			else
 				res = sampler([args])
@@ -203,7 +209,9 @@ local function makeGeoPrim(shapefn)
 								C.longjmp(gp.jumpEnv, 1)
 							end
 						elseif IMPLEMENTATION == Impl.FULLRUN then
-							-- TODO: FILL IN
+							emit quote
+								gp.geoindex = gp.geoindex + 1
+							end
 						end
 					end
 
