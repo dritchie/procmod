@@ -9,6 +9,33 @@ local tmath = terralib.require("qs.lib.tmath")
 
 -----------------------------------------------------------------
 
+-- Different strategies for implementing SMC inference semantics
+local Impl = 
+{
+	-- Early out by inserting a 'return' statement.
+	-- Does not work if the program has subroutines, but will fire deferred destructors
+	RETURN = 0,
+	-- Early out by longjmp-ing out of the program.
+	-- Works for any program, but will *not* fire deferred destructors, so memory may leak
+	--    (unless we provide a special managed 'pool' for user-allocated memory).
+	LONGJMP = 1,
+	-- Run the program through to completion every time, just don't do any random choices/factors
+	--    past the current 'stop' point.
+	-- Works for any program and will not leak, but might be noticably slower.
+	FULLRUN = 2
+}
+
+local IMPLEMENTATION = Impl.RETURN
+
+local C
+if IMPLEMENTATION == Impl.LONGJMP then
+	C = terralib.includecstring [[
+	#include <setjmp.h>
+	]]
+end
+
+-----------------------------------------------------------------
+
 local Program = {&Mesh} -> {bool}
 
 -----------------------------------------------------------------
@@ -30,6 +57,7 @@ local struct Particle(S.Object)
 	stopindex: uint
 	finished: bool
 }
+if IMPLEMENTATION == Impl.LONGJMP then Particle.entries:insert({field="jumpEnv", type=C.jmp_buf}) end
 
 local gp = global(&Particle, nil)
 
@@ -48,11 +76,30 @@ terra Particle:run(p: Program)
 		self.boolindex = 0
 		self.geoindex = 0
 		gp = self
-		if not p(&self.mesh) then
-			self.stopindex = self.stopindex + 1
-		else
-			self.finished = true
+
+		-- How we run the program depends on the implementation strategy
+		escape
+			if IMPLEMENTATION == Impl.RETURN then
+				emit quote
+					if not p(&self.mesh) then
+						self.stopindex = self.stopindex + 1
+					else
+						self.finished = true
+					end
+				end
+			elseif IMPLEMENTATION == Impl.LONGJMP then
+				emit quote
+					if C.setjmp(self.jumpEnv) == 0 then
+						p(&self.mesh)
+						self.finished = true
+					end
+					self.stopindex = self.stopindex + 1
+				end
+			elseif IMPLEMENTATION == Impl.FULLRUN then
+				-- TODO: FILL IN
+			end
 		end
+
 		gp = nil
 	end
 end
@@ -144,10 +191,21 @@ local function makeGeoPrim(shapefn)
 
 					mesh:append(&gp.tmpmesh)
 
-					-- TODO: Only works if program has no subroutines. Replace with setjmp/longjmp?
-					--    (Note: any heap allocated memory in use by the program will leak...)
-					-- ALTERNATIVELY: could just run the program through to completion...
-					return false
+					-- What we do next depends on the implementation strategy
+					escape
+						if IMPLEMENTATION == Impl.RETURN then
+							emit quote
+								return false
+							end
+						elseif IMPLEMENTATION == Impl.LONGJMP then
+							emit quote
+								C.longjmp(gp.jumpEnv, 1)
+							end
+						elseif IMPLEMENTATION == Impl.FULLRUN then
+							-- TODO: FILL IN
+						end
+					end
+
 				else
 					gp.geoindex = gp.geoindex + 1
 				end
