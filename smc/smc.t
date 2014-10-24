@@ -36,7 +36,7 @@ end
 
 -----------------------------------------------------------------
 
-local Program = {&Mesh} -> {bool}
+local Program = {&Mesh} -> {}
 
 -----------------------------------------------------------------
 
@@ -81,10 +81,11 @@ terra Particle:run(p: Program)
 		escape
 			if IMPLEMENTATION == Impl.RETURN then
 				emit quote
-					if not p(&self.mesh) then
-						self.stopindex = self.stopindex + 1
-					else
+					p(&self.mesh)
+					if self.geoindex < self.stopindex then
 						self.finished = true
+					else
+						self.stopindex = self.stopindex + 1
 					end
 				end
 			elseif IMPLEMENTATION == Impl.LONGJMP then
@@ -195,7 +196,7 @@ local function makeGeoPrim(shapefn)
 					escape
 						if IMPLEMENTATION == Impl.RETURN then
 							emit quote
-								return false
+								return
 							end
 						elseif IMPLEMENTATION == Impl.LONGJMP then
 							emit quote
