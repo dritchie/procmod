@@ -492,7 +492,7 @@ end
 
 
 local terra sampleIndexScrub(x: int, y: int)
-	if prevbutton == gl.mGLUT_LEFT_BUTTON() and samples:size() > 0 then
+	if prevbutton == gl.mGLUT_LEFT_BUTTON() and samples ~= nil then
 		var viewport : int[4]
 		gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
 		var w = viewport[2]
