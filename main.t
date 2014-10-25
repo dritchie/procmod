@@ -40,7 +40,8 @@ local Generations = S.Vector(Samples)
 -- Constants
 -- local GENERATE_FILE = "generate.t"
 -- local GENERATE_FILE = "smc/generate.t"
-local GENERATE_FILE = "smc/generate_multistack.t"
+-- local GENERATE_FILE = "smc/generate_multistack.t"
+local GENERATE_FILE = "smc/generate_recursive.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01
