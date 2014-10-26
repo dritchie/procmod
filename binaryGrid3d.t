@@ -255,7 +255,7 @@ terra BinaryGrid3D:numEmptyCellsEqual(other: &BinaryGrid3D)
 			 self.slices == other.slices)
 	var num = 0
 	for i=0,self:numuints() do
-		var x = not (self.data[i] and other.data[i])
+		var x = not (self.data[i] or other.data[i])
 		num = num + popcount(x)
 	end
 	return num
