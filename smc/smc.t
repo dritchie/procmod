@@ -93,27 +93,35 @@ terra Particle:__init()
 	self.hasSelfIntersections = false
 end
 
+local USE_WEIGHT_ANNEALING = true
 terra Particle:score(generation: uint)
 	-- If we have self-intersections, then score is -inf
 	if self.hasSelfIntersections then
 		self.likelihood = [-math.huge]
 	else
-		-- -- Weight empty cells more than filled cells in the early going, decay
-		-- --    toward default weighting over time.
-		-- -- TODO: Probably want to try and learn the decay weight for each program,
-		-- --    since a single constant is highly unlikely to work in all cases.
-		-- -- TODO: Need a final resampling step that uses the final, 'true' weighting?
-		-- var k = 0.1
-		-- var n = tgrid:numCellsPadded()
-		-- var pe = tgrid:numEmptyCellsPadded() / double(n)
-		-- -- var w = pe
-		-- var w = (1.0-pe)*tmath.exp(-k*generation) + pe
-		-- var percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
-		-- 					   tgrid:percentEmptyCellsEqual(&self.grid),
-		-- 					   w)
-
-		-- Original version that doesn't separate empty from filled.
-		var percentSame = tgrid:percentCellsEqual(&self.grid)
+		var percentSame : double
+		escape
+			if USE_WEIGHT_ANNEALING then
+				emit quote
+					-- Weight empty cells more than filled cells in the early going, decay
+					--    toward default weighting over time.
+					-- TODO: Need a final resampling step that uses the final, 'true' weighting?
+					var k = 0.1
+					var n = tgrid:numCellsPadded()
+					var pe = tgrid:numEmptyCellsPadded() / double(n)
+					-- var w = pe
+					var w = (1.0-pe)*tmath.exp(-k*generation) + pe
+					percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
+									   tgrid:percentEmptyCellsEqual(&self.grid),
+									   w)
+				end
+			else
+				emit quote
+					-- Original version that doesn't separate empty from filled.
+					percentSame = tgrid:percentCellsEqual(&self.grid)
+				end
+			end
+		end
 
 		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
 
