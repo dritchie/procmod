@@ -139,7 +139,10 @@ local p = qs.program(function()
 
 		var nEmptySame = targetGrid:numEmptyCellsEqual(grid)
 		var nFilledSame = targetGrid:numFilledCellsEqual(grid)
-		var p = 2.0 * lerp(nEmptySame, nFilledSame, 0.5) / targetGrid:numCellsPadded()
+		var n = targetGrid:numCellsPadded()
+		var pEmtpy = targetGrid:numEmptyCellsPadded() / qs.real(n)
+		var pFilled = targetGrid:numFilledCellsPadded() / qs.real(n)
+		var p = lerp(nFilledSame/pFilled, nEmptySame/pEmtpy, 0.5) / n
 		qs.factor(qs.softeq(p, 1.0, 0.01))
 
 		-- Also penalize the percentage of tris that fell outside the bounds of the voxelization

@@ -172,6 +172,19 @@ local softeq = macro(function(val, target, s)
 	return `[distrib.gaussian(double)].logprob(val, target, s)
 end)
 
+local lerp = macro(function(lo, hi, t)
+	return `(1.0-t)*lo + t*hi
+end)
+
+-- Weight empty cells more than filled cells in the early going
+-- Decays toward a uniform weighting over time
+-- TODO: Probably want to try and learn the decay weight for each program,
+--    since a single constant is highly unlikely to work in all cases.
+local terra emptyWeight(t: uint)
+	var k = 1.0
+	return 0.5 * (tmath.exp(-k*t) + 1)
+end
+
 local function makeGeoPrim(shapefn)
 	return macro(function(mesh, ...)
 		local args = {...}
@@ -192,11 +205,25 @@ local function makeGeoPrim(shapefn)
 						-- Otherwise, do the voxel stuff
 						else
 							gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
-							var n = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-							gp.outsideTris = gp.outsideTris + n
+							var nout = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+							gp.outsideTris = gp.outsideTris + nout
 							var numTris = mesh:numTris() + gp.tmpmesh:numTris()
-							var percentSame = gp.grid:percentCellsEqual(&tgrid)
+
+							-- var percentSame = gp.grid:percentCellsEqual(&tgrid)
+							var nfe = tgrid:numFilledCellsEqual(&gp.grid)
+							var nee = tgrid:numEmptyCellsEqual(&gp.grid)
+							var n = tgrid:numCellsPadded()
+							var pf = tgrid:numFilledCellsPadded() / double(n)
+							var pe = tgrid:numEmptyCellsPadded() / double(n)
+							var percentSame = lerp(nfe/pf,
+												   nee/pe,
+												   -- 0.5)
+												   -- 1.0)
+												   emptyWeight(gp.stopindex))
+												  / n
+
 							var percentOutside = double(gp.outsideTris) / numTris
+							-- S.printf("percentSame: %g, percentOutside: %g\n", percentSame, percentOutside)
 							gp.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
 						end
 					end
@@ -282,11 +309,14 @@ local terra run(prog: Program, nParticles: uint, outgenerations: &Generations, r
 		end
 		generation = generation + 1
 		-- Importance resampling
+		-- S.printf("\nWeights: ")
 		for i=0,nParticles do
+			-- S.printf("  %g", weights(i))
 			var index = [distrib.categorical_vector(double)].sample(weights)
 			var newp = nextParticles:insert()
 			newp:copy(particles:get(index))
 		end
+		-- S.printf("\n")
 		-- Record meshes *BEFORE* resampling
 		if recordHistory then
 			recordCurrMeshes(particles, outgenerations)
