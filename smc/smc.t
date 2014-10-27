@@ -36,6 +36,28 @@ end
 
 -----------------------------------------------------------------
 
+local softeq = macro(function(val, target, s)
+	return `[distrib.gaussian(double)].logprob(val, target, s)
+end)
+
+local lerp = macro(function(lo, hi, t)
+	return `(1.0-t)*lo + t*hi
+end)
+
+-----------------------------------------------------------------
+
+local tgrid = global(BinaryGrid)
+local tbounds = global(BBox3)
+local terra initglobals()
+	tbounds = globals.targetMesh:bbox()
+	tbounds:expand(globals.BOUNDS_EXPAND)
+	tgrid:init()
+	globals.targetMesh:voxelize(&tgrid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+end
+initglobals()
+
+-----------------------------------------------------------------
+
 local Program = {&Mesh} -> {}
 
 -----------------------------------------------------------------
@@ -48,14 +70,15 @@ local struct Particle(S.Object)
 	realindex: uint
 	intindex: uint
 	boolindex: uint
-	likelihood: double
 	mesh: Mesh
 	tmpmesh: Mesh
+	hasSelfIntersections: bool
 	grid: BinaryGrid
 	outsideTris: uint
 	geoindex: uint
 	stopindex: uint
 	finished: bool
+	likelihood: double
 }
 if IMPLEMENTATION == Impl.LONGJMP then Particle.entries:insert({field="jumpEnv", type=C.jmp_buf}) end
 
@@ -67,6 +90,35 @@ terra Particle:__init()
 	self.likelihood = 0.0
 	self.outsideTris = 0
 	self.finished = false
+	self.hasSelfIntersections = false
+end
+
+terra Particle:score(generation: uint)
+	-- If we have self-intersections, then score is -inf
+	if self.hasSelfIntersections then
+		self.likelihood = [-math.huge]
+	else
+		-- -- Weight empty cells more than filled cells in the early going, decay
+		-- --    toward default weighting over time.
+		-- -- TODO: Probably want to try and learn the decay weight for each program,
+		-- --    since a single constant is highly unlikely to work in all cases.
+		-- -- TODO: Need a final resampling step that uses the final, 'true' weighting?
+		-- var k = 0.1
+		-- var n = tgrid:numCellsPadded()
+		-- var pe = tgrid:numEmptyCellsPadded() / double(n)
+		-- -- var w = pe
+		-- var w = (1.0-pe)*tmath.exp(-k*generation) + pe
+		-- var percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
+		-- 					   tgrid:percentEmptyCellsEqual(&self.grid),
+		-- 					   w)
+
+		-- Original version that doesn't separate empty from filled.
+		var percentSame = tgrid:percentCellsEqual(&self.grid)
+
+		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
+
+		self.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
+	end
 end
 
 terra Particle:run(p: Program)
@@ -102,18 +154,6 @@ terra Particle:run(p: Program)
 		gp = nil
 	end
 end
-
------------------------------------------------------------------
-
-local tgrid = global(BinaryGrid)
-local tbounds = global(BBox3)
-local terra initglobals()
-	tbounds = globals.targetMesh:bbox()
-	tbounds:expand(globals.BOUNDS_EXPAND)
-	tgrid:init()
-	globals.targetMesh:voxelize(&tgrid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-end
-initglobals()
 
 -----------------------------------------------------------------
 
@@ -168,23 +208,6 @@ local uniformInt = makeERP(
 
 -----------------------------------------------------------------
 
-local softeq = macro(function(val, target, s)
-	return `[distrib.gaussian(double)].logprob(val, target, s)
-end)
-
-local lerp = macro(function(lo, hi, t)
-	return `(1.0-t)*lo + t*hi
-end)
-
--- Weight empty cells more than filled cells in the early going
--- Decays toward a uniform weighting over time
--- TODO: Probably want to try and learn the decay weight for each program,
---    since a single constant is highly unlikely to work in all cases.
-local terra emptyWeight(t: uint)
-	var k = 1.0
-	return 0.5 * (tmath.exp(-k*t) + 1)
-end
-
 local function makeGeoPrim(shapefn)
 	return macro(function(mesh, ...)
 		local args = {...}
@@ -192,40 +215,18 @@ local function makeGeoPrim(shapefn)
 			if mesh ~= &gp.mesh then
 				shapefn(mesh, [args])
 			else
+				-- Skip all geo primitives up until the last one for this run.
 				if gp.geoindex == gp.stopindex then
 					gp.tmpmesh:clear()
 					shapefn(&gp.tmpmesh, [args])
 
-					-- If likelihood is already -inf, then leave it that way
-					-- (With resampling enabled, this shouldn't happen--we should always discard these particles)
-					if gp.likelihood ~= [-math.huge] then
-						-- If self-intersections, then set likelihood to -inf
-						if gp.tmpmesh:intersects(mesh) then
-							gp.likelihood = [-math.huge]
-						-- Otherwise, do the voxel stuff
-						else
-							gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
-							var nout = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-							gp.outsideTris = gp.outsideTris + nout
-							var numTris = mesh:numTris() + gp.tmpmesh:numTris()
-
-							-- var percentSame = gp.grid:percentCellsEqual(&tgrid)
-							var nfe = tgrid:numFilledCellsEqual(&gp.grid)
-							var nee = tgrid:numEmptyCellsEqual(&gp.grid)
-							var n = tgrid:numCellsPadded()
-							var pf = tgrid:numFilledCellsPadded() / double(n)
-							var pe = tgrid:numEmptyCellsPadded() / double(n)
-							var percentSame = lerp(nfe/pf,
-												   nee/pe,
-												   -- 0.5)
-												   -- 1.0)
-												   emptyWeight(gp.stopindex))
-												  / n
-
-							var percentOutside = double(gp.outsideTris) / numTris
-							-- S.printf("percentSame: %g, percentOutside: %g\n", percentSame, percentOutside)
-							gp.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
-						end
+					-- Record whether we have any new self-intersections
+					-- If not, then go on to voxelize
+					gp.hasSelfIntersections = gp.hasSelfIntersections or gp.tmpmesh:intersects(mesh)
+					if not gp.hasSelfIntersections then
+						gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
+						var nout = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+						gp.outsideTris = gp.outsideTris + nout
 					end
 
 					mesh:append(&gp.tmpmesh)
@@ -263,10 +264,15 @@ local Samples = S.Vector(Sample)
 local Generations = S.Vector(Samples)
 local Particles = S.Vector(Particle)
 
-local flushstdout = terralib.includecstring([[
+local C = terralib.includecstring [[
 #include <stdio.h>
 inline void flushstdout() { fflush(stdout); }
-]]).flushstdout
+#include <float.h>
+inline double getdblmin() { return DBL_MIN; }
+]]
+
+local flushstdout = C.flushstdout
+local LOG_DBL_MIN = tmath.log(C.getdblmin())
 
 local terra recordCurrMeshes(particles: &Particles, generations: &Generations)
 	var samps = generations:insert()
@@ -293,15 +299,31 @@ local terra run(prog: Program, nParticles: uint, outgenerations: &Generations, r
 	var generation = 0
 	repeat
 		var numFinished = 0
+		var minFiniteScore = [math.huge]
 		for i=0,particles:size() do
 			var p = particles:get(i)
 			p:run(prog)
+			p:score(generation)
 			if p.finished then
 				numFinished = numFinished + 1
 			end
-			weights(i) = tmath.exp(p.likelihood)
+			weights(i) = p.likelihood
+			if weights(i) ~= [-math.huge] and weights(i) < minFiniteScore then
+				minFiniteScore = weights(i)
+			end
 		end
 		var allParticlesFinished = (numFinished == nParticles)
+		-- Exponentiate the weights to bring them out of log-space
+		-- (Avoid underflow by adding a constant to all scores that
+		--  ensures that when we exp them, they will all be representable
+		--  doubles).
+		var underflowCorrect = 0.0
+		if minFiniteScore < LOG_DBL_MIN then
+			underflowCorrect = LOG_DBL_MIN - minFiniteScore
+		end
+		for w in weights do
+			w = tmath.exp(w + underflowCorrect)
+		end
 		if verbose then
 			S.printf(" Generation %u: Finished %u/%u particles.\r",
 				generation, numFinished, nParticles)

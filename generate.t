@@ -129,21 +129,9 @@ local p = qs.program(function()
 		var grid = BinaryGrid.salloc():init(targetGrid.rows, targetGrid.cols, targetGrid.slices)
 		var numOutsideTris = mesh:voxelize(grid, &targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 
-		-- -- Penalize difference in voxelization
-		-- var percentsame = grid:percentCellsEqual(&targetGrid)
-		-- qs.factor(qs.softeq(percentsame, 1.0, 0.01))
-
-		-- var pEmptySame = targetGrid:percentEmptyCellsEqual(grid)
-		-- var pFilledSame = targetGrid:percentFilledCellsEqual(grid)
-		-- qs.factor(qs.softeq(lerp(pEmptySame, pFilledSame, 0.5), 1.0, 0.01))
-
-		var nEmptySame = targetGrid:numEmptyCellsEqual(grid)
-		var nFilledSame = targetGrid:numFilledCellsEqual(grid)
-		var n = targetGrid:numCellsPadded()
-		var pEmtpy = targetGrid:numEmptyCellsPadded() / qs.real(n)
-		var pFilled = targetGrid:numFilledCellsPadded() / qs.real(n)
-		var p = lerp(nFilledSame/pFilled, nEmptySame/pEmtpy, 0.5) / n
-		qs.factor(qs.softeq(p, 1.0, 0.01))
+		-- Penalize difference in voxelization
+		var percentsame = grid:percentCellsEqual(&targetGrid)
+		qs.factor(qs.softeq(percentsame, 1.0, 0.01))
 
 		-- Also penalize the percentage of tris that fell outside the bounds of the voxelization
 		var percentOutside = qs.real(numOutsideTris) / mesh:numTris()
