@@ -71,6 +71,7 @@ local prevy = global(int)
 local alt = global(bool, 0)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
+local shouldDrawOverlay = global(bool, 1)
 local minScore = global(double)
 local maxScore = global(double)
 local voxelizeUsingTargetBounds = global(bool, 0)
@@ -300,6 +301,11 @@ local terra toggleGrid()
 	end
 end
 
+local terra toggleOverlay()
+	shouldDrawOverlay = not shouldDrawOverlay
+	gl.glutPostRedisplay()
+end
+
 local terra toggleTargetBoundsVoxelization()
 	voxelizeUsingTargetBounds = not voxelizeUsingTargetBounds
 	updateBounds()
@@ -444,7 +450,9 @@ local terra display()
 	if shouldDrawGrid then
 		drawGrid()
 	end
-	drawOverlay()
+	if shouldDrawOverlay then
+		drawOverlay()
+	end
 
 	gl.glutSwapBuffers()
 end
@@ -534,6 +542,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		setSampleIndex(MAPIndex)
 	elseif key == char('b') then
 		toggleTargetBoundsVoxelization()
+	elseif key == char('o') then
+		toggleOverlay()
 	end
 end
 
