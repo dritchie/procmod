@@ -93,7 +93,8 @@ terra Particle:__init()
 	self.hasSelfIntersections = false
 end
 
-local USE_WEIGHT_ANNEALING = true
+local USE_WEIGHT_ANNEALING = false
+local ANNEAL_RATE = 0.05
 terra Particle:score(generation: uint)
 	-- If we have self-intersections, then score is -inf
 	if self.hasSelfIntersections then
@@ -106,11 +107,10 @@ terra Particle:score(generation: uint)
 					-- Weight empty cells more than filled cells in the early going, decay
 					--    toward default weighting over time.
 					-- TODO: Need a final resampling step that uses the final, 'true' weighting?
-					var k = 0.1
 					var n = tgrid:numCellsPadded()
 					var pe = tgrid:numEmptyCellsPadded() / double(n)
 					-- var w = pe
-					var w = (1.0-pe)*tmath.exp(-k*generation) + pe
+					var w = (1.0-pe)*tmath.exp(-ANNEAL_RATE*generation) + pe
 					percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
 									   tgrid:percentEmptyCellsEqual(&self.grid),
 									   w)
