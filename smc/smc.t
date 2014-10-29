@@ -88,6 +88,28 @@ end
 
 -----------------------------------------------------------------
 
+-- A simple version of a probabilistic program trace that does not
+--    record any structural information--just stores flat lists that
+--    can be consulted to re-execute a program in a particular way.
+-- MCMC is, generally, not possible with this representation.
+local struct SimpleTrace(S.Object)
+{
+	realchoices: S.Vector(double)
+	intchoices: S.Vector(int)
+	boolchoices: S.Vector(bool)
+	realindex: uint
+	intindex: uint
+	boolindex: uint
+}
+
+terra SimpleTrace:prepareForRun()
+	self.realindex = 0
+	self.intindex = 0
+	self.boolindex = 0
+end
+
+-----------------------------------------------------------------
+
 local _Particle = S.memoize(function(P)
 
 	assert(isSMCProgram(P), "Particle - P is not an smc.program")
@@ -95,12 +117,7 @@ local _Particle = S.memoize(function(P)
 
 	local struct Particle(S.Object)
 	{
-		realchoices: S.Vector(double)
-		intchoices: S.Vector(int)
-		boolchoices: S.Vector(bool)
-		realindex: uint
-		intindex: uint
-		boolindex: uint
+		trace: SimpleTrace
 		mesh: Mesh
 		tmpmesh: Mesh
 		hasSelfIntersections: bool
@@ -163,9 +180,7 @@ local _Particle = S.memoize(function(P)
 
 	terra Particle:run()
 		if not self.finished then
-			self.realindex = 0
-			self.intindex = 0
-			self.boolindex = 0
+			self.trace:prepareForRun()
 			self.geoindex = 0
 
 			globalParticle = self
@@ -226,14 +241,14 @@ local function makeERP(sampler)
 		-- Figure out which vector of random choices we should look into
 		local indexq, choiceq
 		if T == bool then
-			indexq = `gp.boolindex
-			choiceq = `gp.boolchoices
+			indexq = `gp.trace.boolindex
+			choiceq = `gp.trace.boolchoices
 		elseif T == int then
-			indexq = `gp.intindex
-			choiceq = `gp.intchoices
+			indexq = `gp.trace.intindex
+			choiceq = `gp.trace.intchoices
 		elseif T == double then
-			indexq = `gp.realindex
-			choiceq = `gp.realchoices
+			indexq = `gp.trace.realindex
+			choiceq = `gp.trace.realchoices
 		else
 			error("makeERP: sampler must return bool, int, or double.")
 		end
