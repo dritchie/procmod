@@ -11,6 +11,9 @@ local BBox = terralib.require("bbox")
 -- Main will call the function returned by this module
 
 
+terralib.require("qs").initrand()
+
+
 local p = qs.program(function()
 	local Vec3 = Vec(qs.real, 3)
 	local Shape = Shapes(qs.real)

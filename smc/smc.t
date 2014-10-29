@@ -58,131 +58,185 @@ initglobals()
 
 -----------------------------------------------------------------
 
-local Program = {&Mesh} -> {}
+local currentlyCompilingProgram = nil
+
+local smc_mt = {}
+
+-- Abstracts an SMC-able program.
+local function program(fn)
+	fn = S.memoize(fn)
+	local obj = {
+		compile = S.memoize(function(self)
+			local tfn = fn()
+			-- Ensure program is compiled whenever we access it,
+			--    to make sure that the correct macros get used, etc.
+			currentlyCompilingProgram = self
+			tfn:compile(function()
+				currentlyCompilingProgram = nil
+				self.compiled = true
+			end)
+			return tfn
+		end)
+	}
+	setmetatable(obj, smc_mt)
+	return obj
+end
+
+local function isSMCProgram(P)
+	return getmetatable(P) == smc_mt
+end
 
 -----------------------------------------------------------------
 
-local struct Particle(S.Object)
-{
-	realchoices: S.Vector(double)
-	intchoices: S.Vector(int)
-	boolchoices: S.Vector(bool)
-	realindex: uint
-	intindex: uint
-	boolindex: uint
-	mesh: Mesh
-	tmpmesh: Mesh
-	hasSelfIntersections: bool
-	grid: BinaryGrid
-	outsideTris: uint
-	geoindex: uint
-	stopindex: uint
-	finished: bool
-	likelihood: double
-}
-if IMPLEMENTATION == Impl.LONGJMP then Particle.entries:insert({field="jumpEnv", type=C.jmp_buf}) end
+local _Particle = S.memoize(function(P)
 
-local gp = global(&Particle, nil)
+	assert(isSMCProgram(P), "Particle - P is not an smc.program")
+	local p = P:compile()
 
-terra Particle:__init()
-	self:initmembers()
-	self.stopindex = 0
-	self.likelihood = 0.0
-	self.outsideTris = 0
-	self.finished = false
-	self.hasSelfIntersections = false
-end
+	local struct Particle(S.Object)
+	{
+		realchoices: S.Vector(double)
+		intchoices: S.Vector(int)
+		boolchoices: S.Vector(bool)
+		realindex: uint
+		intindex: uint
+		boolindex: uint
+		mesh: Mesh
+		tmpmesh: Mesh
+		hasSelfIntersections: bool
+		grid: BinaryGrid
+		outsideTris: uint
+		geoindex: uint
+		stopindex: uint
+		finished: bool
+		likelihood: double
+	}
+	if IMPLEMENTATION == Impl.LONGJMP then Particle.entries:insert({field="jumpEnv", type=C.jmp_buf}) end
 
-local USE_WEIGHT_ANNEALING = false
-local ANNEAL_RATE = 0.05
-terra Particle:score(generation: uint)
-	-- If we have self-intersections, then score is -inf
-	if self.hasSelfIntersections then
-		self.likelihood = [-math.huge]
-	else
-		var percentSame : double
-		escape
-			if USE_WEIGHT_ANNEALING then
-				emit quote
-					-- Weight empty cells more than filled cells in the early going, decay
-					--    toward default weighting over time.
-					-- TODO: Need a final resampling step that uses the final, 'true' weighting?
-					var n = tgrid:numCellsPadded()
-					var pe = tgrid:numEmptyCellsPadded() / double(n)
-					-- var w = pe
-					var w = (1.0-pe)*tmath.exp(-ANNEAL_RATE*generation) + pe
-					percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
-									   tgrid:percentEmptyCellsEqual(&self.grid),
-									   w)
-				end
-			else
-				emit quote
-					-- Original version that doesn't separate empty from filled.
-					percentSame = tgrid:percentCellsEqual(&self.grid)
+	terra Particle:__init()
+		self:initmembers()
+		self.stopindex = 0
+		self.likelihood = 0.0
+		self.outsideTris = 0
+		self.finished = false
+		self.hasSelfIntersections = false
+	end
+
+	local USE_WEIGHT_ANNEALING = false
+	local ANNEAL_RATE = 0.05
+	terra Particle:score(generation: uint)
+		-- If we have self-intersections, then score is -inf
+		if self.hasSelfIntersections then
+			self.likelihood = [-math.huge]
+		else
+			var percentSame : double
+			escape
+				if USE_WEIGHT_ANNEALING then
+					emit quote
+						-- Weight empty cells more than filled cells in the early going, decay
+						--    toward default weighting over time.
+						-- TODO: Need a final resampling step that uses the final, 'true' weighting?
+						var n = tgrid:numCellsPadded()
+						var pe = tgrid:numEmptyCellsPadded() / double(n)
+						-- var w = pe
+						var w = (1.0-pe)*tmath.exp(-ANNEAL_RATE*generation) + pe
+						percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
+										   tgrid:percentEmptyCellsEqual(&self.grid),
+										   w)
+					end
+				else
+					emit quote
+						-- Original version that doesn't separate empty from filled.
+						percentSame = tgrid:percentCellsEqual(&self.grid)
+					end
 				end
 			end
+
+			var percentOutside = double(self.outsideTris) / self.mesh:numTris()
+
+			self.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
 		end
-
-		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
-
-		self.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
 	end
-end
 
-terra Particle:run(p: Program)
-	if not self.finished then
-		self.realindex = 0
-		self.intindex = 0
-		self.boolindex = 0
-		self.geoindex = 0
-		gp = self
+	local globalParticle = global(&Particle, 0)
+	Particle.globalParticle = globalParticle
 
-		-- How we run the program depends on the implementation strategy
-		escape
-			if IMPLEMENTATION == Impl.RETURN or IMPLEMENTATION == Impl.FULLRUN then
-				emit quote
-					p(&self.mesh)
-					if self.geoindex < self.stopindex then
-						self.finished = true
-					else
+	terra Particle:run()
+		if not self.finished then
+			self.realindex = 0
+			self.intindex = 0
+			self.boolindex = 0
+			self.geoindex = 0
+
+			globalParticle = self
+
+			-- How we run the program depends on the implementation strategy
+			escape
+				if IMPLEMENTATION == Impl.RETURN or IMPLEMENTATION == Impl.FULLRUN then
+					emit quote
+						p(&self.mesh)
+						if self.geoindex < self.stopindex then
+							self.finished = true
+						else
+							self.stopindex = self.stopindex + 1
+						end
+					end
+				elseif IMPLEMENTATION == Impl.LONGJMP then
+					emit quote
+						if C.setjmp(self.jumpEnv) == 0 then
+							p(&self.mesh)
+							self.finished = true
+						end
 						self.stopindex = self.stopindex + 1
 					end
 				end
-			elseif IMPLEMENTATION == Impl.LONGJMP then
-				emit quote
-					if C.setjmp(self.jumpEnv) == 0 then
-						p(&self.mesh)
-						self.finished = true
-					end
-					self.stopindex = self.stopindex + 1
-				end
 			end
-		end
 
-		gp = nil
+			globalParticle = nil
+		end
 	end
+
+	return Particle
+
+end)
+-- Much like Quicksand's RandExecTrace type, we must compile the program before we
+--    enter the memoized type constructor, otherwise we'll end up recursively entering
+--    the type constructor twice, which results in code from two different instantiations
+--    of the same type floating around in the system. Bad times.
+local function Particle(P)
+	P:compile()
+	return _Particle(P)
+end
+
+-----------------------------------------------------------------
+
+-- Retrieves the global particle for the currently compiling program
+local function globalParticle()
+	assert(currentlyCompilingProgram ~= nil)
+	return Particle(currentlyCompilingProgram).globalParticle
 end
 
 -----------------------------------------------------------------
 
 local function makeERP(sampler)
 	local T = sampler:gettype().returntype
-	-- Figure out which vector of random choices we should look into
-	local indexq, choiceq
-	if T == bool then
-		indexq = `gp.boolindex
-		choiceq = `gp.boolchoices
-	elseif T == int then
-		indexq = `gp.intindex
-		choiceq = `gp.intchoices
-	elseif T == double then
-		indexq = `gp.realindex
-		choiceq = `gp.realchoices
-	else
-		error("makeERP: sampler must return bool, int, or double.")
-	end
 	return macro(function(...)
 		local args = {...}
+		local gp = globalParticle()
+		-- Figure out which vector of random choices we should look into
+		local indexq, choiceq
+		if T == bool then
+			indexq = `gp.boolindex
+			choiceq = `gp.boolchoices
+		elseif T == int then
+			indexq = `gp.intindex
+			choiceq = `gp.intchoices
+		elseif T == double then
+			indexq = `gp.realindex
+			choiceq = `gp.realchoices
+		else
+			error("makeERP: sampler must return bool, int, or double.")
+		end
 		return quote
 			var res: T
 			if gp.geoindex > gp.stopindex then
@@ -219,6 +273,7 @@ local uniformInt = makeERP(
 local function makeGeoPrim(shapefn)
 	return macro(function(mesh, ...)
 		local args = {...}
+		local gp = globalParticle()
 		return quote
 			if mesh ~= &gp.mesh then
 				shapefn(mesh, [args])
@@ -270,7 +325,6 @@ end
 local Sample = terralib.require("qs").Sample(Mesh)
 local Samples = S.Vector(Sample)
 local Generations = S.Vector(Samples)
-local Particles = S.Vector(Particle)
 
 local C = terralib.includecstring [[
 #include <stdio.h>
@@ -282,91 +336,99 @@ inline double getdblmin() { return DBL_MIN; }
 local flushstdout = C.flushstdout
 local LOG_DBL_MIN = tmath.log(C.getdblmin())
 
-local terra recordCurrMeshes(particles: &Particles, generations: &Generations)
-	var samps = generations:insert()
-	samps:init()
-	for p in particles do
-		var s = samps:insert()
-		s.value:copy(&p.mesh)
-		s.logprob = p.likelihood
-	end
-end
+local run = S.memoize(function(P)
 
-local terra run(prog: Program, nParticles: uint, outgenerations: &Generations, recordHistory: bool, verbose: bool)
-	-- Init particles
-	var particles = Particles.salloc():init()
-	var nextParticles = Particles.salloc():init()
-	var weights = [S.Vector(double)].salloc():init()
-	for i=0,nParticles do
-		var p = particles:insert()
-		p:init()
-		weights:insert(0.0)
+	assert(isSMCProgram(P))
+
+	local Particles = S.Vector(Particle(P))
+
+	local terra recordCurrMeshes(particles: &Particles, generations: &Generations)
+		var samps = generations:insert()
+		samps:init()
+		for p in particles do
+			var s = samps:insert()
+			s.value:copy(&p.mesh)
+			s.logprob = p.likelihood
+		end
 	end
-	-- Run particles step-by-step (read: geo prim by geo prim)
-	--   until all particles are finished
-	var generation = 0
-	repeat
-		var numFinished = 0
-		var minFiniteScore = [math.huge]
-		for i=0,particles:size() do
-			var p = particles:get(i)
-			p:run(prog)
-			p:score(generation)
-			if p.finished then
-				numFinished = numFinished + 1
-			end
-			weights(i) = p.likelihood
-			if weights(i) ~= [-math.huge] and weights(i) < minFiniteScore then
-				minFiniteScore = weights(i)
-			end
-		end
-		var allParticlesFinished = (numFinished == nParticles)
-		-- Exponentiate the weights to bring them out of log-space
-		-- (Avoid underflow by adding a constant to all scores that
-		--  ensures that when we exp them, they will all be representable
-		--  doubles).
-		var underflowCorrect = 0.0
-		if minFiniteScore < LOG_DBL_MIN then
-			underflowCorrect = LOG_DBL_MIN - minFiniteScore
-		end
-		for w in weights do
-			w = tmath.exp(w + underflowCorrect)
-		end
-		if verbose then
-			S.printf(" Generation %u: Finished %u/%u particles.\r",
-				generation, numFinished, nParticles)
-			flushstdout()
-		end
-		generation = generation + 1
-		-- Importance resampling
-		-- S.printf("\nWeights: ")
+
+	return terra(nParticles: uint, outgenerations: &Generations, recordHistory: bool, verbose: bool)
+		-- Init particles
+		var particles = Particles.salloc():init()
+		var nextParticles = Particles.salloc():init()
+		var weights = [S.Vector(double)].salloc():init()
 		for i=0,nParticles do
-			-- S.printf("  %g", weights(i))
-			var index = [distrib.categorical_vector(double)].sample(weights)
-			var newp = nextParticles:insert()
-			newp:copy(particles:get(index))
+			var p = particles:insert()
+			p:init()
+			weights:insert(0.0)
 		end
-		-- S.printf("\n")
-		-- Record meshes *BEFORE* resampling
-		if recordHistory then
-			recordCurrMeshes(particles, outgenerations)
-		end
-		var tmp = particles
-		particles = nextParticles
-		nextParticles = tmp
-		nextParticles:clear()
-		-- Record meshes *AFTER* resampling
-		if recordHistory or allParticlesFinished then
-			recordCurrMeshes(particles, outgenerations)
-		end
-	until allParticlesFinished
-	if verbose then S.printf("\n") end
-end
+		-- Run particles step-by-step (read: geo prim by geo prim)
+		--   until all particles are finished
+		var generation = 0
+		repeat
+			var numFinished = 0
+			var minFiniteScore = [math.huge]
+			for i=0,particles:size() do
+				var p = particles:get(i)
+				p:run()
+				p:score(generation)
+				if p.finished then
+					numFinished = numFinished + 1
+				end
+				weights(i) = p.likelihood
+				if weights(i) ~= [-math.huge] and weights(i) < minFiniteScore then
+					minFiniteScore = weights(i)
+				end
+			end
+			var allParticlesFinished = (numFinished == nParticles)
+			-- Exponentiate the weights to bring them out of log-space
+			-- (Avoid underflow by adding a constant to all scores that
+			--  ensures that when we exp them, they will all be representable
+			--  doubles).
+			var underflowCorrect = 0.0
+			if minFiniteScore < LOG_DBL_MIN then
+				underflowCorrect = LOG_DBL_MIN - minFiniteScore
+			end
+			for w in weights do
+				w = tmath.exp(w + underflowCorrect)
+			end
+			if verbose then
+				S.printf(" Generation %u: Finished %u/%u particles.\r",
+					generation, numFinished, nParticles)
+				flushstdout()
+			end
+			generation = generation + 1
+			-- Importance resampling
+			-- S.printf("\nWeights: ")
+			for i=0,nParticles do
+				-- S.printf("  %g", weights(i))
+				var index = [distrib.categorical_vector(double)].sample(weights)
+				var newp = nextParticles:insert()
+				newp:copy(particles:get(index))
+			end
+			-- S.printf("\n")
+			-- Record meshes *BEFORE* resampling
+			if recordHistory then
+				recordCurrMeshes(particles, outgenerations)
+			end
+			var tmp = particles
+			particles = nextParticles
+			nextParticles = tmp
+			nextParticles:clear()
+			-- Record meshes *AFTER* resampling
+			if recordHistory or allParticlesFinished then
+				recordCurrMeshes(particles, outgenerations)
+			end
+		until allParticlesFinished
+		if verbose then S.printf("\n") end
+	end
+end)
 
 -----------------------------------------------------------------
 
 return
 {
+	program = program,
 	Sample = Sample,
 	flip = flip,
 	poisson = poisson,
