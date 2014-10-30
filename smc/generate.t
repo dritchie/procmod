@@ -90,10 +90,12 @@ local spaceship = smc.program(function()
 		end
 	end)
 
-	return terra(mesh: &Mesh)
-		var rearz = -5.0
-		genShip(mesh, rearz)
-	end
+	return smc.main(macro(function(mesh)
+		return quote
+			var rearz = -5.0
+			genShip(mesh, rearz)
+		end
+	end))
 end)
 
 local N_PARTICLES = 200

@@ -7,6 +7,14 @@ local globals = terralib.require("globals")
 local distrib = terralib.require("qs.distrib")
 local tmath = terralib.require("qs.lib.tmath")
 
+-- Quicksand interop stuff
+local qs = terralib.require("qs")
+local trace = terralib.require("qs.trace")
+
+local C = terralib.includecstring [[
+#include <setjmp.h>
+]]
+
 -----------------------------------------------------------------
 
 -- Different strategies for implementing SMC inference semantics
@@ -25,14 +33,11 @@ local Impl =
 	FULLRUN = 2
 }
 
+-- Parameters that control the overall SMC behavior
 local IMPLEMENTATION = Impl.RETURN
-
-local C
-if IMPLEMENTATION == Impl.LONGJMP then
-	C = terralib.includecstring [[
-	#include <setjmp.h>
-	]]
-end
+local USE_WEIGHT_ANNEALING = false
+local ANNEAL_RATE = 0.05
+local USE_QUICKSAND_TRACE = true
 
 -----------------------------------------------------------------
 
@@ -64,20 +69,32 @@ local smc_mt = {}
 
 -- Abstracts an SMC-able program.
 local function program(fn)
-	fn = S.memoize(fn)
+	if USE_QUICKSAND_TRACE then
+		fn = qs.program(fn)
+	else
+		fn = S.memoize(fn)
+	end
 	local obj = {
 		compile = S.memoize(function(self)
-			local tfn = fn()
-			-- Ensure program is compiled whenever we access it,
-			--    to make sure that the correct macros get used, etc.
 			currentlyCompilingProgram = self
+			local tfn
+			if USE_QUICKSAND_TRACE then
+				tfn = fn:compile()
+			else
+				tfn = fn()
+			end
+			-- In the Quicksand version, tfn is actually already being compiled. But we still
+			--    need to register the continuation that sets currentlyCompilingProgram back to nil.
 			tfn:compile(function()
 				currentlyCompilingProgram = nil
-				self.compiled = true
 			end)
 			return tfn
 		end)
 	}
+	if USE_QUICKSAND_TRACE then
+		obj.__qsprog = fn
+		obj.qsprog = function(self) return obj.__qsprog end
+	end
 	setmetatable(obj, smc_mt)
 	return obj
 end
@@ -86,38 +103,130 @@ local function isSMCProgram(P)
 	return getmetatable(P) == smc_mt
 end
 
+-- Forward declaration (see 'main' below)
+local isSMCMainFunction
+
 -----------------------------------------------------------------
 
 -- A simple version of a probabilistic program trace that does not
 --    record any structural information--just stores flat lists that
 --    can be consulted to re-execute a program in a particular way.
 -- MCMC is, generally, not possible with this representation.
-local struct SimpleTrace(S.Object)
-{
-	realchoices: S.Vector(double)
-	intchoices: S.Vector(int)
-	boolchoices: S.Vector(bool)
-	realindex: uint
-	intindex: uint
-	boolindex: uint
-}
+local _SimpleTrace = S.memoize(function(P)
 
-terra SimpleTrace:prepareForRun()
-	self.realindex = 0
-	self.intindex = 0
-	self.boolindex = 0
+	assert(isSMCProgram(P), "SimpleTrace - program P is not an smc.program")
+	local p = P:compile()
+	assert(isSMCMainFunction(p), "SimpleTrace - program P must return an smc.main function")
+
+	local struct SimpleTrace(S.Object)
+	{
+		realchoices: S.Vector(double)
+		intchoices: S.Vector(int)
+		boolchoices: S.Vector(bool)
+		realindex: uint
+		intindex: uint
+		boolindex: uint
+	}
+
+	-- Global trace (analagous to Quicksand's)
+	local globalTrace = global(&SimpleTrace, 0)
+	SimpleTrace.globalTrace = globalTrace
+
+	-- Stand-in for qs RandExecTrace update method
+	-- The two boolean args aren't used, but they're needed for type-signature compatibility.
+	terra SimpleTrace:update(canStructureChange: bool, evalFactorsAndConditions: bool)
+		self.realindex = 0
+		self.intindex = 0
+		self.boolindex = 0
+		globalTrace = self
+		p()
+		globalTrace = nil
+	end
+
+	return SimpleTrace
+end)
+-- Much like Quicksand's RandExecTrace type, we must compile the program before we
+--    enter the memoized type constructor, otherwise we'll end up recursively entering
+--    the type constructor twice, which results in code from two different instantiations
+--    of the same type floating around in the system. Bad times.
+local function SimpleTrace(P)
+	P:compile()
+	return _SimpleTrace(P)
+end
+
+-- Retrieve the global trace for the currently compiling program
+local function globalTrace()
+	assert(currentlyCompilingProgram ~= nil)
+	return SimpleTrace(currentlyCompilingProgram).globalTrace
 end
 
 -----------------------------------------------------------------
 
-local _Particle = S.memoize(function(P)
+-- Simple ERP creation for when we're not using Quicksand traces
+local function makeERP(sampler)
+	local T = sampler:gettype().returntype
+	return macro(function(...)
+		local args = {...}
+		local gt = globalTrace()
+		-- Figure out which vector of random choices we should look into
+		local indexq, choiceq
+		if T == bool then
+			indexq = `gt.boolindex
+			choiceq = `gt.boolchoices
+		elseif T == int then
+			indexq = `gt.intindex
+			choiceq = `gt.intchoices
+		elseif T == double then
+			indexq = `gt.realindex
+			choiceq = `gt.realchoices
+		else
+			error("makeERP: sampler must return bool, int, or double.")
+		end
+		return quote
+			var res: T
+			-- If global trace is nil, just sample a value
+			if gt == nil then
+				res = sampler([args])
+			elseif indexq < choiceq:size() then
+				res = choiceq(indexq)
+			else
+				res = sampler([args])
+				choiceq:insert(res)
+			end
+			indexq = indexq + 1
+		in
+			res
+		end
+	end)
+end
 
-	assert(isSMCProgram(P), "Particle - P is not an smc.program")
-	local p = P:compile()
+local flip
+local poisson
+local uniform
+local uniformInt
+if USE_QUICKSAND_TRACE then
+	flip = qs.flip
+	poisson = qs.poisson
+	uniform = qs.uniform
+	uniformInt = qs.uniformInt
+else
+	flip = makeERP(distrib.bernoulli(double).sample)
+	poisson = makeERP(distrib.poisson(double).sample)
+	uniform = makeERP(distrib.uniform(double).sample)
+	uniformInt = makeERP(
+		terra(lo: int, hi: int)
+			return int([distrib.uniform(double)].sample(lo, hi))
+		end
+	)
+end
+
+-----------------------------------------------------------------
+
+local Particle = S.memoize(function(Trace)
 
 	local struct Particle(S.Object)
 	{
-		trace: SimpleTrace
+		trace: Trace
 		mesh: Mesh
 		tmpmesh: Mesh
 		hasSelfIntersections: bool
@@ -139,8 +248,6 @@ local _Particle = S.memoize(function(P)
 		self.hasSelfIntersections = false
 	end
 
-	local USE_WEIGHT_ANNEALING = false
-	local ANNEAL_RATE = 0.05
 	terra Particle:score(generation: uint)
 		-- If we have self-intersections, then score is -inf
 		if self.hasSelfIntersections then
@@ -175,12 +282,12 @@ local _Particle = S.memoize(function(P)
 		end
 	end
 
+	-- Analagous to the 'global trace' in Quicksand
 	local globalParticle = global(&Particle, 0)
 	Particle.globalParticle = globalParticle
 
 	terra Particle:run()
 		if not self.finished then
-			self.trace:prepareForRun()
 			self.geoindex = 0
 
 			globalParticle = self
@@ -189,7 +296,7 @@ local _Particle = S.memoize(function(P)
 			escape
 				if IMPLEMENTATION == Impl.RETURN or IMPLEMENTATION == Impl.FULLRUN then
 					emit quote
-						p(&self.mesh)
+						self.trace:update(true, true)
 						if self.geoindex < self.stopindex then
 							self.finished = true
 						else
@@ -199,7 +306,7 @@ local _Particle = S.memoize(function(P)
 				elseif IMPLEMENTATION == Impl.LONGJMP then
 					emit quote
 						if C.setjmp(self.jumpEnv) == 0 then
-							p(&self.mesh)
+							self.trace:update(true, true)
 							self.finished = true
 						end
 						self.stopindex = self.stopindex + 1
@@ -214,13 +321,15 @@ local _Particle = S.memoize(function(P)
 	return Particle
 
 end)
--- Much like Quicksand's RandExecTrace type, we must compile the program before we
---    enter the memoized type constructor, otherwise we'll end up recursively entering
---    the type constructor twice, which results in code from two different instantiations
---    of the same type floating around in the system. Bad times.
-local function Particle(P)
-	P:compile()
-	return _Particle(P)
+
+-----------------------------------------------------------------
+
+local function TraceType(P)
+	if USE_QUICKSAND_TRACE then
+		return trace.RandExecTrace(P)
+	else
+		return SimpleTrace(P)
+	end
 end
 
 -----------------------------------------------------------------
@@ -228,62 +337,49 @@ end
 -- Retrieves the global particle for the currently compiling program
 local function globalParticle()
 	assert(currentlyCompilingProgram ~= nil)
-	return Particle(currentlyCompilingProgram).globalParticle
+	return Particle(TraceType(currentlyCompilingProgram)).globalParticle
 end
 
 -----------------------------------------------------------------
 
-local function makeERP(sampler)
-	local T = sampler:gettype().returntype
-	return macro(function(...)
-		local args = {...}
-		local gp = globalParticle()
-		-- Figure out which vector of random choices we should look into
-		local indexq, choiceq
-		if T == bool then
-			indexq = `gp.trace.boolindex
-			choiceq = `gp.trace.boolchoices
-		elseif T == int then
-			indexq = `gp.trace.intindex
-			choiceq = `gp.trace.intchoices
-		elseif T == double then
-			indexq = `gp.trace.realindex
-			choiceq = `gp.trace.realchoices
-		else
-			error("makeERP: sampler must return bool, int, or double.")
-		end
-		return quote
-			var res: T
-			if gp.geoindex > gp.stopindex then
-				-- The only time this happens is if we're in FULLRUN mode and we're just
-				--    finishing out the program. In this case, just sample something but
-				--    don't record it--we haven't "officially" gotten to this random choice yet
-				-- TODO: Try to sample values that will lead to shorter completion runs
-				--    (perhaps by providing domains/bounds?)
-				res = sampler([args])
-			elseif indexq < choiceq:size() then
-				res = choiceq(indexq)
-			else
-				res = sampler([args])
-				choiceq:insert(res)
-			end
-			indexq = indexq + 1
-		in
-			res
-		end
-	end)
-end
-
-local flip = makeERP(distrib.bernoulli(double).sample)
-local poisson = makeERP(distrib.poisson(double).sample)
-local uniform = makeERP(distrib.uniform(double).sample)
-local uniformInt = makeERP(
-	terra(lo: int, hi: int)
-		return int([distrib.uniform(double)].sample(lo, hi))
+-- Denotes the 'main' function of an SMC program.
+-- Should be used to wrap the function returned by an smc.program.
+local function main(fn)
+	if IMPLEMENTATION == Impl.RETURN then
+		-- This won't prevent all errors (because any subroutine could fail to be a macro),
+		--    but hopefully it catches some common ones.
+		assert(terralib.ismacro(fn),
+			"smc.main: argument must be a Terra macro to use RETURN semantics")
 	end
-)
+	-- Reach into the global particle to get the mesh-so-far.
+	-- (I've implemented things this way mostly as a concession to Quicksand,
+	--    whose programs don't take arguments)
+	local getgp = macro(function()
+		return globalParticle()
+	end)
+	local terra mainfn()
+		var gp = getgp()
+		var meshptr = &gp.mesh
+		fn(meshptr)
+	end
+	mainfn.__is_smc_main__ = true
+	return mainfn
+end
+
+isSMCMainFunction = function(p)
+	return p.__is_smc_main__
+end
 
 -----------------------------------------------------------------
+
+-- Set the global trace to nil
+local nilGlobalTrace = macro(function()
+	if USE_QUICKSAND_TRACE then
+		return quote trace.__UNSAFE_setGlobalTrace(nil) end
+	else
+		return quote [globalTrace()] = nil end
+	end
+end)
 
 local function makeGeoPrim(shapefn)
 	return macro(function(mesh, ...)
@@ -321,7 +417,8 @@ local function makeGeoPrim(shapefn)
 							end
 						elseif IMPLEMENTATION == Impl.FULLRUN then
 							emit quote
-								gp.geoindex = gp.geoindex + 1
+								-- So that the trace doesn't record any random choices past this point.
+								nilGlobalTrace()
 							end
 						end
 					end
@@ -337,7 +434,7 @@ end
 -----------------------------------------------------------------
 
 -- Need to use Quicksand's Sample type for compatibility with other code
-local Sample = terralib.require("qs").Sample(Mesh)
+local Sample = qs.Sample(Mesh)
 local Samples = S.Vector(Sample)
 local Generations = S.Vector(Samples)
 
@@ -355,7 +452,7 @@ local run = S.memoize(function(P)
 
 	assert(isSMCProgram(P))
 
-	local Particles = S.Vector(Particle(P))
+	local Particles = S.Vector(Particle(TraceType(P)))
 
 	local terra recordCurrMeshes(particles: &Particles, generations: &Generations)
 		var samps = generations:insert()
@@ -444,6 +541,7 @@ end)
 return
 {
 	program = program,
+	main = main,
 	Sample = Sample,
 	flip = flip,
 	poisson = poisson,

@@ -190,14 +190,16 @@ local spaceship = smc.program(function()
 		end
 	end)
 
-	return terra(mesh: &Mesh)
-		var stacks = Stacks.salloc():init()
-		var rearz = -5.0
-		BodyState.new(stacks, rearz)
-		while not stacks:isEmpty() do
-			stacks:advanceRandom(mesh)
+	return smc.main(macro(function(mesh)
+		return quote
+			var stacks = Stacks.salloc():init()
+			var rearz = -5.0
+			BodyState.new(stacks, rearz)
+			while not stacks:isEmpty() do
+				stacks:advanceRandom(mesh)
+			end
 		end
-	end
+	end))
 end)
 
 
