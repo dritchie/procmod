@@ -37,7 +37,7 @@ local Impl =
 local IMPLEMENTATION = Impl.RETURN
 local USE_WEIGHT_ANNEALING = false
 local ANNEAL_RATE = 0.05
-local USE_QUICKSAND_TRACE = true
+local USE_QUICKSAND_TRACE = false
 
 -----------------------------------------------------------------
 
