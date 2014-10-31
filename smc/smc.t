@@ -63,11 +63,9 @@ initglobals()
 
 -----------------------------------------------------------------
 
-local currentlyCompilingProgram = nil
-
-local smc_mt = {}
-
 -- Abstracts an SMC-able program.
+local currentlyCompilingProgram = nil
+local smc_mt = {}
 local function program(fn)
 	if USE_QUICKSAND_TRACE then
 		fn = qs.program(fn)
@@ -133,8 +131,8 @@ local _SimpleTrace = S.memoize(function(P)
 	SimpleTrace.globalTrace = globalTrace
 
 	-- Stand-in for qs RandExecTrace update method
-	-- The two boolean args aren't used, but they're needed for type-signature compatibility.
-	terra SimpleTrace:update(canStructureChange: bool, evalFactorsAndConditions: bool)
+	-- The bool arg isn't used, but is needed for type signature compatibility
+	terra SimpleTrace:update(canStructureChange: bool)
 		self.realindex = 0
 		self.intindex = 0
 		self.boolindex = 0
@@ -159,6 +157,15 @@ local function globalTrace()
 	assert(currentlyCompilingProgram ~= nil)
 	return SimpleTrace(currentlyCompilingProgram).globalTrace
 end
+
+-----------------------------------------------------------------
+
+-- Wrapper around the Quicksand version of trace that is made safe for use with SMC.
+local function QSTrace(P)
+	P:compile()
+	return trace.RandExecTrace(P:qsprog(), double)
+end
+
 
 -----------------------------------------------------------------
 
@@ -296,7 +303,7 @@ local Particle = S.memoize(function(Trace)
 			escape
 				if IMPLEMENTATION == Impl.RETURN or IMPLEMENTATION == Impl.FULLRUN then
 					emit quote
-						self.trace:update(true, true)
+						self.trace:update(true)
 						if self.geoindex < self.stopindex then
 							self.finished = true
 						else
@@ -306,7 +313,7 @@ local Particle = S.memoize(function(Trace)
 				elseif IMPLEMENTATION == Impl.LONGJMP then
 					emit quote
 						if C.setjmp(self.jumpEnv) == 0 then
-							self.trace:update(true, true)
+							self.trace:update(true)
 							self.finished = true
 						end
 						self.stopindex = self.stopindex + 1
@@ -326,7 +333,7 @@ end)
 
 local function TraceType(P)
 	if USE_QUICKSAND_TRACE then
-		return trace.RandExecTrace(P)
+		return QSTrace(P)
 	else
 		return SimpleTrace(P)
 	end
@@ -338,6 +345,22 @@ end
 local function globalParticle()
 	assert(currentlyCompilingProgram ~= nil)
 	return Particle(TraceType(currentlyCompilingProgram)).globalParticle
+end
+
+-- Macro that needs access to the global particle.
+-- Second argument is the function that generates alternate code in compilation contexts
+--    where it is not safe to access the global particle (i.e. Quicksand's
+--    type detection pass)
+-- Second arg defaults to a function returning the empty quote
+local function gpmacro(fn, altfn)
+	altfn = altfn or function() return quote end end
+	return macro(function(...)
+		if USE_QUICKSAND_TRACE and trace.compilation.isDoingTypeDetectionPass() then
+			return altfn(...)
+		else
+			return fn(...)
+		end
+	end)
 end
 
 -----------------------------------------------------------------
@@ -354,12 +377,12 @@ local function main(fn)
 	-- Reach into the global particle to get the mesh-so-far.
 	-- (I've implemented things this way mostly as a concession to Quicksand,
 	--    whose programs don't take arguments)
-	local getgp = macro(function()
-		return globalParticle()
-	end)
+	local globalMesh = gpmacro(
+		function() return `&[globalParticle()].mesh end,
+		function() return `nil end
+	)
 	local terra mainfn()
-		var gp = getgp()
-		var meshptr = &gp.mesh
+		var meshptr = globalMesh()
 		fn(meshptr)
 	end
 	mainfn.__is_smc_main__ = true
@@ -382,7 +405,7 @@ local nilGlobalTrace = macro(function()
 end)
 
 local function makeGeoPrim(shapefn)
-	return macro(function(mesh, ...)
+	return gpmacro(function(mesh, ...)
 		local args = {...}
 		local gp = globalParticle()
 		return quote
@@ -511,14 +534,11 @@ local run = S.memoize(function(P)
 			end
 			generation = generation + 1
 			-- Importance resampling
-			-- S.printf("\nWeights: ")
 			for i=0,nParticles do
-				-- S.printf("  %g", weights(i))
 				var index = [distrib.categorical_vector(double)].sample(weights)
 				var newp = nextParticles:insert()
 				newp:copy(particles:get(index))
 			end
-			-- S.printf("\n")
 			-- Record meshes *BEFORE* resampling
 			if recordHistory then
 				recordCurrMeshes(particles, outgenerations)
