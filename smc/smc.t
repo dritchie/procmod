@@ -45,10 +45,12 @@ local Resample =
 
 -- Parameters that control the overall SMC behavior
 local IMPLEMENTATION = Impl.RETURN
+local VOXEL_FACTOR_WEIGHT = 0.01
+local OUTSIDE_FACTOR_WEIGHT = 0.01
 local USE_WEIGHT_ANNEALING = false
 local ANNEAL_RATE = 0.05
 local USE_QUICKSAND_TRACE = false
-local RESAMPLING_ALG = Resample.SYSTEMATIC
+local RESAMPLING_ALG = Resample.MULTINOMIAL
 local METROPOLIS_RESAMPLE_EPS = 0.001
 
 -----------------------------------------------------------------
@@ -297,7 +299,8 @@ local Particle = S.memoize(function(Trace)
 
 			var percentOutside = double(self.outsideTris) / self.mesh:numTris()
 
-			self.likelihood = softeq(percentSame, 1.0, 0.01) + softeq(percentOutside, 0.0, 0.01)
+			self.likelihood = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
+							  softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
 		end
 	end
 
