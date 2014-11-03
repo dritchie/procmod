@@ -38,7 +38,9 @@ local Resample =
 {
 	MULTINOMIAL = 0,
 	STRATIFIED = 1,
-	SYSTEMATIC = 2
+	SYSTEMATIC = 2,
+	REJECTION = 3,
+	METROPOLIS = 4
 }
 
 -- Parameters that control the overall SMC behavior
@@ -47,6 +49,7 @@ local USE_WEIGHT_ANNEALING = false
 local ANNEAL_RATE = 0.05
 local USE_QUICKSAND_TRACE = false
 local RESAMPLING_ALG = Resample.SYSTEMATIC
+local METROPOLIS_RESAMPLE_EPS = 0.001
 
 -----------------------------------------------------------------
 
@@ -550,6 +553,59 @@ local run = S.memoize(function(P)
 		end
 	end
 
+	-- See http://arxiv.org/abs/1301.4019
+	local terra resampleRejection(weights: &S.Vector(double), pcurr: &Particles, pnext: &Particles)
+		pnext:clear()
+		var N = pcurr:size()
+		-- find max weight
+		var maxweight = [-math.huge]
+		for w in weights do
+			maxweight = tmath.fmax(w, maxweight)
+		end
+		-- resample
+		for i=0,N do
+			var j = i
+			var u = [distrib.uniform(double)].sample(0.0, 1.0)
+			while u > weights(j)/maxweight do
+				j = [distrib.uniformInt(double)].sample(0, N-1)
+				u = [distrib.uniform(double)].sample(0.0, 1.0)
+			end
+			var newp = pnext:insert()
+			newp:copy(pcurr:get(j))
+		end
+	end
+
+	-- See http://arxiv.org/abs/1301.4019
+	local terra resampleMetropolis(weights: &S.Vector(double), pcurr: &Particles, pnext: &Particles, eps: double)
+		pnext:clear()
+		var N = pcurr:size()
+		-- find max weight and mean weight
+		var maxweight = [-math.huge]
+		var meanweight = 0.0
+		for w in weights do
+			maxweight = tmath.fmax(w, maxweight)
+			meanweight = meanweight + w
+		end
+		meanweight = meanweight / N
+		-- Calculate the number of MH iterations to use to guarantee a bias bound
+		--    of eps
+		var beta = meanweight / maxweight
+		var nIters = int(tmath.log(eps) / tmath.log(1 - beta))
+		-- resample
+		for i=0,N do
+			var k = i
+			for b=0,nIters do
+				var u = [distrib.uniform(double)].sample(0.0, 1.0)
+				var j = [distrib.uniformInt(double)].sample(0, N-1)
+				if u < weights(j) / weights(k) then
+					k = j
+				end
+			end
+			var newp = pnext:insert()
+			newp:copy(pcurr:get(k))
+		end
+	end
+
 	return terra(nParticles: uint, outgenerations: &Generations, recordHistory: bool, verbose: bool)
 		-- Init particles
 		var particles = Particles.salloc():init()
@@ -597,6 +653,7 @@ local run = S.memoize(function(P)
 			end
 			generation = generation + 1
 			-- Importance resampling
+			-- TODO: Resampling in-place?
 			escape
 				if RESAMPLING_ALG == Resample.MULTINOMIAL then
 					emit `resampleMultinomial(weights, particles, nextParticles)
@@ -604,6 +661,10 @@ local run = S.memoize(function(P)
 					emit `resampleStratified(weights, particles, nextParticles, false)
 				elseif RESAMPLING_ALG == Resample.SYSTEMATIC then
 					emit `resampleStratified(weights, particles, nextParticles, true)
+				elseif RESAMPLING_ALG == Resample.REJECTION then
+					emit `resampleRejection(weights, particles, nextParticles)
+				elseif RESAMPLING_ALG == Resample.METROPOLIS then
+					emit `resampleMetropolis(weights, particles, nextParticles, METROPOLIS_RESAMPLE_EPS)
 				end
 			end
 			-- Record meshes *BEFORE* resampling
