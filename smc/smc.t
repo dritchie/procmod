@@ -33,11 +33,20 @@ local Impl =
 	FULLRUN = 2
 }
 
+-- Different particle resampling algorithms
+local Resample = 
+{
+	MULTINOMIAL = 0,
+	STRATIFIED = 1,
+	SYSTEMATIC = 2
+}
+
 -- Parameters that control the overall SMC behavior
 local IMPLEMENTATION = Impl.RETURN
 local USE_WEIGHT_ANNEALING = false
 local ANNEAL_RATE = 0.05
 local USE_QUICKSAND_TRACE = false
+local RESAMPLING_ALG = Resample.SYSTEMATIC
 
 -----------------------------------------------------------------
 
@@ -487,6 +496,60 @@ local run = S.memoize(function(P)
 		end
 	end
 
+	local terra resampleMultinomial(weights: &S.Vector(double), pcurr: &Particles, pnext: &Particles)
+		pnext:clear()
+		var nParticles = pcurr:size()
+		for i=0,nParticles do
+			var index = [distrib.categorical_vector(double)].sample(weights)
+			var newp = pnext:insert()
+			newp:copy(pcurr:get(index))
+		end
+	end
+
+	-- See http://arxiv.org/abs/1301.4019
+	local terra resampleStratified(weights: &S.Vector(double), pcurr: &Particles, pnext: &Particles, systematic: bool)
+		pnext:clear()
+		var N = pcurr:size()
+		var u : double
+		if systematic then
+			u = [distrib.uniform(double)].sample(0.0, 1.0)
+		end
+		-- Compute CDF of weight distribution
+		var weightCDF = [S.Vector(double)].salloc():init()
+		weightCDF:insert(weights(0))
+		for i=1,N do
+			var wprev = weightCDF(weightCDF:size()-1)
+			weightCDF:insert(wprev + weights(i))
+		end
+		-- Resample
+		var cumNumOffspring = 0
+		var checkCum = 0
+		var numinserts = 0
+		for i=0,N do
+			var ri = N * weightCDF(i) / weightCDF(N-1)
+			var ki = int(tmath.floor(ri)) + 1
+			if ki > N then ki = N end
+			if not systematic then
+				u = [distrib.uniform(double)].sample(0.0, 1.0)
+			end
+			var oi = int(tmath.floor(ri + u))
+			if oi > N then oi = N end
+			-- cumNumOffspring should be non-decreasing.
+			-- I think this can happen due to the random offset?
+			if oi < cumNumOffspring then oi = cumNumOffspring end
+			var numOffspring = oi - cumNumOffspring
+			checkCum = checkCum + numOffspring
+			cumNumOffspring = oi
+			var localNumInserts = 0
+			for j=0,numOffspring do
+				numinserts = numinserts + 1
+				localNumInserts = localNumInserts + 1
+				var newp = pnext:insert()
+				newp:copy(pcurr:get(i))
+			end
+		end
+	end
+
 	return terra(nParticles: uint, outgenerations: &Generations, recordHistory: bool, verbose: bool)
 		-- Init particles
 		var particles = Particles.salloc():init()
@@ -534,15 +597,20 @@ local run = S.memoize(function(P)
 			end
 			generation = generation + 1
 			-- Importance resampling
-			for i=0,nParticles do
-				var index = [distrib.categorical_vector(double)].sample(weights)
-				var newp = nextParticles:insert()
-				newp:copy(particles:get(index))
+			escape
+				if RESAMPLING_ALG == Resample.MULTINOMIAL then
+					emit `resampleMultinomial(weights, particles, nextParticles)
+				elseif RESAMPLING_ALG == Resample.STRATIFIED then
+					emit `resampleStratified(weights, particles, nextParticles, false)
+				elseif RESAMPLING_ALG == Resample.SYSTEMATIC then
+					emit `resampleStratified(weights, particles, nextParticles, true)
+				end
 			end
 			-- Record meshes *BEFORE* resampling
 			if recordHistory then
 				recordCurrMeshes(particles, outgenerations)
 			end
+			-- Swap old and new particle sets
 			var tmp = particles
 			particles = nextParticles
 			nextParticles = tmp
