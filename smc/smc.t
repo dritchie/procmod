@@ -52,6 +52,16 @@ local ANNEAL_RATE = 0.05
 local USE_QUICKSAND_TRACE = false
 local RESAMPLING_ALG = Resample.MULTINOMIAL
 local METROPOLIS_RESAMPLE_EPS = 0.001
+local DO_REJUVENATION = false
+local REJUVENATION_STEPS = 10
+local REJUVENATION_CHANCE = 0.05
+local REJUVENATION_LAG = 4
+local REJUVENATION_MAKES_STRUCT_CHANGES = false
+
+
+if DO_REJUVENATION then
+	USE_QUICKSAND_TRACE = true
+end
 
 -----------------------------------------------------------------
 
@@ -166,8 +176,8 @@ local function SimpleTrace(P)
 	return _SimpleTrace(P)
 end
 
--- Retrieve the global trace for the currently compiling program
-local function globalTrace()
+-- Retrieve the global SimpleTrace for the currently compiling program
+local function globalSimpleTrace()
 	assert(currentlyCompilingProgram ~= nil)
 	return SimpleTrace(currentlyCompilingProgram).globalTrace
 end
@@ -180,7 +190,6 @@ local function QSTrace(P)
 	return trace.RandExecTrace(P:qsprog(), double)
 end
 
-
 -----------------------------------------------------------------
 
 -- Simple ERP creation for when we're not using Quicksand traces
@@ -188,7 +197,7 @@ local function makeERP(sampler)
 	local T = sampler:gettype().returntype
 	return macro(function(...)
 		local args = {...}
-		local gt = globalTrace()
+		local gt = globalSimpleTrace()
 		-- Figure out which vector of random choices we should look into
 		local indexq, choiceq
 		if T == bool then
@@ -228,7 +237,13 @@ local uniformInt
 if USE_QUICKSAND_TRACE then
 	flip = qs.flip
 	poisson = qs.poisson
-	uniform = qs.uniform
+	uniform = macro(function(lo, hi)
+		return quote
+			var t = qs.uniform(0.0, 1.0, {struc=false})
+		in
+			lerp(lo, hi, t)
+		end
+	end)
 	uniformInt = qs.uniformInt
 else
 	flip = makeERP(distrib.bernoulli(double).sample)
@@ -257,8 +272,15 @@ local Particle = S.memoize(function(Trace)
 		stopindex: uint
 		finished: bool
 		likelihood: double
+		rejuvenating: bool
 	}
+	-- longjmp data
 	if IMPLEMENTATION == Impl.LONGJMP then Particle.entries:insert({field="jumpEnv", type=C.jmp_buf}) end
+	-- rejuvenation data
+	if DO_REJUVENATION then
+		local TraceMHKernel = qs.TraceMHKernel({doStruct=REJUVENATION_MAKES_STRUCT_CHANGES})(Trace)
+		Particle.entries:insert({field="rejuvenationKernel", type=TraceMHKernel})
+	end
 
 	terra Particle:__init()
 		self:initmembers()
@@ -267,12 +289,13 @@ local Particle = S.memoize(function(Trace)
 		self.outsideTris = 0
 		self.finished = false
 		self.hasSelfIntersections = false
+		self.rejuvenating = false
 	end
 
-	terra Particle:score(generation: uint)
+	terra Particle:computeScore(generation: uint)
 		-- If we have self-intersections, then score is -inf
 		if self.hasSelfIntersections then
-			self.likelihood = [-math.huge]
+			return [-math.huge]
 		else
 			var percentSame : double
 			escape
@@ -299,9 +322,13 @@ local Particle = S.memoize(function(Trace)
 
 			var percentOutside = double(self.outsideTris) / self.mesh:numTris()
 
-			self.likelihood = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
-							  softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+			return softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
+				   softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
 		end
+	end
+
+	terra Particle:score(generation: uint)
+		self.likelihood = self:computeScore(generation)
 	end
 
 	-- Analagous to the 'global trace' in Quicksand
@@ -321,6 +348,11 @@ local Particle = S.memoize(function(Trace)
 						self.trace:update(true)
 						if self.geoindex < self.stopindex then
 							self.finished = true
+							-- When a particle is finished, we want stopindex to be 1 greater
+							--    than the index of the last geo prim. RETURN and FULLRUN semantics
+							--    require an extra final run to detect termination, which increments
+							--    stopindex higher than it should be, so we reset it here.
+							self.stopindex = self.stopindex - 1
 						else
 							self.stopindex = self.stopindex + 1
 						end
@@ -330,13 +362,50 @@ local Particle = S.memoize(function(Trace)
 						if C.setjmp(self.jumpEnv) == 0 then
 							self.trace:update(true)
 							self.finished = true
+						else
+							self.stopindex = self.stopindex + 1
 						end
-						self.stopindex = self.stopindex + 1
 					end
 				end
 			end
 
 			globalParticle = nil
+		end
+	end
+
+	if DO_REJUVENATION then
+		terra Particle:rejuvenate(numIters: uint)
+			-- if self.finished then return end
+			-- S.printf("======== BEGIN rejuvenate ========\n")
+			-- S.printf("Particle is finished: %u\n", self.finished)
+			self.rejuvenating = true
+			globalParticle = self
+			-- The logprob of self.trace currently only incorporates the prior;
+			--    adjust it to include the likelihood so that MH can work.
+			self.trace.loglikelihood = self.likelihood
+			self.trace.logprob = self.trace.logprob + self.trace.loglikelihood
+			-- Do MH for numIters iterations
+			for i=0,numIters do
+				self.geoindex = 0
+				-- need to clear out the mesh and the voxel grid, since we'll
+				--    be regenerating them from scratch.
+				self.mesh:clear()
+				self.grid:clear()
+				-- S.printf("ll before kernel: %g\n",
+					-- self.trace.loglikelihood)
+				self.rejuvenationKernel:next(&self.trace, i, numIters)
+				-- S.printf("ll after kernel: %g\n",
+					-- self.trace.loglikelihood)
+			end
+			self.rejuvenating = false
+			globalParticle = nil
+			-- The new score is the loglikelihood on the trace after MH finishes
+			self.likelihood = self.trace.loglikelihood
+			-- S.printf("%g, %g, %g\n", self.likelihood, self.trace.loglikelihood, self.trace.logprob)
+			-- Reset self.trace.logprob to only include the prior
+			self.trace.logprob = (self.trace.logprob - self.likelihood)
+			self.trace.loglikelihood = 0.0
+			-- S.printf("======== END rejuvenate ========\n")
 		end
 	end
 
@@ -351,6 +420,15 @@ local function TraceType(P)
 		return QSTrace(P)
 	else
 		return SimpleTrace(P)
+	end
+end
+
+-- Retrieve the global trace for the currently compiling program
+local function globalTrace()
+	if USE_QUICKSAND_TRACE then
+		return trace.__UNSAFE_getGlobalTrace__()
+	else
+		return globalSimpleTrace()
 	end
 end
 
@@ -410,15 +488,6 @@ end
 
 -----------------------------------------------------------------
 
--- Set the global trace to nil
-local nilGlobalTrace = macro(function()
-	if USE_QUICKSAND_TRACE then
-		return quote trace.__UNSAFE_setGlobalTrace(nil) end
-	else
-		return quote [globalTrace()] = nil end
-	end
-end)
-
 local function makeGeoPrim(shapefn)
 	return gpmacro(function(mesh, ...)
 		local args = {...}
@@ -427,8 +496,13 @@ local function makeGeoPrim(shapefn)
 			if mesh ~= &gp.mesh then
 				shapefn(mesh, [args])
 			else
-				-- Skip all geo primitives up until the last one for this run.
-				if gp.geoindex == gp.stopindex then
+				var shouldCompute = true
+				-- If we're not doing rejuvenation MCMC (i.e. we're just doing SMC), then
+				--    skip all geo primitives up until the last one for this run.
+				if not gp.rejuvenating then
+					shouldCompute = (gp.geoindex == gp.stopindex)
+				end
+				if shouldCompute then
 					gp.tmpmesh:clear()
 					shapefn(&gp.tmpmesh, [args])
 
@@ -443,27 +517,41 @@ local function makeGeoPrim(shapefn)
 
 					mesh:append(&gp.tmpmesh)
 
-					-- What we do next depends on the implementation strategy
-					escape
-						if IMPLEMENTATION == Impl.RETURN then
-							emit quote
-								return
-							end
-						elseif IMPLEMENTATION == Impl.LONGJMP then
-							emit quote
-								C.longjmp(gp.jumpEnv, 1)
-							end
-						elseif IMPLEMENTATION == Impl.FULLRUN then
-							emit quote
-								-- So that the trace doesn't record any random choices past this point.
-								nilGlobalTrace()
+					var shouldStop = true
+					-- If we're doing rejuvenation, then we only terminate if we've reached the stop point
+					if gp.rejuvenating then
+						shouldStop = (gp.geoindex == gp.stopindex-1)
+					end
+					if shouldStop then
+						-- If we're doing rejuvenation MCMC, then we need to set the trace likelihood to
+						--    the current score.
+						escape
+							if DO_REJUVENATION then emit quote
+								if gp.rejuvenating then
+									[globalTrace()]:setLikelihood(gp:computeScore(gp.stopindex-1))
+								end
+							end end
+						end
+						-- Termination semantics depends on the implementation strategy
+						escape
+							if IMPLEMENTATION == Impl.RETURN then
+								emit quote
+									return
+								end
+							elseif IMPLEMENTATION == Impl.LONGJMP then
+								emit quote
+									C.longjmp(gp.jumpEnv, 1)
+								end
+							elseif IMPLEMENTATION == Impl.FULLRUN then
+								emit quote
+									-- So that the trace doesn't record any random choices past this point.
+									[globalTrace()] = nil
+								end
 							end
 						end
 					end
-
-				else
-					gp.geoindex = gp.geoindex + 1
 				end
+				gp.geoindex = gp.geoindex + 1
 			end
 		end
 	end)
@@ -679,6 +767,21 @@ local run = S.memoize(function(P)
 			particles = nextParticles
 			nextParticles = tmp
 			nextParticles:clear()
+			-- Rejuvenation
+			escape
+				if DO_REJUVENATION then
+					emit quote
+						if generation % REJUVENATION_LAG == 0 then
+							for i=0,nParticles do
+								if [distrib.bernoulli(double)].sample(REJUVENATION_CHANCE) then
+									var p = particles:get(i)
+									p:rejuvenate(REJUVENATION_STEPS)
+								end
+							end
+						end
+					end
+				end
+			end
 			-- Record meshes *AFTER* resampling
 			if recordHistory or allParticlesFinished then
 				recordCurrMeshes(particles, outgenerations)

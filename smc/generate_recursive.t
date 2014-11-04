@@ -115,7 +115,7 @@ local RECORD_HISTORY = true
 local run = smc.run(spaceship)
 return terra(generations: &S.Vector(S.Vector(smc.Sample)))
 	generations:clear()
-	run(spaceship, N_PARTICLES, generations, RECORD_HISTORY, true)
+	run(N_PARTICLES, generations, RECORD_HISTORY, true)
 end
 
 

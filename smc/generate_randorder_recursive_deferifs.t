@@ -243,6 +243,7 @@ local spaceship = smc.program(function()
 		return quote
 			var n = self:size()
 			var i = smc.uniformInt(0, n)
+			-- S.printf("i: %u, n: %u\n", i, n)
 			[checkStacks(i)]
 		end
 	end)
