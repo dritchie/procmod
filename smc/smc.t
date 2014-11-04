@@ -244,7 +244,13 @@ if USE_QUICKSAND_TRACE then
 			lerp(lo, hi, t)
 		end
 	end)
-	uniformInt = qs.uniformInt
+	uniformInt = macro(function(lo, hi)
+		return quote
+			var t = qs.uniform(0.0, 1.0)
+		in
+			int(lerp(lo, hi, t))
+		end
+	end)
 else
 	flip = makeERP(distrib.bernoulli(double).sample)
 	poisson = makeERP(distrib.poisson(double).sample)
