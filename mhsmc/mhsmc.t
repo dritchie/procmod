@@ -169,12 +169,20 @@ local run = S.memoize(function(P)
 			weights:insert(0.0)
 		end
 		-- Repeatedly do MH proposals, then resample.
-		var mhkernel = [qs.TraceMHKernel()(Trace)].salloc():init()
+		-- var mhkernel = [qs.TraceMHKernel()(Trace)].salloc():init()
 		for g=0,nGenerations do
 			var minFiniteScore = [math.huge]
 			for i=0,particles:size() do
 				var p = particles:get(i)
-				mhkernel:next(p, 0, 1)
+
+				-- mhkernel:next(p, 0, 1)
+
+				var numchoices = [Trace.countChoices()](p)
+				var randindex = [distrib.uniform(double)].sample(0.0, 1.0) * numchoices
+				var rc = [Trace.getChoice()](p, randindex)
+				rc:proposal()
+				p:update(rc:getIsStructural())
+
 				weights(i) = p.logprob
 				-- Violated hard constraints --> 0 probability
 				if not p.conditionsSatisfied then weights(i) = [-math.huge] end
