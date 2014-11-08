@@ -177,6 +177,7 @@ local run = S.memoize(function(P)
 
 				-- mhkernel:next(p, 0, 1)
 
+				-- TODO: Do I need to adjust score using proposal probability? (Do I even care...?)
 				var numchoices = [Trace.countChoices()](p)
 				var randindex = [distrib.uniform(double)].sample(0.0, 1.0) * numchoices
 				var rc = [Trace.getChoice()](p, randindex)
