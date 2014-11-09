@@ -1,5 +1,10 @@
 local util = terralib.require("lua.util")
 
+-- (For now) borrow some code from old probabilistic-lua
+local distrib = terralib.require("probabilistic.random")
+
+---------------------------------------------------------------
+
 -- Functionality that all traces share
 local Trace = {}
 Trace.__index = Trace
@@ -50,6 +55,16 @@ function Trace:run()
 	self.logposterior = 0.0
 	self.retval = self.program(unpack(self.args))
 	globalTrace = prevGlobalTrace
+end
+
+function Trace:makeRandomChoice(erp, ...)
+	local val = self:makeRandomChoiceImpl(erp, ...)
+	self.logprior = self.logprior + erp.logprob(val, ...)
+	self.logposterior = self.logprior + self.loglikelihood
+end
+
+function Trace:makeRandomChoiceImpl(erp, ...)
+	error("Trace: 'makeRandomChoiceImpl' method not implemented.")
 end
 
 function Trace:addFactor(num)
@@ -105,12 +120,12 @@ end
 
 -- Look up the value, or sample a new one if we're past
 --    the end of the list
-function FlatValueTrace:makeRandomChoice(erp, params)
+function FlatValueTrace:makeRandomChoiceImpl(erp, ...)
 	local val
 	if self.choiceindex <= #self.choicevals then
 		val = self.choicevals[self.choiceindex]
 	else
-		val = erp.sample(params)
+		val = erp.sample(...)
 		table.insert(self.choicevals, val)
 	end
 	self.choiceindex = self.choiceindex + 1
@@ -119,9 +134,9 @@ end
 
 ---------------------------------------------------------------
 
--- TODO: FlatERPTrace
+-- TODO: FlatERPTrace?
 
--- TODO: StructuredERPTrace
+-- TODO: StructuredERPTrace?
 
 ---------------------------------------------------------------
 
@@ -133,7 +148,17 @@ local function makeSampler(ERP)
 	end
 end
 
--- TODO: Make some sampling functions (don't forget to export them...)
+-- TODO: Make 'propse' methods for these
+
+local flip = makeSampler({
+	sample = distrib.flip_sample,
+	logprob = distrib.flip_logprob
+})
+
+local uniform = makeSampler({
+	sample = distrib.uniform_sample,
+	logprob = distrib.uniform_logprob
+})
 
 ---------------------------------------------------------------
 
@@ -142,6 +167,8 @@ return
 {
 	Trace = Trace,
 	FlatValueTrace = FlatValueTrace,
+	flip = flip,
+	uniform = uniform,
 	factor = function(num) globalTrace and globalTrace:addFactor(num) end,
 	likelihood = function(num) globalTrace and globalTrace:setLoglikelihood(num) end
 }

@@ -2,9 +2,6 @@ local S = terralib.require("qs.lib.std")
 local util = terralib.require("lua.util")
 local trace = terralib.require("lua.trace")
 
--- (For now) borrow some code from old probabilistic-lua
-local distrib = terralib.require("probabilistic.random")
-
 ---------------------------------------------------------------
 
 -- Sync points use exception handling
@@ -31,20 +28,28 @@ local Particle = S.memoize(function(Trace)
 	function Particle:init(program, ...)
 		self.trace = Trace.alloc():init(program, ...)
 		self.finished = false
-		self.currSyncIndex = 0
-		self.stopSyncIndex = 0
+		self.currSyncIndex = 1
+		self.stopSyncIndex = 1
 		return self
 	end
 
-	function Particle:reachedNextSyncPoint()
+	function Particle:willStopAtNextSync()
 		return self.currSyncIndex == self.stopSyncIndex
+	end
+
+	function Particle:sync()
+		if self.currSyncIndex == self.stopSyncIndex then
+			error(SMC_SYNC_ERROR)
+		else
+			self.currSyncIndex = self.currSyncIndex + 1
+		end
 	end
 
 	function Particle:step()
 		if not self.finished then
 			local prevGlobalParticle = globalParticle
 			self.stopSyncIndex = self.stopSyncIndex + 1
-			self.currSyncIndex = 0
+			self.currSyncIndex = 1
 			local succ, err = pcall(function() self.trace:update() end)
 			if succ then
 				self.finished = true
@@ -59,13 +64,50 @@ local Particle = S.memoize(function(Trace)
 	return Particle
 end)
 
-
 ---------------------------------------------------------------
 
 -- Straight-up sequential importance resampling
 -- The last three args are callbacks
-local function SIR(nParticles, program, args, beforeResample, afterResample, exit)
-	--
+local function SIR(nParticles, program, args, verbose, beforeResample, afterResample, exit)
+	-- Only need the simplest trace to do SIR
+	local Trace = trace.FlatValueTrace
+	-- Init particles
+	local particles = {}
+	local nextParticles = {}
+	local weights = {}
+	for i=0,nParticles do
+		-- Each particle gets a copy of any input args
+		local argscopy = {}
+		for _,a in ipairs(args) do table.insert(argscopy, util.newcopy(a)) end
+		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
+		table.insert(particles, p)
+		table.insert(weights, 0)
+	end
+	-- Step all particles forward in lockstep until they are all finished
+	local generation = 1
+	repeat
+		local numfinished = 0
+		for i,p in ipairs(particles) do
+			p:step()
+			if p.finished then
+				numfinished = numfinished + 1
+			end
+			weights[i] = p.trace.loglikelihood
+		end
+		local allfinished = (numfinished == nParticles)
+		if verbose then
+			io.write(string.format("Generation %u: Finished %u/%u particles.\r",
+				generation, numfinished, nParticles))
+		end
+		beforeResample(particles)
+		-- TODO: exponentiate weights, preventing underflow
+		-- TODO: Resampling
+		afterResample(particles)
+	until allfinished
+	exit(particles)
+	if verbose then
+		io.write("\n")
+	end
 end
 
 
@@ -73,10 +115,12 @@ end
 return
 {
 	SIR = SIR,
-	reachedNextSyncPoint = function()
-		return globalParticle and globalParticle:reachedNextSyncPoint()
+	willStopAtNextSync = function()
+		return globalParticle and globalParticle:willStopAtNextSync()
 	end,
-	sync = function() globalParticle and error(SMC_SYNC_ERROR) end
+	sync = function()
+		return globalParticle and globalParticle:sync()
+	end
 }
 
 
