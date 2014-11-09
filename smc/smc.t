@@ -75,18 +75,6 @@ end)
 
 -----------------------------------------------------------------
 
-local tgrid = global(BinaryGrid)
-local tbounds = global(BBox3)
-local terra initglobals()
-	tbounds = globals.targetMesh:bbox()
-	tbounds:expand(globals.BOUNDS_EXPAND)
-	tgrid:init()
-	globals.targetMesh:voxelize(&tgrid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-end
-initglobals()
-
------------------------------------------------------------------
-
 -- Abstracts an SMC-able program.
 local currentlyCompilingProgram = nil
 local smc_mt = {}
@@ -310,18 +298,18 @@ local Particle = S.memoize(function(Trace)
 						-- Weight empty cells more than filled cells in the early going, decay
 						--    toward default weighting over time.
 						-- TODO: Need a final resampling step that uses the final, 'true' weighting?
-						var n = tgrid:numCellsPadded()
-						var pe = tgrid:numEmptyCellsPadded() / double(n)
+						var n = globals.targetGrid:numCellsPadded()
+						var pe = globals.targetGrid:numEmptyCellsPadded() / double(n)
 						-- var w = pe
 						var w = (1.0-pe)*tmath.exp(-ANNEAL_RATE*generation) + pe
-						percentSame = lerp(tgrid:percentFilledCellsEqual(&self.grid),
-										   tgrid:percentEmptyCellsEqual(&self.grid),
+						percentSame = lerp(globals.targetGrid:percentFilledCellsEqual(&self.grid),
+										   globals.targetGrid:percentEmptyCellsEqual(&self.grid),
 										   w)
 					end
 				else
 					emit quote
 						-- Original version that doesn't separate empty from filled.
-						percentSame = tgrid:percentCellsEqual(&self.grid)
+						percentSame = globals.targetGrid:percentCellsEqual(&self.grid)
 					end
 				end
 			end
@@ -516,8 +504,8 @@ local function makeGeoPrim(shapefn)
 					-- If not, then go on to voxelize
 					gp.hasSelfIntersections = gp.hasSelfIntersections or gp.tmpmesh:intersects(mesh)
 					if not gp.hasSelfIntersections then
-						gp.grid:resize(tgrid.rows, tgrid.cols, tgrid.slices)
-						var nout = gp.tmpmesh:voxelize(&gp.grid, &tbounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+						gp.grid:resize(globals.targetGrid.rows, globals.targetGrid.cols, globals.targetGrid.slices)
+						var nout = gp.tmpmesh:voxelize(&gp.grid, &globals.targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 						gp.outsideTris = gp.outsideTris + nout
 					end
 
