@@ -6,6 +6,7 @@ local BBox3 = terralib.require("bbox")(Vec3)
 local BinaryGrid = terralib.require("binaryGrid3d")
 local trace = terralib.require("lua.trace")
 local smc = terralib.require("lua.smc")
+local distrib = terralib.require("qs.distrib")
 
 -- Still using the same global config, for now
 local globals = terralib.require("globals")
@@ -14,6 +15,12 @@ local globals = terralib.require("globals")
 
 local VOXEL_FACTOR_WEIGHT = 0.01
 local OUTSIDE_FACTOR_WEIGHT = 0.01
+
+---------------------------------------------------------------
+
+local softeq = macro(function(val, target, s)
+	return `[distrib.gaussian(double)].logprob(val, target, s)
+end)
 
 ---------------------------------------------------------------
 
@@ -38,18 +45,18 @@ terra State:__init()
 end
 
 -- Returns the new score
-terra State:update(newgeo: &Mesh)
+terra State:update()
 	self.hasSelfIntersections =
-		self.hasSelfIntersections or newgeo:intersects(self.mesh)
+		self.hasSelfIntersections or self.addmesh:intersects(&self.mesh)
 	if not self.hasSelfIntersections then
 		self.grid:resize(globals.targetGrid.rows,
 						 globals.targetGrid.cols,
 						 globals.targetGrid.slices)
-		var nout = newgeo:voxelize(&self.grid, &globals.targetBounds,
+		var nout = self.addmesh:voxelize(&self.grid, &globals.targetBounds,
 								   globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 		self.outsideTris = self.outsideTris + nout
 	end
-	self.mesh:append(newgeo)
+	self.mesh:append(&self.addmesh)
 	-- Compute and return score
 	if self.hasSelfIntersections then
 		return [-math.huge]
@@ -111,7 +118,7 @@ end
 -- Copy meshes from a Lua table of smc Particles to a cdata Vector of Sample(Mesh)
 local function copyMeshes(particles, outgenerations)
 	local newgeneration = outgenerations:insert()
-	newgeneration:init()
+	LS.luainit(newgeneration)
 	for _,p in ipairs(particles) do
 		local samp = newgeneration:insert()
 		-- The first arg of the particle's trace is the procmod State object.

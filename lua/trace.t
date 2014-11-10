@@ -1,8 +1,5 @@
 local LS = terralib.require("lua.std")
 
--- (For now) borrow some code from old probabilistic-lua
-local distrib = terralib.require("probabilistic.random")
-
 ---------------------------------------------------------------
 
 -- Functionality that all traces share
@@ -13,11 +10,11 @@ local globalTrace = nil
 -- Program can optionally take some arguments (typically used for some
 --    persistent store)
 function Trace:init(program, ...)
-	self.program = program,
-	self.args = {...},
+	self.program = program
+	self.args = {...}
 	self.retval = nil
-	self.logprior = 0.0,
-	self.loglikelihood = 0.0,
+	self.logprior = 0.0
+	self.loglikelihood = 0.0
 	self.logposterior = 0.0
 	return self
 end
@@ -61,6 +58,7 @@ function Trace:makeRandomChoice(erp, ...)
 	local val = self:makeRandomChoiceImpl(erp, ...)
 	self.logprior = self.logprior + erp.logprob(val, ...)
 	self.logposterior = self.logprior + self.loglikelihood
+	return val
 end
 
 function Trace:makeRandomChoiceImpl(erp, ...)
@@ -122,8 +120,10 @@ end
 --    the end of the list
 function FlatValueTrace:makeRandomChoiceImpl(erp, ...)
 	local val
+	local reused = false
 	if self.choiceindex <= #self.choicevals then
 		val = self.choicevals[self.choiceindex]
+		reused = true
 	else
 		val = erp.sample(...)
 		table.insert(self.choicevals, val)
@@ -143,21 +143,36 @@ end
 -- ERP is a table consisting of sample, logprob, and (optionally) propose
 local function makeSampler(ERP)
 	return function(...)
-		return globalTrace and globalTrace:makeRandomChoice(ERP, ...)
-						   or ERP.sample(...)
+		if globalTrace then
+			return globalTrace:makeRandomChoice(ERP, ...)
+		else
+			return ERP.sample(...)
+		end
 	end
 end
 
--- TODO: Make 'propse' methods for these
+
+-- TODO: Make 'propose' methods for these?
 
 local flip = makeSampler({
-	sample = distrib.flip_sample,
-	logprob = distrib.flip_logprob
+	name = "flip",
+	sample = function(p) return math.random() < p end,
+	logprob = function(val, p)
+		local prob = val and p or 1-p
+		return math.log(prob)
+	end
 })
 
 local uniform = makeSampler({
-	sample = distrib.uniform_sample,
-	logprob = distrib.uniform_logprob
+	name = "uniform",
+	sample = function(lo, hi)
+		local u = math.random()
+		return (1-u)*lo + u*hi
+	end,
+	logprob = function(val, lo, hi)
+		if val < lo or val > hi then return -math.huge end
+		return -math.log(hi - lo)
+	end
 })
 
 ---------------------------------------------------------------
@@ -165,12 +180,11 @@ local uniform = makeSampler({
 
 return
 {
-	Trace = Trace,
 	FlatValueTrace = FlatValueTrace,
 	flip = flip,
 	uniform = uniform,
-	factor = function(num) globalTrace and globalTrace:addFactor(num) end,
-	likelihood = function(num) globalTrace and globalTrace:setLoglikelihood(num) end
+	factor = function(num) if globalTrace then globalTrace:addFactor(num) end end,
+	likelihood = function(num) if globalTrace then globalTrace:setLoglikelihood(num) end end
 }
 
 

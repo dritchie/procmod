@@ -29,7 +29,7 @@ local Particle = S.memoize(function(Trace)
 		self.trace = Trace.alloc():init(program, ...)
 		self.finished = false
 		self.currSyncIndex = 1
-		self.stopSyncIndex = 1
+		self.stopSyncIndex = 0
 		return self
 	end
 
@@ -48,9 +48,10 @@ local Particle = S.memoize(function(Trace)
 	function Particle:step()
 		if not self.finished then
 			local prevGlobalParticle = globalParticle
+			globalParticle = self
 			self.stopSyncIndex = self.stopSyncIndex + 1
 			self.currSyncIndex = 1
-			local succ, err = pcall(function() self.trace:update() end)
+			local succ, err = pcall(function() self.trace:run() end)
 			if succ then
 				self.finished = true
 			elseif err ~= SMC_SYNC_ERROR then
@@ -75,7 +76,7 @@ local function SIR(program, args, nParticles, verbose, beforeResample, afterResa
 	local particles = {}
 	local nextParticles = {}
 	local weights = {}
-	for i=0,nParticles do
+	for i=1,nParticles do
 		-- Each particle gets a copy of any input args
 		local argscopy = {}
 		for _,a in ipairs(args) do table.insert(argscopy, LS.newcopy(a)) end
@@ -98,7 +99,9 @@ local function SIR(program, args, nParticles, verbose, beforeResample, afterResa
 		if verbose then
 			io.write(string.format("Generation %u: Finished %u/%u particles.\r",
 				generation, numfinished, nParticles))
+			io.flush()
 		end
+		generation = generation + 1
 		beforeResample(particles)
 		-- TODO: exponentiate weights, preventing underflow
 		-- TODO: Resampling
@@ -119,7 +122,7 @@ return
 		return globalParticle and globalParticle:willStopAtNextSync()
 	end,
 	sync = function()
-		return globalParticle and globalParticle:sync()
+		if globalParticle then globalParticle:sync() end
 	end
 }
 
