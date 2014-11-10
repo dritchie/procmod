@@ -4,10 +4,16 @@ local Mesh = terralib.require("mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 local BBox3 = terralib.require("bbox")(Vec3)
 local BinaryGrid = terralib.require("binaryGrid3d")
+local trace = terralib.require("lua.trace")
 local smc = terralib.require("lua.smc")
 
 -- Still using the same global config, for now
 local globals = terralib.require("globals")
+
+---------------------------------------------------------------
+
+local VOXEL_FACTOR_WEIGHT = 0.01
+local OUTSIDE_FACTOR_WEIGHT = 0.01
 
 ---------------------------------------------------------------
 
@@ -17,7 +23,7 @@ local globals = terralib.require("globals")
 local struct State(S.Object)
 {
 	mesh: Mesh
-	tmpmesh: Mesh
+	addmesh: Mesh
 	grid: BinaryGrid
 	outsideTris: uint
 	hasSelfIntersections: bool
@@ -31,6 +37,7 @@ terra State:__init()
 	self.hasSelfIntersections = false
 end
 
+-- Returns the new score
 terra State:update(newgeo: &Mesh)
 	self.hasSelfIntersections =
 		self.hasSelfIntersections or newgeo:intersects(self.mesh)
@@ -43,6 +50,15 @@ terra State:update(newgeo: &Mesh)
 		self.outsideTris = self.outsideTris + nout
 	end
 	self.mesh:append(newgeo)
+	-- Compute and return score
+	if self.hasSelfIntersections then
+		return [-math.huge]
+	else
+		var percentSame = globals.targetGrid:percentCellsEqual(&self.grid)
+		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
+		return softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
+			   softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+	end
 end
 
 -- State for the currently executing program
@@ -62,15 +78,16 @@ local function makeGeoPrim(geofn)
 		asyms:insert(symbol(paramtypes[i]))
 	end
 	local terra dowork([asyms])
-		var tmpmesh = Mesh.salloc():init()
-		geofn(tmpmesh, [asyms])
-		globalState:update(tmpmesh)
+		globalState.addmesh:clear()
+		geofn(&globalState.addmesh, [asyms])
+		return globalState:update()
 	end
 	-- Now we wrap this in a Lua function that checks whether this work
 	--    needs to be done at all
 	return function(...)
 		if smc.willStopAtNextSync() then
-			dowork(...)
+			local score = dowork(...)
+			trace.likelihood(score)
 		end
 		smc.sync()
 	end
@@ -80,7 +97,7 @@ end
 
 -- Wrap a generative procedural modeling function such that it takes
 --    a State as an argument and does the right thing with it.
-local function program(fn)
+local function statewrap(fn)
 	return function(state)
 		local prevstate = globalState:get()
 		globalState:set(state)
@@ -91,8 +108,54 @@ end
 
 ---------------------------------------------------------------
 
+-- Copy meshes from a Lua table of smc Particles to a cdata Vector of Sample(Mesh)
+local function copyMeshes(particles, outgenerations)
+	local newgeneration = outgenerations:insert()
+	newgeneration:init()
+	for _,p in ipairs(particles) do
+		local samp = newgeneration:insert()
+		-- The first arg of the particle's trace is the procmod State object.
+		-- This is a bit funky, but I think it's the best way to get a this data.
+		samp.value:copy(p.trace.args[1].mesh)
+		samp.logprob = p.trace.logposterior
+		samp.loglikelihood = p.trace.loglikelihood
+	end
+end
+
 -- Run sequential importance sampling on a procedural modeling program,
 --    saving the generated meshes
+-- 'outgenerations' is a cdata Vector(Vector(Sample(Mesh)))
+local function SIR(program, nParticles, outgenerations, recordHistory, verbose)
+	-- Wrap program so that it takes procmod State as argument
+	program = statewrap(program)
+	-- Create the beforeResample, afterResample, and exit callbacks
+	local function dorecord(particles)
+		copyMeshes(particles, outgenerations)
+	end
+	local exit = dorecord
+	local beforeResample, afterResample
+	if recordHistory then
+		beforeResample = dorecord
+		afterResample = dorecord
+	else
+		local function donothing(particles) end
+		beforeResample = donothing
+		afterResample = donothing
+	end
+	-- Run smc.SIR with an initial empty State object as argument
+	smc.SIR(program, {State.luaalloc():luainit()}, nParticles, verbose,
+			beforeResample, afterResample, exit)
+end
+
+---------------------------------------------------------------
+
+return
+{
+	Sample = terralib.require("qs").Sample(Mesh),
+	makeGeoPrim = makeGeoPrim,
+	SIR = SIR
+}
+
 
 
 
