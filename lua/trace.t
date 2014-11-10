@@ -1,4 +1,4 @@
-local util = terralib.require("lua.util")
+local LS = terralib.require("lua.std")
 
 -- (For now) borrow some code from old probabilistic-lua
 local distrib = terralib.require("probabilistic.random")
@@ -26,9 +26,9 @@ function Trace:copy(other)
 	self.program = other.program
 	self.args = {}
 	for _,a in ipairs(other.args) do
-		table.insert(self.args, newcopy(a))
+		table.insert(self.args, LS.newcopy(a))
 	end
-	self.retval = newcopy(other.retval)
+	self.retval = LS.newcopy(other.retval)
 	self.logprior = other.logprior
 	self.loglikelihood = other.loglikelihood
 	self.logposterior = other.logposterior

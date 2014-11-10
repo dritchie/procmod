@@ -1,5 +1,5 @@
 local S = terralib.require("qs.lib.std")
-local util = terralib.require("lua.util")
+local LS = terralib.require("lua.std")
 local trace = terralib.require("lua.trace")
 
 ---------------------------------------------------------------
@@ -68,7 +68,7 @@ end)
 
 -- Straight-up sequential importance resampling
 -- The last three args are callbacks
-local function SIR(nParticles, program, args, verbose, beforeResample, afterResample, exit)
+local function SIR(program, args, nParticles, verbose, beforeResample, afterResample, exit)
 	-- Only need the simplest trace to do SIR
 	local Trace = trace.FlatValueTrace
 	-- Init particles
@@ -78,7 +78,7 @@ local function SIR(nParticles, program, args, verbose, beforeResample, afterResa
 	for i=0,nParticles do
 		-- Each particle gets a copy of any input args
 		local argscopy = {}
-		for _,a in ipairs(args) do table.insert(argscopy, util.newcopy(a)) end
+		for _,a in ipairs(args) do table.insert(argscopy, LS.newcopy(a)) end
 		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
 		table.insert(particles, p)
 		table.insert(weights, 0)
