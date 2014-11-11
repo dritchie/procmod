@@ -117,6 +117,7 @@ end
 
 return
 {
+	-- Particle = Particle,
 	SIR = SIR,
 	willStopAtNextSync = function()
 		return globalParticle and globalParticle:willStopAtNextSync()

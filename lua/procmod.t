@@ -158,6 +158,7 @@ end
 
 return
 {
+	-- State = State,
 	Sample = terralib.require("qs").Sample(Mesh),
 	makeGeoPrim = makeGeoPrim,
 	SIR = SIR

@@ -55,6 +55,7 @@ local MAX_SCORE_COLOR = {0.0, 1.0, 0.0}
 
 -- Globals
 local generate = global({&Generations}->{}, 0)
+local generateRef = nil		-- To ensure code isn't garbage collected
 local generations = global(Generations)
 local currGenIndex = global(int, 0)
 local samples = global(&Samples, 0)
@@ -162,9 +163,8 @@ local function reloadCode()
 		if not modulefn then
 			error(string.format("Error loading procedural modeling code: %s", err))
 		end
-		local genfn = modulefn()
-		-- TODO: Any way to ensure this doesn't leak?
-		generate:set(genfn:getpointer())
+		generateRef = modulefn()
+		generate:set(generateRef:getpointer())
 	end
 	local ok, maybeerr = pcall(doReload)
 	if not ok then
@@ -181,7 +181,6 @@ local reload = terralib.cast({}->bool, reloadCode)
 local terra regen()
 	-- Only generate if the generate fn pointer is not nil.
 	if generate ~= nil then
-		generations:clear()
 		generate(&generations)
 		setGenerationIndex(generations:size()-1, true)
 	end

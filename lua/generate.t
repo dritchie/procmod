@@ -12,7 +12,8 @@ local RECORD_HISTORY = true
 local function run(generations)
 	procmod.SIR(program, N_PARTICLES, generations, RECORD_HISTORY, true)
 end
+local runterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample))}->{}, run)
 return terra(generations: &S.Vector(S.Vector(procmod.Sample)))
 	generations:clear()
-	run(generations)
+	runterra(generations)
 end
