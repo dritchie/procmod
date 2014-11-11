@@ -7,10 +7,13 @@ local program = terralib.require("lua.spaceship")
 
 ---------------------------------------------------------------
 
-local N_PARTICLES = 200
-local RECORD_HISTORY = true
+local opts = {
+	nParticles = 200,
+	recordHistory = true,
+	verbose = true
+}
 local function run(generations)
-	procmod.SIR(program, N_PARTICLES, generations, RECORD_HISTORY, true)
+	procmod.SIR(program, generations, opts)
 end
 local runterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample))}->{}, run)
 return terra(generations: &S.Vector(S.Vector(procmod.Sample)))

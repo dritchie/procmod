@@ -68,8 +68,20 @@ end)
 ---------------------------------------------------------------
 
 -- Straight-up sequential importance resampling
--- The last three args are callbacks
-local function SIR(program, args, nParticles, verbose, beforeResample, afterResample, exit)
+-- Options are:
+--    * nParticles: How many particles to run
+--    * verbose: Verbose output?
+--    * beforeResample: Callback that does something with particles before resampling
+--    * afterResample: Callback that does something with particles after resampling
+--    * exit: Callback that does something with particles when everything is finished
+local function SIR(program, args, opts)
+	local function nop() end
+	-- Extract options
+	local nParticles = opts.nParticles or 200
+	local verbose = opts.verbose
+	local beforeResample = opts.beforeResample or nop
+	local afterResample = opts.afterResample or nop
+	local exit = opts.exit or nop
 	-- Only need the simplest trace to do SIR
 	local Trace = trace.FlatValueTrace
 	-- Init particles

@@ -132,26 +132,24 @@ end
 -- Run sequential importance sampling on a procedural modeling program,
 --    saving the generated meshes
 -- 'outgenerations' is a cdata Vector(Vector(Sample(Mesh)))
-local function SIR(program, nParticles, outgenerations, recordHistory, verbose)
+-- Options are:
+--    * recordHistory: record meshes all the way through, not just the final ones
+--    * any other options recognized by smc.SIR
+local function SIR(program, outgenerations, opts)
 	-- Wrap program so that it takes procmod State as argument
 	program = statewrap(program)
 	-- Create the beforeResample, afterResample, and exit callbacks
 	local function dorecord(particles)
 		copyMeshes(particles, outgenerations)
 	end
-	local exit = dorecord
-	local beforeResample, afterResample
-	if recordHistory then
-		beforeResample = dorecord
-		afterResample = dorecord
-	else
-		local function donothing(particles) end
-		beforeResample = donothing
-		afterResample = donothing
+	local newopts = LS.copytable(opts)
+	newopts.exit = dorecord
+	if opts.recordHistory then
+		newopts.beforeResample = dorecord
+		newopts.afterResample = dorecord
 	end
 	-- Run smc.SIR with an initial empty State object as argument
-	smc.SIR(program, {State.luaalloc():luainit()}, nParticles, verbose,
-			beforeResample, afterResample, exit)
+	smc.SIR(program, {State.luaalloc():luainit()}, newopts)
 end
 
 ---------------------------------------------------------------

@@ -2,6 +2,14 @@ local ffi = require("ffi")
 
 local S = {}
 
+function S.copytable(tbl)
+	local t = {}
+	for k,v in pairs(tbl) do
+		t[k] = v
+	end
+	return t
+end
+
 function S.luaalloc(T)
 	local obj = terralib.new(T)
 	ffi.gc(obj, T.methods.destruct)
