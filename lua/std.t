@@ -10,6 +10,8 @@ function S.copytable(tbl)
 	return t
 end
 
+-- Allocation is done via terralib.new, but we attach a LuaJIT ffi
+--    finalizer to clean up memory
 function S.luaalloc(T)
 	local obj = terralib.new(T)
 	ffi.gc(obj, T.methods.destruct)
@@ -33,7 +35,7 @@ function S.luainit(self, ...)
 end
 
 function S.newcopy(obj)
-	if obj.newcopy then
+	if obj and obj.newcopy then
 		return obj:newcopy()
 	else
 		return obj
@@ -41,12 +43,10 @@ function S.newcopy(obj)
 end
 
 
--- Metatype that exposes standard Object stuff
+-- Terra metatype that exposes standard Object stuff
 -- to Lua code.
 function S.Object(T)
-	
-	-- Allocation is done via terralib.new, but we attach a LuaJIT ffi
-	--    finalizer to clean up memory
+
 	function T.luaalloc()
 		return S.luaalloc(T)
 	end
@@ -58,6 +58,28 @@ function S.Object(T)
 	T.methods.newcopy = function(self)
 		return T.luaalloc():copy(self)
 	end
+
+end
+
+-- Lua 'metatype' that adds some common functionality
+function S.LObject(T)
+
+	T = T or {}
+	T.__index = T
+	
+	function T.alloc()
+		local obj = {}
+		setmetatable(obj, T)
+		return obj
+	end
+
+	-- Will error if the copy method doesn't exist, but that's
+	--    probably the right behavior
+	function T:newcopy()
+		return T.alloc():copy(self)
+	end
+
+	return T
 
 end
 

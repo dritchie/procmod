@@ -568,6 +568,7 @@ inline double getdblmin() { return DBL_MIN; }
 local flushstdout = C.flushstdout
 local LOG_DBL_MIN = tmath.log(C.getdblmin())
 
+
 local run = S.memoize(function(P)
 
 	assert(isSMCProgram(P))

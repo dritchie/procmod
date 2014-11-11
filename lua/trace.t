@@ -4,8 +4,7 @@ local distrib = terralib.require("lua.distrib")
 ---------------------------------------------------------------
 
 -- Functionality that all traces share
-local Trace = {}
-Trace.__index = Trace
+local Trace = LS.LObject()
 local globalTrace = nil
 
 -- Program can optionally take some arguments (typically used for some
@@ -30,6 +29,7 @@ function Trace:copy(other)
 	self.logprior = other.logprior
 	self.loglikelihood = other.loglikelihood
 	self.logposterior = other.logposterior
+	return self
 end
 
 -- Find a complete trace of nonzero probability via rejection sampling
@@ -80,16 +80,8 @@ end
 
 -- Simple trace that stores the values of random choices in a flat list.
 -- Sufficent to replay an execution, and that's about it.
-local FlatValueTrace = {}
-FlatValueTrace.__index = FlatValueTrace
+local FlatValueTrace = LS.LObject()
 setmetatable(FlatValueTrace, Trace)
-FlatValueTrace.globalTrace = nil
-
-function FlatValueTrace.alloc()
-	local obj = {}
-	setmetatable(obj, FlatValueTrace)
-	return obj
-end
 
 function FlatValueTrace:init(program, ...)
 	Trace.init(self, program, ...)
@@ -105,6 +97,7 @@ function FlatValueTrace:copy(other)
 		table.insert(self.choicevals, v)
 	end
 	self.choiceindex = other.choiceindex
+	return self
 end
 
 function FlatValueTrace:clear()

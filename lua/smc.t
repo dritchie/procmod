@@ -17,8 +17,7 @@ local SMC_SYNC_ERROR = {}
 -- A particle is parameterized by the type of trace we're using
 local globalParticle = nil
 local Particle = S.memoize(function(Trace)
-	local Particle = {}
-	Particle.__index = Particle
+	local Particle = LS.LObject()
 
 	function Particle.alloc()
 		local obj = {}
@@ -31,6 +30,14 @@ local Particle = S.memoize(function(Trace)
 		self.finished = false
 		self.currSyncIndex = 1
 		self.stopSyncIndex = 0
+		return self
+	end
+
+	function Particle:copy(other)
+		self.trace = Trace.alloc():copy(other.trace)
+		self.finished = other.finished
+		self.currSyncIndex = other.currSyncIndex
+		self.stopSyncIndex = other.stopSyncIndex
 		return self
 	end
 
@@ -75,15 +82,21 @@ local Resample = {}
 function Resample.multinomial(particles, weights)
 	local newparticles = {}
 	for i,p in ipairs(particles) do
-		--
+		local idx = distrib.multinomial.sample(weights)
+		table.insert(newparticles, particles[idx]:newcopy())
 	end
+	return newparticles
 end
 
 ---------------------------------------------------------------
 
+-- The log of the minimum-representable double precision float
+local LOG_DBL_MIN = -708.39641853226
+
 -- Straight-up sequential importance resampling
 -- Options are:
 --    * nParticles: How many particles to run
+--    * resample: Which resampling alg to use
 --    * verbose: Verbose output?
 --    * beforeResample: Callback that does something with particles before resampling
 --    * afterResample: Callback that does something with particles after resampling
@@ -92,6 +105,7 @@ local function SIR(program, args, opts)
 	local function nop() end
 	-- Extract options
 	local nParticles = opts.nParticles or 200
+	local resample = opts.resample or Resample.multinomial
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
@@ -113,12 +127,17 @@ local function SIR(program, args, opts)
 	local generation = 1
 	repeat
 		local numfinished = 0
+		local minFiniteScore = math.huge
+		-- Step
 		for i,p in ipairs(particles) do
 			p:step()
 			if p.finished then
 				numfinished = numfinished + 1
 			end
 			weights[i] = p.trace.loglikelihood
+			if weights[i] ~= math.huge then
+				minFiniteScore = math.min(minFiniteScore, weights[i])
+			end
 		end
 		local allfinished = (numfinished == nParticles)
 		if verbose then
@@ -127,15 +146,18 @@ local function SIR(program, args, opts)
 			io.flush()
 		end
 		generation = generation + 1
+		-- Exponentiate weights, preventing underflow
+		local underflowFix = (minFiniteScore < LOG_DBL_MIN) and LOG_DBL_MIN - minFiniteScore or 0
+		for i=1,#weights do weights[i] = math.exp(weights[i] + underflowFix) end
+		-- Resampling
 		beforeResample(particles)
-		-- TODO: exponentiate weights, preventing underflow
-		-- TODO: Resampling
+		particles = resample(particles, weights)
 		afterResample(particles)
 	until allfinished
-	exit(particles)
 	if verbose then
 		io.write("\n")
 	end
+	exit(particles)
 end
 
 
@@ -143,6 +165,7 @@ end
 return
 {
 	-- Particle = Particle,
+	Resample = Resample,
 	SIR = SIR,
 	willStopAtNextSync = function()
 		return globalParticle and globalParticle:willStopAtNextSync()
