@@ -1,4 +1,5 @@
 local LS = terralib.require("lua.std")
+local distrib = terralib.require("lua.distrib")
 
 ---------------------------------------------------------------
 
@@ -151,29 +152,8 @@ local function makeSampler(ERP)
 	end
 end
 
-
--- TODO: Make 'propose' methods for these?
-
-local flip = makeSampler({
-	name = "flip",
-	sample = function(p) return math.random() < p end,
-	logprob = function(val, p)
-		local prob = val and p or 1-p
-		return math.log(prob)
-	end
-})
-
-local uniform = makeSampler({
-	name = "uniform",
-	sample = function(lo, hi)
-		local u = math.random()
-		return (1-u)*lo + u*hi
-	end,
-	logprob = function(val, lo, hi)
-		if val < lo or val > hi then return -math.huge end
-		return -math.log(hi - lo)
-	end
-})
+local flip = makeSampler(distrib.bernoulli)
+local uniform = makeSampler(distrib.uniform)
 
 ---------------------------------------------------------------
 

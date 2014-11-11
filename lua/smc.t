@@ -1,6 +1,7 @@
 local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
 local trace = terralib.require("lua.trace")
+local distrib = terralib.require("lua.distrib")
 
 ---------------------------------------------------------------
 
@@ -67,6 +68,19 @@ end)
 
 ---------------------------------------------------------------
 
+-- Different importance resampling algorithms
+
+local Resample = {}
+
+function Resample.multinomial(particles, weights)
+	local newparticles = {}
+	for i,p in ipairs(particles) do
+		--
+	end
+end
+
+---------------------------------------------------------------
+
 -- Straight-up sequential importance resampling
 -- Options are:
 --    * nParticles: How many particles to run
@@ -86,7 +100,6 @@ local function SIR(program, args, opts)
 	local Trace = trace.FlatValueTrace
 	-- Init particles
 	local particles = {}
-	local nextParticles = {}
 	local weights = {}
 	for i=1,nParticles do
 		-- Each particle gets a copy of any input args
