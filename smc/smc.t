@@ -612,8 +612,6 @@ local run = S.memoize(function(P)
 		end
 		-- Resample
 		var cumNumOffspring = 0
-		var checkCum = 0
-		var numinserts = 0
 		for i=0,N do
 			var ri = N * weightCDF(i) / weightCDF(N-1)
 			var ki = int(tmath.floor(ri)) + 1
@@ -627,12 +625,8 @@ local run = S.memoize(function(P)
 			-- I think this can happen due to the random offset?
 			if oi < cumNumOffspring then oi = cumNumOffspring end
 			var numOffspring = oi - cumNumOffspring
-			checkCum = checkCum + numOffspring
 			cumNumOffspring = oi
-			var localNumInserts = 0
 			for j=0,numOffspring do
-				numinserts = numinserts + 1
-				localNumInserts = localNumInserts + 1
 				var newp = pnext:insert()
 				newp:copy(pcurr:get(i))
 			end

@@ -76,6 +76,7 @@ end)
 ---------------------------------------------------------------
 
 -- Different importance resampling algorithms
+-- TODO: Potentially replace these with Terra code, if it has better perf?
 
 local Resample = {}
 
@@ -88,9 +89,51 @@ function Resample.multinomial(particles, weights)
 	return newparticles
 end
 
+local function resampleStratified(particles, weights, systematic)
+	local N = #weights
+	local newparticles = {}
+	-- Compute CDF of weight distribution
+	local weightCDF = {weights[1]}
+	for i=2,N do
+		local wprev = weightCDF[#weightCDF]
+		table.insert(weightCDF, wprev + weights[i])
+	end
+	-- Resample
+	local u
+	if systematic then
+		u = math.random()
+	end
+	local cumOffspring = 0
+	for i=1,N do
+		local ri = N * weightCDF[i] / weightCDF[N]
+		local ki = math.min(math.floor(ri) + 1, N)
+		if not systematic then
+			u = math.random()
+		end
+		local oi = math.min(math.floor(ri + u), N)
+		-- cumOffspring must be non-decreasing
+		oi = math.max(oi, cumOffspring)
+		local numOffspring = oi - cumOffspring
+		cumOffspring = oi
+		for j=1,numOffspring do
+			table.insert(newparticles, particles[i]:newcopy())
+		end
+	end
+	return newparticles
+end
+
+function Resample.stratified(particles, weights)
+	return resampleStratified(particles, weights, false)
+end
+
+function Resample.systematic(particles, weights)
+	return resampleStratified(particles, weights, true)
+end
+
 ---------------------------------------------------------------
 
 -- The log of the minimum-representable double precision float
+-- TODO: Replace with log of the minimum-representable *non-denormalized* number?
 local LOG_DBL_MIN = -708.39641853226
 
 -- Straight-up sequential importance resampling
@@ -105,7 +148,7 @@ local function SIR(program, args, opts)
 	local function nop() end
 	-- Extract options
 	local nParticles = opts.nParticles or 200
-	local resample = opts.resample or Resample.multinomial
+	local resample = opts.resample or Resample.systematic
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
