@@ -135,7 +135,7 @@ local function SIR(program, args, opts)
 				numfinished = numfinished + 1
 			end
 			weights[i] = p.trace.loglikelihood
-			if weights[i] ~= math.huge then
+			if weights[i] ~= -math.huge then
 				minFiniteScore = math.min(minFiniteScore, weights[i])
 			end
 		end
@@ -147,7 +147,7 @@ local function SIR(program, args, opts)
 		end
 		generation = generation + 1
 		-- Exponentiate weights, preventing underflow
-		local underflowFix = (minFiniteScore < LOG_DBL_MIN) and LOG_DBL_MIN - minFiniteScore or 0
+		local underflowFix = (minFiniteScore < LOG_DBL_MIN) and (LOG_DBL_MIN - minFiniteScore) or 0
 		for i=1,#weights do weights[i] = math.exp(weights[i] + underflowFix) end
 		-- Resampling
 		beforeResample(particles)
