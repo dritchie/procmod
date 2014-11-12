@@ -34,6 +34,7 @@ local struct State(S.Object)
 	grid: BinaryGrid
 	outsideTris: uint
 	hasSelfIntersections: bool
+	score: double
 }
 -- Also give the State class all the lua.std metatype stuff
 LS.Object(State)
@@ -42,6 +43,7 @@ terra State:__init()
 	self:initmembers()
 	self.outsideTris = 0
 	self.hasSelfIntersections = false
+	self.score = 0.0
 end
 
 -- Returns the new score
@@ -57,14 +59,14 @@ terra State:update()
 		self.outsideTris = self.outsideTris + nout
 	end
 	self.mesh:append(&self.addmesh)
-	-- Compute and return score
+	-- Compute score
 	if self.hasSelfIntersections then
-		return [-math.huge]
+		self.score = [-math.huge]
 	else
 		var percentSame = globals.targetGrid:percentCellsEqual(&self.grid)
 		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
-		return softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
-			   softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+		self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
+			   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
 	end
 end
 
@@ -84,7 +86,7 @@ local function makeGeoPrim(geofn)
 	for i=2,#paramtypes do 	 -- Skip first arg (the mesh itself)
 		asyms:insert(symbol(paramtypes[i]))
 	end
-	local terra dowork([asyms])
+	local terra update([asyms])
 		globalState.addmesh:clear()
 		geofn(&globalState.addmesh, [asyms])
 		return globalState:update()
@@ -93,9 +95,10 @@ local function makeGeoPrim(geofn)
 	--    needs to be done at all
 	return function(...)
 		if smc.willStopAtNextSync() then
-			local score = dowork(...)
-			trace.likelihood(score)
+			update(...)
 		end
+		-- Always set the trace likelihood to be the current score
+		trace.likelihood(globalState:get().score)
 		smc.sync()
 	end
 end
@@ -124,8 +127,9 @@ local function copyMeshes(particles, outgenerations)
 		-- The first arg of the particle's trace is the procmod State object.
 		-- This is a bit funky, but I think it's the best way to get a this data.
 		samp.value:copy(p.trace.args[1].mesh)
-		samp.logprob = p.trace.logposterior
-		samp.loglikelihood = p.trace.loglikelihood
+		-- samp.logprob = p.trace.logposterior
+		-- samp.loglikelihood = p.trace.loglikelihood
+		samp.logprob = p.trace.loglikelihood
 	end
 end
 
