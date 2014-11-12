@@ -1,6 +1,6 @@
 local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
-local trace = terralib.require("lua.trace")
+local prob = terralib.require("lua.prob")
 local distrib = terralib.require("lua.distrib")
 
 ---------------------------------------------------------------
@@ -154,7 +154,7 @@ local function SIR(program, args, opts)
 	local afterResample = opts.afterResample or nop
 	local exit = opts.exit or nop
 	-- Only need the simplest trace to do SIR
-	local Trace = trace.FlatValueTrace
+	local Trace = prob.FlatValueTrace
 	-- Init particles
 	local particles = {}
 	local weights = {}

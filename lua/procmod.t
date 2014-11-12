@@ -4,7 +4,7 @@ local Mesh = terralib.require("mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 local BBox3 = terralib.require("bbox")(Vec3)
 local BinaryGrid = terralib.require("binaryGrid3d")
-local trace = terralib.require("lua.trace")
+local prob = terralib.require("lua.prob")
 local smc = terralib.require("lua.smc")
 local distrib = terralib.require("qs.distrib")
 
@@ -98,7 +98,7 @@ local function makeGeoPrim(geofn)
 			update(...)
 		end
 		-- Always set the trace likelihood to be the current score
-		trace.likelihood(globalState:get().score)
+		prob.likelihood(globalState:get().score)
 		smc.sync()
 	end
 end

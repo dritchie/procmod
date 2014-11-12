@@ -1,13 +1,13 @@
 local procmod = terralib.require("lua.procmod")
-local trace = terralib.require("lua.trace")
+local prob = terralib.require("lua.prob")
 local Shapes = terralib.require("shapes")(double)
 local Mesh = terralib.require("mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 ---------------------------------------------------------------
 
-local flip = trace.flip
-local uniform = trace.uniform
+local flip = prob.flip
+local uniform = prob.uniform
 
 local box = procmod.makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
 	Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
