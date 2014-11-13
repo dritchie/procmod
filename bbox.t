@@ -59,6 +59,19 @@ local BBox = S.memoize(function(Vec)
 		return 0.5 * (self.mins + self.maxs)
 	end
 
+	terra BBox:volume()
+		var extents = self:extents():abs()
+		var vol = 1.0
+		escape
+			for i=0,Vec.Dimension-1 do
+				emit quote
+					vol = vol * extents(i)
+				end
+			end
+		end
+		return vol
+	end
+
 	terra BBox:cubify()
 		-- Expand all dims to be the same size as the largest one
 		var maxlen = 0.0

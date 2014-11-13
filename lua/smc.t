@@ -1,6 +1,6 @@
 local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
-local prob = terralib.require("lua.prob")
+local trace = terralib.require("lua.trace")
 local distrib = terralib.require("lua.distrib")
 
 ---------------------------------------------------------------
@@ -133,10 +133,10 @@ end
 ---------------------------------------------------------------
 
 -- The log of the minimum-representable double precision float
--- TODO: Replace with log of the minimum-representable *non-denormalized* number?
+-- TODO: Replace with log of the minimum-representable *non-denormalized* double?
 local LOG_DBL_MIN = -708.39641853226
 
--- Straight-up sequential importance resampling
+-- Sequential importance resampling
 -- Options are:
 --    * nParticles: How many particles to run
 --    * resample: Which resampling alg to use
@@ -154,7 +154,7 @@ local function SIR(program, args, opts)
 	local afterResample = opts.afterResample or nop
 	local exit = opts.exit or nop
 	-- Only need the simplest trace to do SIR
-	local Trace = prob.FlatValueTrace
+	local Trace = trace.FlatValueTrace
 	-- Init particles
 	local particles = {}
 	local weights = {}

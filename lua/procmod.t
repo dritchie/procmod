@@ -67,6 +67,7 @@ terra State:update()
 		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
 		self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
 			   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+		self.score = self.score
 	end
 end
 
