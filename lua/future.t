@@ -159,7 +159,7 @@ function squeue:isempty()
 	return #self.activequeue == 0
 end
 function squeue:clear()
-	self.activequeue = false
+	self.activequeue = {}
 end
 function squeue:selectrandom()
 	local randidx = math.ceil(trace.uniform(0, #self.activequeue))
@@ -263,8 +263,8 @@ end
 
 -- Can switch which implementation of futures we expose
 -- local future = edfuture
-local future = ldfuture
--- local future = sfuture
+-- local future = ldfuture
+local future = sfuture
 
 -- Before a trace runs, we make sure that there are no futures lingering in the system.
 trace.addPreRunEvent(future.killall)
