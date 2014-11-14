@@ -134,7 +134,11 @@ local function SIR(module, outgenerations, opts)
 			end
 			-- Always set the trace likelihood to be the current score
 			prob.likelihood(globalState:get().score)
+			-- SMC barrier synchronization
 			smc.sync()
+			-- If we're using stochastic futures, provide an opportunity to switch
+			--    to a different future.
+			prob.future.yield()
 		end
 	end
 
