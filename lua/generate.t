@@ -3,7 +3,8 @@ local procmod = terralib.require("lua.procmod")
 
 ---------------------------------------------------------------
 
-local program = terralib.require("lua.spaceship")
+-- local program = terralib.require("lua.spaceship")
+local program = terralib.require("lua.spaceship_future")
 
 ---------------------------------------------------------------
 

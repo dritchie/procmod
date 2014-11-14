@@ -1,84 +1,135 @@
+local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
 local trace = terralib.require("lua.trace")
 
 ---------------------------------------------------------------
 
--- Deterministic futures don't do anything interesting--they're just here
---    to provide a predictable point of comparison.
+-- An eager deterministic future just immediately executes itself and saves
+--    its return value(s) for when :force asks for them
 
--- Abstract the actual implementation of the queue (it's just a hash set)
-local dqueue =
+local EagerDeterministicFuture = LS.LObject()
+
+function EagerDeterministicFuture:init(fn, ...)
+	local retvals = { pcall(fn, ...) }
+	if not retvals[1] then
+		error(retvals[2])
+	else
+		table.remove(retvals, 1)
+		self.retvals = retvals
+	end
+	return self
+end
+
+function EagerDeterministicFuture:force()
+	return unpack(self.retvals)
+end
+
+
+local edfuture = {}
+
+function edfuture.create(fn, ...)
+	assert(trace.isrunning(), "future.create can only be invoked when a probabilistic program trace is running")
+	return EagerDeterministicFuture.alloc():init(fn, ...)
+end
+
+-- Deterministic futures execute in a fixed order and
+--    don't interleave their execution, so this does nothing.
+function edfuture.yield() end
+
+-- Execute ell remaining unforced futures.
+-- Does nothing, because eager futures always execute immediately.
+function edfuture.finishall() end
+
+-- Discard all remaining unforced futures
+-- Again, does nothing
+function edfuture.killall() end
+
+---------------------------------------------------------------
+
+-- A lazy deterministic future waits until :force is called to execute itself
+
+-- Abstract the actual implementation of the queue
+local ldqueue =
 {
 	queue = {}
 }
-function dqueue:add(f)
-	self.queue[f] = true
+function ldqueue:add(f)
+	table.insert(self.queue, f)
 end
-function dqueue:remove(f)
-	self.queue[f] = nil
+function ldqueue:remove(f)
+	for i,qf in ipairs(self.queue) do
+		if f == qf then
+			table.remove(self.queue, i)
+			break
+		end
+	end
 end
-function dqueue:clear()
+function ldqueue:clear()
 	self.queue = {}
 end
--- Iterator for generic for loop
-local function nextkey(t, k)
-	local kn = next(t, k)
-	return kn
+function ldqueue:isempty()
+	return #self.queue == 0
 end
-function dqueue:iter()
-	return nextkey, self.queue, nil
+function ldqueue:back()
+	return self.queue[#self.queue]
 end
 
 
 
 -- This is the functionality we'll export
-local dfuture = 
+local ldfuture = 
 {
 	isrunning = false
 }
 
 
 
-local DeterministicFuture = LS.LObject()
+local LazyDeterministicFuture = LS.LObject()
 
-function DeterministicFuture:init(fn, ...)
+function LazyDeterministicFuture:init(fn, ...)
 	self.fn = fn
 	self.args = {...}
-	dqueue:add(self)
+	ldqueue:add(self)
 	return self
 end
 
-function DeterministicFuture:force()
-	dfuture.isrunning = true
-	local ret = self.fn(unpack(self.args))
-	dfuture.isrunning = false
-	dqueue:remove(self)
-	return ret
+function LazyDeterministicFuture:force()
+	ldfuture.isrunning = true
+	local retvals = { pcall(self.fn, unpack(self.args)) }
+	ldfuture.isrunning = false
+	ldqueue:remove(self)
+	if retvals[1] then
+		table.remove(retvals, 1)
+		return unpack(retvals)
+	else
+		error(retvals[2])
+	end
 end
 
 
 
-function dfuture.create(fn)
+function ldfuture.create(fn, ...)
 	assert(trace.isrunning(), "future.create can only be invoked when a probabilistic program trace is running")
-	return DeterministicFuture.alloc():init(fn)
+	return LazyDeterministicFuture.alloc():init(fn, ...)
 end
 
 -- Deterministic futures execute in a fixed order and
 --    don't interleave their execution, so this does nothing.
-function dfuture.yield() end
+function ldfuture.yield() end
 
 -- Execute all remaining unforced futures
-function dfuture.finishall()
-	assert(not dfuture.isrunning, "future.finishall cannot be invoked from within a future")
-	for f in dqueue:iter() do
-		f:force()
+function ldfuture.finishall()
+	assert(not ldfuture.isrunning, "future.finishall cannot be invoked from within a future")
+	local futures = {}
+	while not ldqueue:isempty() do
+		ldqueue:back():force()
 	end
 end
 
 -- Discard all remaining unforced futures
-function dfuture.killall()
-	assert(not dfuture.isrunning, "future.killall cannot be invoked from within a future")
-	dqueue:clear()
+function ldfuture.killall()
+	assert(not ldfuture.isrunning, "future.killall cannot be invoked from within a future")
+	ldqueue:clear()
 end
 
 ---------------------------------------------------------------
@@ -185,9 +236,9 @@ end
 
 
 
-function sfuture.create(fn)
+function sfuture.create(fn, ...)
 	assert(trace.isrunning(), "future.create can only be invoked when a probabilistic program trace is running")
-	return StochasticFuture.alloc():init(fn)
+	return StochasticFuture.alloc():init(fn, ...)
 end
 
 function sfuture.yield()
@@ -211,13 +262,12 @@ end
 ---------------------------------------------------------------
 
 -- Can switch which implementation of futures we expose
-local future = dfuture
+-- local future = edfuture
+local future = ldfuture
 -- local future = sfuture
 
 -- Before a trace runs, we make sure that there are no futures lingering in the system.
 trace.addPreRunEvent(future.killall)
--- After a trace run ends, we finish any unforced futures.
-trace.addPostRunEvent(future.finishall)
 
 return future
 

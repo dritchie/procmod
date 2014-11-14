@@ -14,7 +14,7 @@ local globalTrace = nil
 function Trace:init(program, ...)
 	self.program = program
 	self.args = {...}
-	self.retval = nil
+	self.retvals = {}
 	self.logprior = 0.0
 	self.loglikelihood = 0.0
 	self.logposterior = 0.0
@@ -27,7 +27,10 @@ function Trace:copy(other)
 	for _,a in ipairs(other.args) do
 		table.insert(self.args, LS.newcopy(a))
 	end
-	self.retval = LS.newcopy(other.retval)
+	self.retvals = {}
+	for _,rv in ipairs(other.retvals) do
+		table.insert(self.retvals, LS.newcopy(rv))
+	end
 	self.logprior = other.logprior
 	self.loglikelihood = other.loglikelihood
 	self.logposterior = other.logposterior
@@ -54,13 +57,14 @@ function Trace:run()
 	self.loglikelihood = 0.0
 	self.logposterior = 0.0
 	for _,e in ipairs(Trace.preRunEvents) do e() end
-	local success, retval = pcall(self.program, unpack(self.args))
+	local retvals = { pcall(self.program, unpack(self.args)) }
 	for _,e in ipairs(Trace.postRunEvents) do e() end
 	globalTrace = prevGlobalTrace
-	if success then
-		self.retval = retval
+	if retvals[1] then
+		table.remove(retvals, 1)
+		self.retvals = retvals
 	else
-		error(retval)
+		error(retvals[2])
 	end
 end
 
@@ -115,6 +119,7 @@ function FlatValueTrace:clear()
 end
 
 function FlatValueTrace:run()
+	-- print("-------------------")
 	self.choiceindex = 1
 	Trace.run(self)
 end
@@ -123,10 +128,8 @@ end
 --    the end of the list
 function FlatValueTrace:makeRandomChoiceImpl(erp, ...)
 	local val
-	local reused = false
 	if self.choiceindex <= #self.choicevals then
 		val = self.choicevals[self.choiceindex]
-		reused = true
 	else
 		val = erp.sample(...)
 		table.insert(self.choicevals, val)
