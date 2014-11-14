@@ -30,7 +30,6 @@ end)
 local struct State(S.Object)
 {
 	mesh: Mesh
-	addmesh: Mesh
 	grid: BinaryGrid
 	outsideTris: uint
 	hasSelfIntersections: bool
@@ -46,63 +45,44 @@ terra State:__init()
 	self.score = 0.0
 end
 
--- Returns the new score
-terra State:update()
-	self.hasSelfIntersections =
-		self.hasSelfIntersections or self.addmesh:intersects(&self.mesh)
-	if not self.hasSelfIntersections then
-		self.grid:resize(globals.targetGrid.rows,
-						 globals.targetGrid.cols,
-						 globals.targetGrid.slices)
-		var nout = self.addmesh:voxelize(&self.grid, &globals.targetBounds,
-								   globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
-		self.outsideTris = self.outsideTris + nout
+terra State:clear()
+	self.mesh:clear()
+	self.grid:clear()
+	self.outsideTris = 0
+	self.hasSelfIntersections = false
+	self.score = 0.0
+end
+
+terra State:update(newmesh: &Mesh, updateScore: bool)
+	if updateScore then
+		self.hasSelfIntersections =
+			self.hasSelfIntersections or newmesh:intersects(&self.mesh)
+		if not self.hasSelfIntersections then
+			self.grid:resize(globals.targetGrid.rows,
+							 globals.targetGrid.cols,
+							 globals.targetGrid.slices)
+			var nout = newmesh:voxelize(&self.grid, &globals.targetBounds,
+									   globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+			self.outsideTris = self.outsideTris + nout
+		end
 	end
-	self.mesh:append(&self.addmesh)
-	-- Compute score
-	if self.hasSelfIntersections then
-		self.score = [-math.huge]
-	else
-		var percentSame = globals.targetGrid:percentCellsEqual(&self.grid)
-		var percentOutside = double(self.outsideTris) / self.mesh:numTris()
-		self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
-			   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
-		self.score = self.score
+	self.mesh:append(newmesh)
+	if updateScore then
+		-- Compute score
+		if self.hasSelfIntersections then
+			self.score = [-math.huge]
+		else
+			var percentSame = globals.targetGrid:percentCellsEqual(&self.grid)
+			var percentOutside = double(self.outsideTris) / self.mesh:numTris()
+			self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
+				   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+			self.score = self.score
+		end
 	end
 end
 
 -- State for the currently executing program
 local globalState = global(&State, 0)
-
----------------------------------------------------------------
-
--- Make a new SMC-integrated geometry primitive out of a function that
---    takes a mesh (plus some other primitive-type args) and adds geometry
---    to that mesh.
-local function makeGeoPrim(geofn)
-	-- First, we make a Terra function that does all the perf-critical stuff:
-	--    creates new geometry, tests for intersections, voxelizes, etc.
-	local paramtypes = geofn:gettype().parameters
-	local asyms = terralib.newlist()
-	for i=2,#paramtypes do 	 -- Skip first arg (the mesh itself)
-		asyms:insert(symbol(paramtypes[i]))
-	end
-	local terra update([asyms])
-		globalState.addmesh:clear()
-		geofn(&globalState.addmesh, [asyms])
-		return globalState:update()
-	end
-	-- Now we wrap this in a Lua function that checks whether this work
-	--    needs to be done at all
-	return function(...)
-		if smc.willStopAtNextSync() then
-			update(...)
-		end
-		-- Always set the trace likelihood to be the current score
-		prob.likelihood(globalState:get().score)
-		smc.sync()
-	end
-end
 
 ---------------------------------------------------------------
 
@@ -114,6 +94,42 @@ local function statewrap(fn)
 		globalState:set(state)
 		fn()
 		globalState:set(prevstate)
+	end
+end
+
+-- Generate symbols for the arguments to a geo prim function
+local function geofnargs(geofn)
+	local paramtypes = geofn:gettype().parameters
+	local asyms = terralib.newlist()
+	for i=2,#paramtypes do 	 -- Skip first arg (the mesh itself)
+		asyms:insert(symbol(paramtypes[i]))
+	end
+	return asyms
+end
+
+---------------------------------------------------------------
+
+-- Make a new SMC-integrated geometry primitive out of a function that
+--    takes a mesh (plus some other primitive-type args) and adds geometry
+--    to that mesh.
+local function makeGeoPrim(geofn)
+	-- First, we make a Terra function that does all the perf-critical stuff:
+	--    creates new geometry, tests for intersections, voxelizes, etc.
+	local args = geofnargs(geofn)
+	local terra update([args])
+		var tmpmesh = Mesh.salloc():init()
+		geofn(tmpmesh, [args])
+		globalState:update(tmpmesh, true)
+	end
+	-- Now we wrap this in a Lua function that checks whether this work
+	--    needs to be done at all
+	return function(...)
+		if smc.willStopAtNextSync() then
+			update(...)
+		end
+		-- Always set the trace likelihood to be the current score
+		prob.likelihood(globalState:get().score)
+		smc.sync()
 	end
 end
 
@@ -161,7 +177,6 @@ end
 
 return
 {
-	-- State = State,
 	Sample = terralib.require("qs").Sample(Mesh),
 	makeGeoPrim = makeGeoPrim,
 	SIR = SIR
