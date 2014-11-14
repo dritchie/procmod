@@ -167,6 +167,7 @@ local function SIR(program, args, opts)
 		table.insert(weights, 0)
 	end
 	-- Step all particles forward in lockstep until they are all finished
+	local t0 = terralib.currenttimeinseconds()
 	local generation = 1
 	repeat
 		local numfinished = 0
@@ -198,7 +199,9 @@ local function SIR(program, args, opts)
 		afterResample(particles)
 	until allfinished
 	if verbose then
+		local t1 = terralib.currenttimeinseconds()
 		io.write("\n")
+		print("Time:", t1 - t0)
 	end
 	exit(particles)
 end
@@ -207,7 +210,6 @@ end
 
 return
 {
-	-- Particle = Particle,
 	Resample = Resample,
 	SIR = SIR,
 	willStopAtNextSync = function()
