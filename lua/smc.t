@@ -19,12 +19,6 @@ local globalParticle = nil
 local Particle = S.memoize(function(Trace)
 	local Particle = LS.LObject()
 
-	function Particle.alloc()
-		local obj = {}
-		setmetatable(obj, Particle)
-		return obj
-	end
-
 	function Particle:init(program, ...)
 		self.trace = Trace.alloc():init(program, ...)
 		self.finished = false
