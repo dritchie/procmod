@@ -109,54 +109,52 @@ end
 
 ---------------------------------------------------------------
 
--- Make a new SMC-integrated geometry primitive out of a function that
---    takes a mesh (plus some other primitive-type args) and adds geometry
---    to that mesh.
-local function makeGeoPrim(geofn)
-	-- First, we make a Terra function that does all the perf-critical stuff:
-	--    creates new geometry, tests for intersections, voxelizes, etc.
-	local args = geofnargs(geofn)
-	local terra update([args])
-		var tmpmesh = Mesh.salloc():init()
-		geofn(tmpmesh, [args])
-		globalState:update(tmpmesh, true)
-	end
-	-- Now we wrap this in a Lua function that checks whether this work
-	--    needs to be done at all
-	return function(...)
-		if smc.willStopAtNextSync() then
-			update(...)
-		end
-		-- Always set the trace likelihood to be the current score
-		prob.likelihood(globalState:get().score)
-		smc.sync()
-	end
-end
-
----------------------------------------------------------------
-
--- Copy meshes from a Lua table of smc Particles to a cdata Vector of Sample(Mesh)
-local function copyMeshes(particles, outgenerations)
-	local newgeneration = outgenerations:insert()
-	LS.luainit(newgeneration)
-	for _,p in ipairs(particles) do
-		local samp = newgeneration:insert()
-		-- The first arg of the particle's trace is the procmod State object.
-		-- This is a bit funky, but I think it's the best way to get a this data.
-		samp.value:copy(p.trace.args[1].mesh)
-		-- samp.logprob = p.trace.logposterior
-		-- samp.loglikelihood = p.trace.loglikelihood
-		samp.logprob = p.trace.loglikelihood
-	end
-end
-
 -- Run sequential importance sampling on a procedural modeling program,
 --    saving the generated meshes
 -- 'outgenerations' is a cdata Vector(Vector(Sample(Mesh)))
 -- Options are:
 --    * recordHistory: record meshes all the way through, not just the final ones
 --    * any other options recognized by smc.SIR
-local function SIR(program, outgenerations, opts)
+local function SIR(module, outgenerations, opts)
+
+	local function makeGeoPrim(geofn)
+		-- First, we make a Terra function that does all the perf-critical stuff:
+		--    creates new geometry, tests for intersections, voxelizes, etc.
+		local args = geofnargs(geofn)
+		local terra update([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			globalState:update(tmpmesh, true)
+		end
+		-- Now we wrap this in a Lua function that checks whether this work
+		--    needs to be done at all
+		return function(...)
+			if smc.willStopAtNextSync() then
+				update(...)
+			end
+			-- Always set the trace likelihood to be the current score
+			prob.likelihood(globalState:get().score)
+			smc.sync()
+		end
+	end
+
+	-- Copy meshes from a Lua table of smc Particles to a cdata Vector of Sample(Mesh)
+	local function copyMeshes(particles, outgenerations)
+		local newgeneration = outgenerations:insert()
+		LS.luainit(newgeneration)
+		for _,p in ipairs(particles) do
+			local samp = newgeneration:insert()
+			-- The first arg of the particle's trace is the procmod State object.
+			-- This is a bit funky, but I think it's the best way to get a this data.
+			samp.value:copy(p.trace.args[1].mesh)
+			-- samp.logprob = p.trace.logposterior
+			-- samp.loglikelihood = p.trace.loglikelihood
+			samp.logprob = p.trace.loglikelihood
+		end
+	end
+
+	-- Install the SMC geo prim generator
+	local program = module(makeGeoPrim)
 	-- Wrap program so that it takes procmod State as argument
 	program = statewrap(program)
 	-- Create the beforeResample, afterResample, and exit callbacks
@@ -175,11 +173,70 @@ end
 
 ---------------------------------------------------------------
 
+-- Just run the program forward without enforcing any constraints
+-- Useful for development and debugging
+local function ForwardSample(module, outgenerations, numsamples)
+
+	local function makeGeoPrim(geofn)
+		local args = geofnargs(geofn)
+		return terra([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			globalState:update(tmpmesh, false)
+		end
+	end
+
+	local program = statewrap(module(makeGeoPrim))
+	local state = State.luaalloc():luainit()
+	local samples = outgenerations:insert()
+	LS.luainit(samples)
+	for i=1,numsamples do
+		program(state)
+		local samp = samples:insert()
+		samp.value:copy(state.mesh)
+		samp.logprob = 0.0
+		state:clear()
+	end
+end
+
+---------------------------------------------------------------
+
+-- Like forward sampling, but reject any 0-probability samples
+-- Keep running until numsamples have been accumulated
+local function RejectionSample(module, outgenerations, numsamples)
+	
+	local function makeGeoPrim(geofn)
+		local args = geofnargs(geofn)
+		return terra([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			globalState:update(tmpmesh, true)
+		end
+	end
+
+	local program = statewrap(module(makeGeoPrim))
+	local state = State.luaalloc():luainit()
+	local samples = outgenerations:insert()
+	LS.luainit(samples)
+	while samples:size() < numsamples do
+		program(state)
+		if state.score > -math.huge then
+			local samp = samples:insert()
+			samp.value:copy(state.mesh)
+			samp.logprob = state.score
+		end
+		state:clear()
+	end
+end
+
+---------------------------------------------------------------
+
 return
 {
 	Sample = terralib.require("qs").Sample(Mesh),
-	makeGeoPrim = makeGeoPrim,
-	SIR = SIR
+	SIR = SIR,
+	ForwardSample = ForwardSample,
+	RejectionSample = RejectionSample
 }
 
 

@@ -5,8 +5,6 @@ local distrib = terralib.require("lua.distrib")
 
 -- Functionality that all traces share
 local Trace = LS.LObject()
-Trace.preRunEvents = {}
-Trace.postRunEvents = {}
 local globalTrace = nil
 
 -- Program can optionally take some arguments (typically used for some
@@ -56,9 +54,7 @@ function Trace:run()
 	self.logprior = 0.0
 	self.loglikelihood = 0.0
 	self.logposterior = 0.0
-	for _,e in ipairs(Trace.preRunEvents) do e() end
 	local retvals = { pcall(self.program, unpack(self.args)) }
-	for _,e in ipairs(Trace.postRunEvents) do e() end
 	globalTrace = prevGlobalTrace
 	if retvals[1] then
 		table.remove(retvals, 1)

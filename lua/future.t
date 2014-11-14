@@ -28,7 +28,6 @@ end
 local edfuture = {}
 
 function edfuture.create(fn, ...)
-	assert(trace.isrunning(), "future.create can only be invoked when a probabilistic program trace is running")
 	return EagerDeterministicFuture.alloc():init(fn, ...)
 end
 
@@ -109,7 +108,6 @@ end
 
 
 function ldfuture.create(fn, ...)
-	assert(trace.isrunning(), "future.create can only be invoked when a probabilistic program trace is running")
 	return LazyDeterministicFuture.alloc():init(fn, ...)
 end
 
@@ -217,6 +215,8 @@ function StochasticFuture:resume()
 	-- Handle situation where the coroutine threw an error (coroutines are executed under pcall,
 	--    so the first return value is bool indicating whether execution terminated safely)
 	if not self.retvals[1] then
+		-- Propagate the error, but first kill all active futures, since execution is unrecoverable
+		sfuture.killall()
 		error(self.retvals[2])
 	-- Handle situation where the coroutine has finished.
 	elseif coroutine.status(self.coroutine) == 'dead' then
@@ -237,7 +237,6 @@ end
 
 
 function sfuture.create(fn, ...)
-	assert(trace.isrunning(), "future.create can only be invoked when a probabilistic program trace is running")
 	return StochasticFuture.alloc():init(fn, ...)
 end
 
@@ -265,9 +264,6 @@ end
 -- local future = edfuture
 -- local future = ldfuture
 local future = sfuture
-
--- Before a trace runs, we make sure that there are no futures lingering in the system.
-trace.addPreRunEvent(future.killall)
 
 return future
 

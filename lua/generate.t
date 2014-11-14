@@ -15,6 +15,7 @@ local opts = {
 }
 local function run(generations)
 	procmod.SIR(program, generations, opts)
+	-- procmod.RejectionSample(program, generations, opts.nParticles)
 end
 local runterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample))}->{}, run)
 return terra(generations: &S.Vector(S.Vector(procmod.Sample)))
