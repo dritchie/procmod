@@ -204,6 +204,76 @@ BinaryGrid3D.toMesh = S.memoize(function(real)
 	end
 end)
 
+-- Input: target bounds, desired padding factor, desired voxel size.
+-- Returns: Padded bounds, dimensions of padded grid, translation of target bounds into grid coords.
+local Vec3d = Vec(double, 3)
+local BBox3d = BBox(Vec3d)
+local terra toVec3u(v: Vec3d)
+	return Vec3u.create(uint(v(0)), uint(v(1)), uint(v(2)))
+end
+BinaryGrid3D.methods.paddedGridBounds = terra(targetBounds: &BBox3d, padFactor: double, voxelSize: double)
+	-- Determine padded bounds
+	var paddedBounds : BBox3d
+	paddedBounds:copy(targetBounds)
+	var targetExtents = targetBounds:extents()
+	paddedBounds.mins = paddedBounds.mins - padFactor*targetExtents
+	paddedBounds.maxs = paddedBounds.maxs + padFactor*targetExtents
+	-- Determine grid resolution
+	var paddedExtents = paddedBounds:extents()
+	var numvox = (paddedExtents / voxelSize):ceil()
+	var gridres = toVec3u(numvox)
+	-- Determine where the target bounds are within the grid
+	var minOffset = toVec3u((((targetBounds.mins - paddedBounds.mins) / paddedExtents) * numvox):floor())
+	var maxOffset = toVec3u((((targetBounds.maxs - paddedBounds.mins) / paddedExtents) * numvox):ceil())
+	var targetGridBounds : BBox3u
+	targetGridBounds:init(minOffset, maxOffset)
+
+	return paddedBounds, gridres, targetGridBounds
+end
+
+
+terra BinaryGrid3D:numFilledCells(bounds: &BBox3u) : uint
+	var num = 0
+	for k=bounds.mins(2),bounds.maxs(2) do
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				num = num + uint(self:isVoxelSet(i,j,k))
+			end
+		end
+	end
+	return num
+end
+terra BinaryGrid3D:numFilledCells() : uint
+	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+	return self:numFilledCells(bounds)
+end
+
+
+terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D, bounds: &BBox3u) : uint
+	var num = 0
+	for k=bounds.mins(2),bounds.maxs(2) do
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				num = num + uint(self:isVoxelSet(i,j,k) == other:isVoxelSet(i,j,k))
+			end
+		end
+	end
+	return num
+end
+terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D) : uint
+	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+	return self:numCellsEqual(other, bounds)
+end
+
+terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D, bounds: &BBox3u) : double
+	var num = self:numCellsEqual(other, bounds)
+	return double(num)/bounds:volume()
+end
+terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D) : double
+	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+	return self:percentCellsEqual(other, bounds)
+end
+
 
 -- Fast population count, from https://github.com/BartMassey/popcount
 local terra popcount(x: uint)
@@ -232,7 +302,7 @@ end
 --    because we may have extra padding in self.data (i.e. up to 31 extra cells). These cells will
 --    always be zero, so this function returns a slight upper bound on the actual number of equal cells.
 --    For sufficiently high-res grids, this shouldn't make a difference.
-terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D)
+terra BinaryGrid3D:numCellsEqualPadded(other: &BinaryGrid3D)
 	S.assert(self.rows == other.rows and
 			 self.cols == other.cols and
 			 self.slices == other.slices)
@@ -243,13 +313,13 @@ terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D)
 	end
 	return num
 end
-terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D)
-	var num = self:numCellsEqual(other)
+terra BinaryGrid3D:percentCellsEqualPadded(other: &BinaryGrid3D)
+	var num = self:numCellsEqualPadded(other)
 	return double(num)/self:numCellsPadded()
 end
 
 
-terra BinaryGrid3D:numEmptyCellsEqual(other: &BinaryGrid3D)
+terra BinaryGrid3D:numEmptyCellsEqualPadded(other: &BinaryGrid3D)
 	S.assert(self.rows == other.rows and
 			 self.cols == other.cols and
 			 self.slices == other.slices)
@@ -261,12 +331,12 @@ terra BinaryGrid3D:numEmptyCellsEqual(other: &BinaryGrid3D)
 	return num
 end
 -- NOTE: This is one-sided (denominator computed on self)
-terra BinaryGrid3D:percentEmptyCellsEqual(other: &BinaryGrid3D)
-	var num = self:numEmptyCellsEqual(other)
+terra BinaryGrid3D:percentEmptyCellsEqualPadded(other: &BinaryGrid3D)
+	var num = self:numEmptyCellsEqualPadded(other)
 	return double(num)/self:numEmptyCellsPadded()
 end
 
-terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D)
+terra BinaryGrid3D:numFilledCellsEqualPadded(other: &BinaryGrid3D)
 	S.assert(self.rows == other.rows and
 			 self.cols == other.cols and
 			 self.slices == other.slices)
@@ -278,8 +348,8 @@ terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D)
 	return num
 end
 -- NOTE: This is one-sided (denominator computed on self)
-terra BinaryGrid3D:percentFilledCellsEqual(other: &BinaryGrid3D)
-	var num = self:numFilledCellsEqual(other)
+terra BinaryGrid3D:percentFilledCellsEqualPadded(other: &BinaryGrid3D)
+	var num = self:numFilledCellsEqualPadded(other)
 	return double(num)/self:numFilledCellsPadded()
 end
 

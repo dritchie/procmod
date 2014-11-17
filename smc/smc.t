@@ -302,14 +302,14 @@ local Particle = S.memoize(function(Trace)
 						var pe = globals.targetGrid:numEmptyCellsPadded() / double(n)
 						-- var w = pe
 						var w = (1.0-pe)*tmath.exp(-ANNEAL_RATE*generation) + pe
-						percentSame = lerp(globals.targetGrid:percentFilledCellsEqual(&self.grid),
-										   globals.targetGrid:percentEmptyCellsEqual(&self.grid),
+						percentSame = lerp(globals.targetGrid:percentFilledCellsEqualPadded(&self.grid),
+										   globals.targetGrid:percentEmptyCellsEqualPadded(&self.grid),
 										   w)
 					end
 				else
 					emit quote
 						-- Original version that doesn't separate empty from filled.
-						percentSame = globals.targetGrid:percentCellsEqual(&self.grid)
+						percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
 					end
 				end
 			end
