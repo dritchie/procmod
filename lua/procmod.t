@@ -10,40 +10,13 @@ local distrib = terralib.require("qs.distrib")
 
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
-local Vec3u = Vec(uint, 3)
-local BBox3u = BBox(Vec3u)
+
+local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
--- Constants
-local VOXEL_SIZE = 0.25
 local VOXEL_FACTOR_WEIGHT = 0.01
 local OUTSIDE_FACTOR_WEIGHT = 0.01
--- local TARGET_MESH = "geom/shipProxy1.obj"
-local TARGET_MESH = "geom/shipProxy2.obj"
-
--- Globals
-local targetMesh = global(Mesh)
-local targetGrid = global(BinaryGrid)
-local targetBounds = global(BBox3)
-local paddedBounds = global(BBox3)
-local gridres = global(Vec3u)
-local targetGridBounds = global(BBox3u)
-
-
-local terra initglobals()
-	targetMesh:init()
-	targetMesh:loadOBJ(TARGET_MESH)
-	targetBounds = targetMesh:bbox()
-	targetGrid:init()
-
-	targetBounds:expand(0.1)
-	targetMesh:voxelize(&targetGrid, &targetBounds, VOXEL_SIZE, true)
-
-	-- paddedBounds, gridres, targetGridBounds = BinaryGrid.paddedGridBounds(&targetBounds, 0.5, VOXEL_SIZE)
-	-- targetMesh:voxelize(&targetGrid, &paddedBounds, gridres(0), gridres(1), gridres(2), true)
-end
-initglobals()
 
 ---------------------------------------------------------------
 
@@ -60,7 +33,6 @@ local struct State(S.Object)
 {
 	mesh: Mesh
 	grid: BinaryGrid
-	outsideTris: uint
 	hasSelfIntersections: bool
 	score: double
 }
@@ -69,7 +41,6 @@ LS.Object(State)
 
 terra State:__init()
 	self:initmembers()
-	self.outsideTris = 0
 	self.hasSelfIntersections = false
 	self.score = 0.0
 end
@@ -77,7 +48,6 @@ end
 terra State:clear()
 	self.mesh:clear()
 	self.grid:clear()
-	self.outsideTris = 0
 	self.hasSelfIntersections = false
 	self.score = 0.0 
 end
@@ -87,15 +57,10 @@ terra State:update(newmesh: &Mesh, updateScore: bool)
 		self.hasSelfIntersections =
 			self.hasSelfIntersections or newmesh:intersects(&self.mesh)
 		if not self.hasSelfIntersections then
-			self.grid:resize(targetGrid.rows,
-							 targetGrid.cols,
-							 targetGrid.slices)
-
-			var nout = newmesh:voxelize(&self.grid, &targetBounds, VOXEL_SIZE, true)
-
-			-- var nout = newmesh:voxelize(&self.grid, &paddedBounds, gridres(0), gridres(1), gridres(2), true)
-
-			self.outsideTris = self.outsideTris + nout
+			self.grid:resize(globals.targetGrid.rows,
+							 globals.targetGrid.cols,
+							 globals.targetGrid.slices)
+			newmesh:voxelize(&self.grid, &globals.targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 		end
 	end
 	self.mesh:append(newmesh)
@@ -104,17 +69,12 @@ terra State:update(newmesh: &Mesh, updateScore: bool)
 		if self.hasSelfIntersections then
 			self.score = [-math.huge]
 		else
-			var percentSame = targetGrid:percentCellsEqualPadded(&self.grid)
-			-- var percentOutside = double(self.outsideTris) / self.mesh:numTris()
+			var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
 			var meshbb = self.mesh:bbox()
-			var targetext = targetBounds:extents()
-			var extralo = (targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
-			var extrahi = (meshbb.maxs - targetBounds.maxs):max(Vec3.create(0.0)) / targetext
+			var targetext = globals.targetBounds:extents()
+			var extralo = (globals.targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
+			var extrahi = (meshbb.maxs - globals.targetBounds.maxs):max(Vec3.create(0.0)) / targetext
 			var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
-
-			-- var percentSame = targetGrid:percentCellsEqual(&self.grid, &targetGridBounds)
-			-- var percentOutside = (targetGrid:numFilledCells() - targetGrid:numFilledCells(&targetGridBounds))/double(targetGridBounds:volume())
-
 			self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
 				   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
 			self.score = self.score
