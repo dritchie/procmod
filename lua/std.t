@@ -57,6 +57,7 @@ function S.Object(T)
 
 	T.methods.newcopy = function(self)
 		return T.luaalloc():copy(self)
+		-- return self
 	end
 
 end

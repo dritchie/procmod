@@ -69,6 +69,9 @@ end)
 
 ---------------------------------------------------------------
 
+-- DEBUG
+local allstatesever = {}
+
 -- Different importance resampling algorithms
 -- TODO: Potentially replace these with Terra code, if it has better perf?
 
@@ -110,7 +113,10 @@ local function resampleStratified(particles, weights, systematic)
 		local numOffspring = oi - cumOffspring
 		cumOffspring = oi
 		for j=1,numOffspring do
-			table.insert(newparticles, particles[i]:newcopy())
+			local np = particles[i]:newcopy()
+			table.insert(newparticles, np)
+			-- -- DEBUG
+			-- allstatesever[np.trace.args[1]] = true
 		end
 	end
 	return newparticles
@@ -134,6 +140,10 @@ local LOG_DBL_MIN = -708.39641853226
 -- Options are:
 --    * nParticles: How many particles to run
 --    * resample: Which resampling alg to use
+--    * doAnneal: Do annealing
+--    * nAnnealSteps: Duration of time to do annealing
+--    * annealStartTemp: Start temperature for annealing
+--    * annealEndTemp: Final temperature for annealing
 --    * verbose: Verbose output?
 --    * beforeResample: Callback that does something with particles before resampling
 --    * afterResample: Callback that does something with particles after resampling
@@ -143,6 +153,10 @@ local function SIR(program, args, opts)
 	-- Extract options
 	local nParticles = opts.nParticles or 200
 	local resample = opts.resample or Resample.systematic
+	local doAnneal = opts.doAnneal
+	local nAnnealSteps = opts.nAnnealSteps or 10	-- No idea...
+	local annealStartTemp = opts.annealStartTemp or 100
+	local annealEndTemp = opts.annealEndTemp or 1
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
@@ -152,14 +166,23 @@ local function SIR(program, args, opts)
 	-- Init particles
 	local particles = {}
 	local weights = {}
+	-- -- DEBUG
+	-- allstatesever[args[1]] = true
+	-- print("KNOWN ALLOC begin")
 	for i=1,nParticles do
 		-- Each particle gets a copy of any input args
 		local argscopy = {}
-		for _,a in ipairs(args) do table.insert(argscopy, LS.newcopy(a)) end
+		for _,a in ipairs(args) do
+			local newa = LS.newcopy(a)
+			table.insert(argscopy, newa)
+		end
 		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
+		-- -- DEBUG
+		-- allstatesever[p.trace.args[1]] = true
 		table.insert(particles, p)
 		table.insert(weights, 0)
 	end
+	-- print("KNOWN ALLOC end")
 	-- Step all particles forward in lockstep until they are all finished
 	local t0 = terralib.currenttimeinseconds()
 	local generation = 1
@@ -168,11 +191,17 @@ local function SIR(program, args, opts)
 		local minFiniteScore = math.huge
 		-- Step
 		for i,p in ipairs(particles) do
+			-- print("stepping particle with state", p.trace.args[1])
 			p:step()
 			if p.finished then
 				numfinished = numfinished + 1
 			end
 			weights[i] = p.trace.loglikelihood
+			if doAnneal then
+				local t = math.min(generation / nAnnealSteps, 1.0)
+				local temp = (1.0-t)*annealStartTemp + t*annealEndTemp
+				weights[i] = weights[i]/temp
+			end
 			if weights[i] ~= -math.huge then
 				minFiniteScore = math.min(minFiniteScore, weights[i])
 			end
@@ -189,7 +218,9 @@ local function SIR(program, args, opts)
 		for i=1,#weights do weights[i] = math.exp(weights[i] + underflowFix) end
 		-- Resampling
 		beforeResample(particles)
+		-- print("KNOWN ALLOC begin")
 		particles = resample(particles, weights)
+		-- print("KNOWN ALLOC end")
 		afterResample(particles)
 	until allfinished
 	if verbose then
@@ -204,6 +235,7 @@ end
 
 return
 {
+	allstatesever = allstatesever,
 	Resample = Resample,
 	SIR = SIR,
 	willStopAtNextSync = function()

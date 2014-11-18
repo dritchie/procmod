@@ -10,6 +10,9 @@ local program = terralib.require("lua.spaceship_future")
 
 local opts = {
 	nParticles = 200,
+	-- doAnneal = true,
+	-- nAnnealSteps = 20,
+	-- annealStartTemp = 100,
 	recordHistory = true,
 	verbose = true
 }
