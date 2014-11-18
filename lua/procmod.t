@@ -47,50 +47,6 @@ terra State:__init()
 	self.destructed = false
 end
 
--- -- DEBUG
--- local ffi = require("ffi")
--- local allstatesever = {}
--- local function assertSameKeys(tbl1, tbl2)
--- 	local ok = true
--- 	for k,_ in pairs(tbl1) do
--- 		if not tbl2[k] then
--- 			ok = false
--- 			break
--- 		end
--- 	end
--- 	for k,_ in pairs(tbl2) do
--- 		if not tbl1[k] then
--- 			ok = false
--- 			break
--- 		end
--- 	end
--- 	if not ok then
--- 		print("tbl1 contains:")
--- 		for k,_ in pairs(tbl1) do print("", k) end
--- 			print("tbl2 contains:")
--- 		for k,_ in pairs(tbl2) do print("", k) end
--- 		assert(false)
--- 	end
--- end
--- function State.luaalloc()
--- 	local s = terralib.new(State)
--- 	print("allocing new State")
--- 	-- local ntotal = 0
--- 	-- local nsmc = 0
--- 	-- for _,_ in pairs(allstatesever) do ntotal = ntotal + 1 end
--- 	-- for _,_ in pairs(smc.allstatesever) do nsmc = nsmc + 1 end
--- 	-- assert(ntotal == nsmc, string.format("total = %u, smc = %u", ntotal, nsmc))
--- 	-- assertSameKeys(allstatesever, smc.allstatesever)
--- 	-- allstatesever[s] = true
--- 	ffi.gc(s, function(self)
--- 		-- print("destructing state", self)
--- 		-- print(allstatesever[self])
--- 		-- print(smc.allstatesever[self])
--- 		State.methods.destruct(self)
--- 	end)
--- 	return s
--- end
-
 terra State:__destruct()
 	self.destructed = true
 end
@@ -103,7 +59,6 @@ terra State:clear()
 end
 
 terra State:update(newmesh: &Mesh, updateScore: bool)
-	-- S.printf("updating state %p\n", self)
 	S.assert(not self.destructed)
 	if updateScore then
 		self.hasSelfIntersections =
@@ -228,11 +183,7 @@ local function SIR(module, outgenerations, opts)
 		newopts.afterResample = dorecord
 	end
 	-- Run smc.SIR with an initial empty State object as argument
-	-- print("KNOWN ALLOC begin")
 	local initstate = State.luaalloc():luainit()
-	-- -- DEBUG
-	-- smc.allstatesever[initstate] = true
-	-- print("KNOWN ALLOC end")
 	smc.SIR(program, {initstate}, newopts)
 end
 

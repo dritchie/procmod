@@ -13,8 +13,13 @@ end
 -- Allocation is done via terralib.new, but we attach a LuaJIT ffi
 --    finalizer to clean up memory
 function S.luaalloc(T)
-	local obj = terralib.new(T)
-	ffi.gc(obj, T.methods.destruct)
+	-- I think this'll allow me to use more memory, especially if
+	--   I'm allocing lots of large structs.
+	local obj = terralib.new(&T)
+	obj = T.methods.alloc()
+	ffi.gc(obj, T.methods.delete)
+	-- local obj = terralib.new(T)
+	-- ffi.gc(obj, T.methods.destruct)
 	return obj
 end
 
@@ -56,8 +61,9 @@ function S.Object(T)
 	end
 
 	T.methods.newcopy = function(self)
-		return T.luaalloc():copy(self)
-		-- return self
+		local newobj = T.luaalloc()
+		newobj:copy(self)
+		return newobj
 	end
 
 end

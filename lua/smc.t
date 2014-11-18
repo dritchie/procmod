@@ -69,9 +69,6 @@ end)
 
 ---------------------------------------------------------------
 
--- DEBUG
-local allstatesever = {}
-
 -- Different importance resampling algorithms
 -- TODO: Potentially replace these with Terra code, if it has better perf?
 
@@ -115,8 +112,6 @@ local function resampleStratified(particles, weights, systematic)
 		for j=1,numOffspring do
 			local np = particles[i]:newcopy()
 			table.insert(newparticles, np)
-			-- -- DEBUG
-			-- allstatesever[np.trace.args[1]] = true
 		end
 	end
 	return newparticles
@@ -166,9 +161,6 @@ local function SIR(program, args, opts)
 	-- Init particles
 	local particles = {}
 	local weights = {}
-	-- -- DEBUG
-	-- allstatesever[args[1]] = true
-	-- print("KNOWN ALLOC begin")
 	for i=1,nParticles do
 		-- Each particle gets a copy of any input args
 		local argscopy = {}
@@ -177,12 +169,9 @@ local function SIR(program, args, opts)
 			table.insert(argscopy, newa)
 		end
 		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
-		-- -- DEBUG
-		-- allstatesever[p.trace.args[1]] = true
 		table.insert(particles, p)
 		table.insert(weights, 0)
 	end
-	-- print("KNOWN ALLOC end")
 	-- Step all particles forward in lockstep until they are all finished
 	local t0 = terralib.currenttimeinseconds()
 	local generation = 1
@@ -191,7 +180,6 @@ local function SIR(program, args, opts)
 		local minFiniteScore = math.huge
 		-- Step
 		for i,p in ipairs(particles) do
-			-- print("stepping particle with state", p.trace.args[1])
 			p:step()
 			if p.finished then
 				numfinished = numfinished + 1
@@ -218,9 +206,7 @@ local function SIR(program, args, opts)
 		for i=1,#weights do weights[i] = math.exp(weights[i] + underflowFix) end
 		-- Resampling
 		beforeResample(particles)
-		-- print("KNOWN ALLOC begin")
 		particles = resample(particles, weights)
-		-- print("KNOWN ALLOC end")
 		afterResample(particles)
 	until allfinished
 	if verbose then
@@ -235,7 +221,6 @@ end
 
 return
 {
-	allstatesever = allstatesever,
 	Resample = Resample,
 	SIR = SIR,
 	willStopAtNextSync = function()
