@@ -403,7 +403,7 @@ local terra drawOverlay()
 		displayString(TEXT_FONT, str, xleft + 65, ytop)
 		moveToNewLine(ytop)
 		gl.glColor3f([TEXT_COLOR])
-		S.sprintf(str, "Num self-intersections: %u\n", displayMesh:numSelfIntersectingTris())
+		S.sprintf(str, "Has self-intersections: %u\n", displayMesh:selfIntersects())
 		displayString(TEXT_FONT, str, xleft, ytop)
 		moveToNewLine(ytop)
 		S.sprintf(str, "Num tris/verts/norms: %u/%u/%u\n",

@@ -96,9 +96,7 @@ local Mesh = S.memoize(function(real)
 		return bbox
 	end
 
-	-- How many intersections are there between triangles in other and triangles in self?
-	-- Pretty stupid: Just loops over every triangle in other and checks it against every triangle in self
-	--    (doing early out with bounding box tests)
+	-- Check if there is an intersection between self and other
 	-- Contracts both of the triangles by a tiny epsilon so that touching (but not interpentratring)
 	--    faces are not considered intersecting.
 	local contractTri = macro(function(v0, v1, v2)
@@ -110,15 +108,14 @@ local Mesh = S.memoize(function(real)
 			v2 = v2 - (v2 - centroid)*CONTRACT_EPS
 		end
 	end)
-	terra Mesh:numIntersectingTris(other: &Mesh)
-		-- First, check that the overall bboxes of the two mesh actually intersect
+	terra Mesh:intersects(other: &Mesh)
+		-- First, check that the overall bboxes of the two meshes actually intersect
 		var selfbbox = self:bbox()
 		var otherbbox = other:bbox()
 		if not selfbbox:intersects(&otherbbox) then
-			return 0
+			return false
 		end
 		-- Now, for every triangle in self, see if other intersects with it (checking overall bbox first)
-		var numIsects = 0
 		var numSelfTris = self:numTris()
 		var numOtherTris = other:numTris()
 		for j=0,numSelfTris do
@@ -138,25 +135,17 @@ local Mesh = S.memoize(function(real)
 					othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
 					if selftribbox:intersects(othertribbox) then
 						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
-							numIsects = numIsects + 1
+							return true
 						end	
 					end
 				end
 			end
 		end
-		return numIsects
-	end
-
-	terra Mesh:intersects(other: &Mesh)
-		return self:numIntersectingTris(other) > 0
-	end
-
-	terra Mesh:numSelfIntersectingTris()
-		return self:numIntersectingTris(self)
+		return false
 	end
 
 	terra Mesh:selfIntersects()
-		return self:numSelfIntersectingTris() > 0
+		return self:intersects(self)
 	end
 
 	-- Returns a bounding box of the voxels touched by this triangle
