@@ -15,7 +15,9 @@ local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
-local VOXEL_FACTOR_WEIGHT = 0.01
+local VOXEL_FACTOR_WEIGHT = 0.04
+-- local VOXEL_FILLED_FACTOR_WEIGHT = 0.1
+-- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.02
 local OUTSIDE_FACTOR_WEIGHT = 0.01
 
 ---------------------------------------------------------------
@@ -35,7 +37,6 @@ local struct State(S.Object)
 	grid: BinaryGrid
 	hasSelfIntersections: bool
 	score: double
-	destructed: bool
 }
 -- Also give the State class all the lua.std metatype stuff
 LS.Object(State)
@@ -44,11 +45,6 @@ terra State:__init()
 	self:initmembers()
 	self.hasSelfIntersections = false
 	self.score = 0.0
-	self.destructed = false
-end
-
-terra State:__destruct()
-	self.destructed = true
 end
 
 terra State:clear()
@@ -59,7 +55,6 @@ terra State:clear()
 end
 
 terra State:update(newmesh: &Mesh, updateScore: bool)
-	S.assert(not self.destructed)
 	if updateScore then
 		self.hasSelfIntersections =
 			self.hasSelfIntersections or newmesh:intersects(&self.mesh)
@@ -76,14 +71,19 @@ terra State:update(newmesh: &Mesh, updateScore: bool)
 		if self.hasSelfIntersections then
 			self.score = [-math.huge]
 		else
-			var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
 			var meshbb = self.mesh:bbox()
 			var targetext = globals.targetBounds:extents()
 			var extralo = (globals.targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
 			var extrahi = (meshbb.maxs - globals.targetBounds.maxs):max(Vec3.create(0.0)) / targetext
 			var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
+			var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
 			self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
 				   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+			-- var percentSameFilled = globals.targetGrid:percentFilledCellsEqualPadded(&self.grid)
+			-- var percentSameEmpty = globals.targetGrid:percentEmptyCellsEqualPadded(&self.grid)
+			-- self.score = softeq(percentSameFilled, 1.0, VOXEL_FILLED_FACTOR_WEIGHT) +
+			-- 			 softeq(percentSameEmpty, 1.0, VOXEL_EMPTY_FACTOR_WEIGHT) +
+			-- 			 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
 			self.score = self.score
 		end
 	end
