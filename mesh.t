@@ -111,26 +111,35 @@ local Mesh = S.memoize(function(real)
 		end
 	end)
 	terra Mesh:numIntersectingTris(other: &Mesh)
+		-- First, check that the overall bboxes of the two mesh actually intersect
+		var selfbbox = self:bbox()
+		var otherbbox = other:bbox()
+		if not selfbbox:intersects(&otherbbox) then
+			return 0
+		end
+		-- Now, for every triangle in self, see if other intersects with it (checking overall bbox first)
 		var numIsects = 0
 		var numSelfTris = self:numTris()
 		var numOtherTris = other:numTris()
-		for i=0,numOtherTris do
-			var v0 = other.vertices(other.indices(3*i).vertex)
-			var v1 = other.vertices(other.indices(3*i + 1).vertex)
-			var v2 = other.vertices(other.indices(3*i + 2).vertex)
-			contractTri(v0, v1, v2)
-			var otherbbox = BBox3.salloc():init()
-			otherbbox:expand(v0); otherbbox:expand(v1); otherbbox:expand(v2)
-			for j=0,numSelfTris do
-				var u0 = self.vertices(self.indices(3*j).vertex)
-				var u1 = self.vertices(self.indices(3*j + 1).vertex)
-				var u2 = self.vertices(self.indices(3*j + 2).vertex)
-				contractTri(u0, u1, u2)
-				var selfbbox = BBox3.salloc():init()
-				selfbbox:expand(u0); selfbbox:expand(u1); selfbbox:expand(u2)
-				if selfbbox:intersects(otherbbox) then
-					if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
-						numIsects = numIsects + 1
+		for j=0,numSelfTris do
+			var u0 = self.vertices(self.indices(3*j).vertex)
+			var u1 = self.vertices(self.indices(3*j + 1).vertex)
+			var u2 = self.vertices(self.indices(3*j + 2).vertex)
+			contractTri(u0, u1, u2)
+			var selftribbox = BBox3.salloc():init()
+			selftribbox:expand(u0); selftribbox:expand(u1); selftribbox:expand(u2)
+			if selftribbox:intersects(&otherbbox) then
+				for i=0,numOtherTris do
+					var v0 = other.vertices(other.indices(3*i).vertex)
+					var v1 = other.vertices(other.indices(3*i + 1).vertex)
+					var v2 = other.vertices(other.indices(3*i + 2).vertex)
+					contractTri(v0, v1, v2)
+					var othertribbox = BBox3.salloc():init()
+					othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
+					if selftribbox:intersects(othertribbox) then
+						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
+							numIsects = numIsects + 1
+						end	
 					end
 				end
 			end
