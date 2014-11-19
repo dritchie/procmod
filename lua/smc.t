@@ -74,16 +74,16 @@ end)
 
 local Resample = {}
 
-function Resample.multinomial(particles, weights)
+function Resample.multinomial(particles, weights, n)
 	local newparticles = {}
-	for i,p in ipairs(particles) do
+	for i=1,n do
 		local idx = distrib.multinomial.sample(weights)
 		table.insert(newparticles, particles[idx]:newcopy())
 	end
 	return newparticles
 end
 
-local function resampleStratified(particles, weights, systematic)
+local function resampleStratified(particles, weights, n, systematic)
 	local N = #weights
 	local newparticles = {}
 	-- Compute CDF of weight distribution
@@ -93,18 +93,24 @@ local function resampleStratified(particles, weights, systematic)
 		table.insert(weightCDF, wprev + weights[i])
 	end
 	-- Resample
-	local u
+	local u, U
 	if systematic then
 		u = math.random()
+	else
+		U = {}
+		for i=1,N do
+			table.insert(U, math.random())
+		end
 	end
 	local cumOffspring = 0
+	local scale = n/N 	-- If we're requesting more/fewer particles than we started with
 	for i=1,N do
 		local ri = N * weightCDF[i] / weightCDF[N]
 		local ki = math.min(math.floor(ri) + 1, N)
 		if not systematic then
-			u = math.random()
+			u = U[ki]
 		end
-		local oi = math.min(math.floor(ri + u), N)
+		local oi = math.min(math.floor((ri + u)*scale), N)
 		-- cumOffspring must be non-decreasing
 		oi = math.max(oi, cumOffspring)
 		local numOffspring = oi - cumOffspring
@@ -117,12 +123,12 @@ local function resampleStratified(particles, weights, systematic)
 	return newparticles
 end
 
-function Resample.stratified(particles, weights)
-	return resampleStratified(particles, weights, false)
+function Resample.stratified(particles, weights, n)
+	return resampleStratified(particles, weights, n, false)
 end
 
-function Resample.systematic(particles, weights)
-	return resampleStratified(particles, weights, true)
+function Resample.systematic(particles, weights, n)
+	return resampleStratified(particles, weights, n, true)
 end
 
 ---------------------------------------------------------------
@@ -139,12 +145,17 @@ local LOG_DBL_MIN = -708.39641853226
 --    * nAnnealSteps: Duration of time to do annealing
 --    * annealStartTemp: Start temperature for annealing
 --    * annealEndTemp: Final temperature for annealing
+--    * doFunnel: Funnel the number of particles from a large number to a small number over time
+--    * nFunnelSteps: Duration of time to do funneling
+--    * funnelStartNum: Number of particles to start with
+--    * funnelEndNum: Number of particles to end with
 --    * verbose: Verbose output?
 --    * beforeResample: Callback that does something with particles before resampling
 --    * afterResample: Callback that does something with particles after resampling
 --    * exit: Callback that does something with particles when everything is finished
 local function SIR(program, args, opts)
 	local function nop() end
+
 	-- Extract options
 	local nParticles = opts.nParticles or 200
 	local resample = opts.resample or Resample.systematic
@@ -152,15 +163,22 @@ local function SIR(program, args, opts)
 	local nAnnealSteps = opts.nAnnealSteps or 10	-- No idea...
 	local annealStartTemp = opts.annealStartTemp or 100
 	local annealEndTemp = opts.annealEndTemp or 1
+	local doFunnel = opts.doFunnel
+	local nFunnelSteps = opts.nFunnelSteps or 10  	-- No idea...
+	local funnelStartNum = opts.funnelStartNum or 1000
+	local funnelEndNum = opts.funnelEndNum or 100
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
 	local exit = opts.exit or nop
+
 	-- Only need the simplest trace to do SIR
 	local Trace = trace.FlatValueTrace
+
 	-- Init particles
 	local particles = {}
 	local weights = {}
+	if doFunnel then nParticles = funnelStartNum end
 	for i=1,nParticles do
 		-- Each particle gets a copy of any input args
 		local argscopy = {}
@@ -170,8 +188,8 @@ local function SIR(program, args, opts)
 		end
 		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
 		table.insert(particles, p)
-		table.insert(weights, 0)
 	end
+
 	-- Step all particles forward in lockstep until they are all finished
 	local t0 = terralib.currenttimeinseconds()
 	local generation = 1
@@ -196,19 +214,25 @@ local function SIR(program, args, opts)
 		end
 		local allfinished = (numfinished == nParticles)
 		if verbose then
-			io.write(string.format("Generation %u: Finished %u/%u particles.\r",
+			io.write(string.format("Generation %u: Finished %u/%u particles.        \r",
 				generation, numfinished, nParticles))
 			io.flush()
 		end
-		generation = generation + 1
 		-- Exponentiate weights, preventing underflow
 		local underflowFix = (minFiniteScore < LOG_DBL_MIN) and (LOG_DBL_MIN - minFiniteScore) or 0
 		for i=1,#weights do weights[i] = math.exp(weights[i] + underflowFix) end
 		-- Resampling
 		beforeResample(particles)
-		particles = resample(particles, weights)
+		if doFunnel then
+			local t = math.min(generation / nAnnealSteps, 1.0)
+			nParticles = (1.0-t)*funnelStartNum + t*funnelEndNum
+		end
+		particles = resample(particles, weights, nParticles)
+		weights = {}
 		afterResample(particles)
+		generation = generation + 1
 	until allfinished
+
 	if verbose then
 		local t1 = terralib.currenttimeinseconds()
 		io.write("\n")
