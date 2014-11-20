@@ -5,6 +5,7 @@ local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 local flip = prob.flip
 local uniform = prob.uniform
+local future = prob.future
 
 ---------------------------------------------------------------
 
@@ -70,24 +71,32 @@ return function(makeGeoPrim)
 			box(cx, ybot + 0.5*height, cz, width, height, depth)
 			if iter == 0 then
 				if leftok then
-					if flip(LEFT_PROB) then
-						leftTower(ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(LEFT_PROB) then
+							leftTower(ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
 				end
 				if rightok then
-					if flip(RIGHT_PROB) then
-						rightTower(ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(RIGHT_PROB) then
+							rightTower(ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
 				end
 				if downok then
-					if flip(DOWN_PROB) then
-						downTower(ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(DOWN_PROB) then
+							downTower(ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
 				end
 				if upok then
-					if flip(UP_PROB) then
-						upTower(ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(UP_PROB) then
+							upTower(ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
 				end
 			end
 			ybot = ybot + height
@@ -101,7 +110,8 @@ return function(makeGeoPrim)
 	end
 
 	return function()
-		centralTower(0, -1.5, 1.5, -1.5, 1.5)
+		future.create(centralTower, 0, -1.5, 1.5, -1.5, 1.5)
+		future.finishall()
 	end
 end
 

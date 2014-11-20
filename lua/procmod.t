@@ -16,9 +16,9 @@ local globals = terralib.require("globals")
 ---------------------------------------------------------------
 
 local VOXEL_FACTOR_WEIGHT = 0.04
--- local VOXEL_FILLED_FACTOR_WEIGHT = 0.1
--- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.02
-local OUTSIDE_FACTOR_WEIGHT = 0.01
+-- local VOXEL_FILLED_FACTOR_WEIGHT = 0.01
+-- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.08
+local OUTSIDE_FACTOR_WEIGHT = 0.04
 
 ---------------------------------------------------------------
 
