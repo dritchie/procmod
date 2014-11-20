@@ -84,7 +84,6 @@ terra State:update(newmesh: &Mesh, updateScore: bool)
 			-- self.score = softeq(percentSameFilled, 1.0, VOXEL_FILLED_FACTOR_WEIGHT) +
 			-- 			 softeq(percentSameEmpty, 1.0, VOXEL_EMPTY_FACTOR_WEIGHT) +
 			-- 			 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
-			self.score = self.score
 		end
 	end
 end
