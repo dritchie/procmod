@@ -116,9 +116,13 @@ local Mesh = S.memoize(function(real)
 			return false
 		end
 		-- Now, for every triangle in self, see if other intersects with it (checking overall bbox first)
-		var numSelfTris = self:numTris()
-		var numOtherTris = other:numTris()
-		for j=0,numSelfTris do
+		-- We loop over the triangles backwards, because a frequent use case is intersecting an in-construction mesh with
+		--    a new component about to be added to it. Triangles toward the end of the list were added later, and are
+		--    thus likely to be closer to the mesh we're testing again. Intersections are more likely between closer things,
+		--    which will cause us to bail out of this function sooner and save time.
+		var numSelfTris = int(self:numTris())
+		var numOtherTris = int(other:numTris())
+		for j=numSelfTris-1,-1,-1 do
 			var u0 = self.vertices(self.indices(3*j).vertex)
 			var u1 = self.vertices(self.indices(3*j + 1).vertex)
 			var u2 = self.vertices(self.indices(3*j + 2).vertex)
