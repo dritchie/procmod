@@ -34,11 +34,16 @@ return function(makeGeoPrim)
 		return tower(ybot, xmin, xmax, zmin, zmax, true, true, false, true)
 	end
 
-	local FINISH_PROB = 0.5
+	local CONTINUE_PROB = 0.5
 	local LEFT_PROB = 0.5
 	local RIGHT_PROB = 0.5
 	local DOWN_PROB = 0.5
 	local UP_PROB = 0.5
+	-- local CONTINUE_PROB = 1.0
+	-- local LEFT_PROB = 1.0
+	-- local RIGHT_PROB = 1.0
+	-- local DOWN_PROB = 1.0
+	-- local UP_PROB = 1.0
 
 	tower = function(ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
 		local finished = false
@@ -48,7 +53,7 @@ return function(makeGeoPrim)
 			local maxdepth = zmax-zmin
 			local width = uniform(0.5*maxwidth, maxwidth)
 			local depth = uniform(0.5*maxdepth, maxdepth)
-			local height = uniform(0.5, 3)
+			local height = uniform(1, 3)
 			local cx, cz
 			if iter == 0 and not leftok then
 				cx = xmin + 0.5*width
@@ -104,13 +109,13 @@ return function(makeGeoPrim)
 			xmax = cx + 0.5*width
 			zmin = cz - 0.5*depth
 			zmax = cz + 0.5*depth
-			finished = flip(FINISH_PROB)
+			finished = flip(1-CONTINUE_PROB)
 			iter = iter + 1
 		until finished
 	end
 
 	return function()
-		future.create(centralTower, 0, -1.5, 1.5, -1.5, 1.5)
+		future.create(centralTower, 0, -2, 2, -2, 2)
 		future.finishall()
 	end
 end

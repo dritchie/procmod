@@ -11,7 +11,7 @@ local program = terralib.require("lua.weird_building_future")
 ---------------------------------------------------------------
 
 local opts = {
-	nParticles = 2000,
+	nParticles = 1000,
 
 	-- doAnneal = true,
 	-- nAnnealSteps = 20,
