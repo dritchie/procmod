@@ -154,6 +154,7 @@ local function makeSampler(ERP)
 end
 
 local flip = makeSampler(distrib.bernoulli)
+local multinomial = makeSampler(distrib.multinomial)
 
 -- Decided to do uniform this way so that we don't have range-invalidation
 --    problems if and when we ever do MH.
@@ -178,6 +179,7 @@ return
 	isrunning = function() return globalTrace ~= nil end,
 	flip = flip,
 	uniform = uniform,
+	multinomial = multinomial,
 	factor = function(num) if globalTrace then globalTrace:addFactor(num) end end,
 	likelihood = function(num) if globalTrace then globalTrace:setLoglikelihood(num) end end
 }

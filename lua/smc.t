@@ -2,6 +2,7 @@ local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
 local trace = terralib.require("lua.trace")
 local distrib = terralib.require("lua.distrib")
+local util = terralib.require("lua.util")
 
 ---------------------------------------------------------------
 
@@ -133,10 +134,6 @@ end
 
 ---------------------------------------------------------------
 
--- The log of the minimum-representable double precision float
--- TODO: Replace with log of the minimum-representable *non-denormalized* double?
-local LOG_DBL_MIN = -708.39641853226
-
 -- Sequential importance resampling
 -- Options are:
 --    * nParticles: How many particles to run
@@ -199,7 +196,6 @@ local function SIR(program, args, opts)
 	-- --------------
 	repeat
 		local numfinished = 0
-		local minFiniteScore = math.huge
 		-- -- TESTING --
 		-- local avglikelihood = 0
 		-- local maxlikelihood = -math.huge
@@ -220,17 +216,16 @@ local function SIR(program, args, opts)
 				local temp = (1.0-t)*annealStartTemp + t*annealEndTemp
 				weights[i] = weights[i]/temp
 			end
-			if weights[i] ~= -math.huge then
-				minFiniteScore = math.min(minFiniteScore, weights[i])
-				-- -- TESTING --
-				-- avglikelihood = avglikelihood + p.trace.loglikelihood
-				-- maxlikelihood = math.max(maxlikelihood, p.trace.loglikelihood)
-				-- minlikelihood = math.min(minlikelihood, p.trace.loglikelihood)
-				-- avgposterior = avgposterior + p.trace.logposterior
-				-- maxposterior = math.max(maxposterior, p.trace.logposterior)
-				-- minposterior = math.min(minposterior, p.trace.logposterior)
-				-- --------------
-			end
+			-- -- TESTING --
+			-- if weights[i] ~= -math.huge then
+			-- 	avglikelihood = avglikelihood + p.trace.loglikelihood
+			-- 	maxlikelihood = math.max(maxlikelihood, p.trace.loglikelihood)
+			-- 	minlikelihood = math.min(minlikelihood, p.trace.loglikelihood)
+			-- 	avgposterior = avgposterior + p.trace.logposterior
+			-- 	maxposterior = math.max(maxposterior, p.trace.logposterior)
+			-- 	minposterior = math.min(minposterior, p.trace.logposterior)
+			-- end
+			-- --------------
 		end
 		local allfinished = (numfinished == nParticles)
 		-- -- TESTING --
@@ -246,8 +241,7 @@ local function SIR(program, args, opts)
 			io.flush()
 		end
 		-- Exponentiate weights, preventing underflow
-		local underflowFix = (minFiniteScore < LOG_DBL_MIN) and (LOG_DBL_MIN - minFiniteScore) or 0
-		for i=1,#weights do weights[i] = math.exp(weights[i] + underflowFix) end
+		util.expNoUnderflow(weights)
 		-- Resampling
 		beforeResample(particles)
 		if doFunnel then

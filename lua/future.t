@@ -1,6 +1,7 @@
 local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
 local trace = terralib.require("lua.trace")
+local util = terralib.require("lua.util")
 
 ---------------------------------------------------------------
 
@@ -159,10 +160,21 @@ end
 function squeue:clear()
 	self.activequeue = {}
 end
-function squeue:selectrandom()
+function squeue:selectrandom_uniform()
 	local randidx = math.ceil(trace.uniform(0, #self.activequeue))
 	return self.activequeue[randidx]
 end
+function squeue:selectrandom_priority()
+	local weights = {}
+	for _,f in ipairs(self.activequeue) do
+		table.insert(weights, f.priority)
+	end
+	util.expNoUnderflow(weights)
+	local randidx = trace.multinomial(weights)
+	return self.activequeue[randidx]
+end
+-- squeue.selectrandom = squeue.selectrandom_uniform
+squeue.selectrandom = squeue.selectrandom_priority
 
 
 
@@ -184,6 +196,8 @@ function StochasticFuture:init(fn, ...)
 	self.resumevals = {...}
 	self.retvals = {}
 	self.finished = false
+	-- self.priority = math.huge
+	self.priority = 1
 	squeue:add(self)
 	return self
 end
@@ -231,6 +245,10 @@ function StochasticFuture:resume()
 		-- Remove this future from the queue
 		squeue:remove(self)
 		self.finished = true
+	-- Handle situation where coroutine has yielded, potentially with a priority
+	else
+		-- self.priority = self.retvals[1]
+		self.priority = 1
 	end
 end
 
