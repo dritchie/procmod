@@ -15,9 +15,9 @@ local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
-local VOXEL_FACTOR_WEIGHT = 0.04
--- local VOXEL_FILLED_FACTOR_WEIGHT = 0.1
--- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.02
+local VOXEL_FACTOR_WEIGHT = 0.01
+-- local VOXEL_FILLED_FACTOR_WEIGHT = 0.01
+-- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.08
 local OUTSIDE_FACTOR_WEIGHT = 0.01
 
 ---------------------------------------------------------------
@@ -144,11 +144,11 @@ local function SIR(module, outgenerations, opts)
 			end
 			-- Always set the trace likelihood to be the current score
 			prob.likelihood(globalState:get().score)
-			-- SMC barrier synchronization
-			smc.sync()
 			-- If we're using stochastic futures, provide an opportunity to switch
 			--    to a different future.
 			prob.future.yield()
+			-- SMC barrier synchronization
+			smc.sync()
 		end
 	end
 

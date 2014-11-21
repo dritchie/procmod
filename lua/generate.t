@@ -5,12 +5,13 @@ local procmod = terralib.require("lua.procmod")
 
 -- local program = terralib.require("lua.spaceship")
 -- local program = terralib.require("lua.spaceship_future")
-local program = terralib.require("lua.weird_building")
+-- local program = terralib.require("lua.weird_building")
+local program = terralib.require("lua.weird_building_future")
 
 ---------------------------------------------------------------
 
 local opts = {
-	nParticles = 2000,
+	nParticles = 1000,
 
 	-- doAnneal = true,
 	-- nAnnealSteps = 20,
@@ -25,8 +26,8 @@ local opts = {
 	verbose = true
 }
 local function run(generations)
-	-- procmod.SIR(program, generations, opts)
-	procmod.RejectionSample(program, generations, 1)
+	procmod.SIR(program, generations, opts)
+	-- procmod.RejectionSample(program, generations, 1)
 	-- procmod.ForwardSample(program, generations, 1)
 end
 local runterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample))}->{}, run)
