@@ -43,49 +43,68 @@ LS.Object(State)
 
 terra State:__init()
 	self:initmembers()
-	self.hasSelfIntersections = false
-	self.score = 0.0
+	self:clear()
 end
 
 terra State:clear()
 	self.mesh:clear()
 	self.grid:clear()
 	self.hasSelfIntersections = false
-	self.score = 0.0 
+	self.score = 0.0
 end
 
-terra State:update(newmesh: &Mesh, updateScore: bool)
+State.methods.doUpdate = terra(newmesh: &Mesh, mesh: &Mesh, grid: &BinaryGrid, hasSelfIntersections: bool, updateScore: bool)
 	if updateScore then
-		self.hasSelfIntersections =
-			self.hasSelfIntersections or newmesh:intersects(&self.mesh)
-		if not self.hasSelfIntersections then
-			self.grid:resize(globals.targetGrid.rows,
-							 globals.targetGrid.cols,
-							 globals.targetGrid.slices)
-			newmesh:voxelize(&self.grid, &globals.targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+		hasSelfIntersections = hasSelfIntersections or newmesh:intersects(mesh)
+		if not hasSelfIntersections then
+			grid:resize(globals.targetGrid.rows,
+						globals.targetGrid.cols,
+						globals.targetGrid.slices)
+			newmesh:voxelize(grid, &globals.targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
 		end
 	end
-	self.mesh:append(newmesh)
+	mesh:append(newmesh)
+	var score = 0.0
 	if updateScore then
 		-- Compute score
-		if self.hasSelfIntersections then
-			self.score = [-math.huge]
+		if hasSelfIntersections then
+			score = [-math.huge]
 		else
-			var meshbb = self.mesh:bbox()
+			var meshbb = mesh:bbox()
 			var targetext = globals.targetBounds:extents()
 			var extralo = (globals.targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
 			var extrahi = (meshbb.maxs - globals.targetBounds.maxs):max(Vec3.create(0.0)) / targetext
 			var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
-			var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
-			self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
-				   		 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
-			-- var percentSameFilled = globals.targetGrid:percentFilledCellsEqualPadded(&self.grid)
-			-- var percentSameEmpty = globals.targetGrid:percentEmptyCellsEqualPadded(&self.grid)
-			-- self.score = softeq(percentSameFilled, 1.0, VOXEL_FILLED_FACTOR_WEIGHT) +
+			var percentSame = globals.targetGrid:percentCellsEqualPadded(grid)
+			score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) +
+				   	softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
+			-- var percentSameFilled = globals.targetGrid:percentFilledCellsEqualPadded(grid)
+			-- var percentSameEmpty = globals.targetGrid:percentEmptyCellsEqualPadded(grid)
+			-- score = softeq(percentSameFilled, 1.0, VOXEL_FILLED_FACTOR_WEIGHT) +
 			-- 			 softeq(percentSameEmpty, 1.0, VOXEL_EMPTY_FACTOR_WEIGHT) +
 			-- 			 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
 		end
 	end
+	return hasSelfIntersections, score
+end
+
+terra State:update(newmesh: &Mesh, updateScore: bool)
+	var hasSelfIntersections, score = State.doUpdate(newmesh, &self.mesh, &self.grid, self.hasSelfIntersections, updateScore)
+	if updateScore then
+		self.hasSelfIntersections = hasSelfIntersections
+		self.score = score
+	end
+end
+
+terra State:predictScore(newmesh: &Mesh)
+	var meshcopy = Mesh.salloc():copy(&self.mesh)
+	var gridcopy = BinaryGrid.salloc():copy(&self.grid)
+	var hasSelfIntersections, score = State.doUpdate(newmesh, meshcopy, gridcopy, self.hasSelfIntersections, true)
+	return score
+end
+
+terra State:currentScore()
+	return self.score
 end
 
 -- State for the currently executing program
@@ -136,17 +155,25 @@ local function SIR(module, outgenerations, opts)
 			geofn(tmpmesh, [args])
 			globalState:update(tmpmesh, true)
 		end
+		args = geofnargs(geofn)
+		local terra predictScore([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			return globalState:predictScore(tmpmesh)
+		end
 		-- Now we wrap this in a Lua function that checks whether this work
 		--    needs to be done at all
 		return function(...)
 			if smc.willStopAtNextSync() then
+				-- local score = predictScore(...)
+				-- prob.future.yield(score)
 				update(...)
+			-- else
+			-- 	prob.future.yield()
 			end
-			-- Always set the trace likelihood to be the current score
-			prob.likelihood(globalState:get().score)
-			-- If we're using stochastic futures, provide an opportunity to switch
-			--    to a different future.
 			prob.future.yield()
+			-- Always set the trace likelihood to be the current score
+			prob.likelihood(globalState:get():currentScore())
 			-- SMC barrier synchronization
 			smc.sync()
 		end
