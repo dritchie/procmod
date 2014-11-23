@@ -7,6 +7,8 @@ local procmod = terralib.require("lua.procmod")
 -- local program = terralib.require("lua.spaceship_future")
 -- local program = terralib.require("lua.weird_building")
 local program = terralib.require("lua.weird_building_future")
+-- local program = terralib.require("lua.random_walk")
+-- local program = terralib.require("lua.cube_fractal")
 
 ---------------------------------------------------------------
 

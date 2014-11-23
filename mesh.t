@@ -108,7 +108,7 @@ local Mesh = S.memoize(function(real)
 			v2 = v2 - (v2 - centroid)*CONTRACT_EPS
 		end
 	end)
-	terra Mesh:intersects(other: &Mesh)
+	terra Mesh:intersects(other: &Mesh) : bool
 		-- First, check that the overall bboxes of the two meshes actually intersect
 		var selfbbox = self:bbox()
 		var otherbbox = other:bbox()
@@ -150,6 +150,17 @@ local Mesh = S.memoize(function(real)
 
 	terra Mesh:selfIntersects()
 		return self:intersects(self)
+	end
+
+	-- We loop over the meshes in reverse order, for the same reason as above
+	terra Mesh:intersects(meshes: &S.Vector(Mesh)) :  bool
+		var numMeshes = int64(meshes:size())
+		for i=numMeshes-1,-1,-1 do
+			if self:intersects(meshes:get(i)) then
+				return true
+			end
+		end
+		return false
 	end
 
 	-- Returns a bounding box of the voxels touched by this triangle
