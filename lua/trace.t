@@ -155,6 +155,7 @@ end
 local ERPRec = LS.LObject()
 
 function ERPRec:init(erp, ...)
+	self.erp = erp
 	self.value = erp.sample(...)
 	self.logprob = erp.logprob(self.value, ...)
 	self.params = {...}
@@ -163,6 +164,7 @@ function ERPRec:init(erp, ...)
 end
 
 function ERPRec:copy(other)
+	self.erp = other.erp
 	self.value = other.value
 	self.logprob = other.logprob
 	self.params = {}
@@ -173,7 +175,7 @@ function ERPRec:copy(other)
 	return self
 end
 
-function ERPRec:checkForParamChanges(erp, ...)
+function ERPRec:checkForParamChanges(...)
 	local params = {...}
 	local hasChanges = false
 	for i,p in ipairs(self.params) do
@@ -184,8 +186,15 @@ function ERPRec:checkForParamChanges(erp, ...)
 	end
 	if hasChanges then
 		self.params = params
-		self.logprob = erp.logprob(self.val, ...)
+		self.logprob = self.erp.logprob(self.val, ...)
 	end
+end
+
+function ERPRec:propose()
+	local newval, fwdlp, rvslp = self.erp.propose(self.val, unpack(self.params))
+	self.logprob = self.erp.logprob(newval, unpack(self.params))
+	self.val = newval
+	return fwdlp, rvslp
 end
 
 
@@ -288,13 +297,22 @@ function StructuredERPTrace:run()
 	end
 end
 
+-- Return vars as a list
+function StructuredERPTrace:records()
+	local recs = {}
+	for _,rec in pairs(self.choicemap) do
+		table.insert(recs, rec)
+	end
+	return recs
+end
+
 function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
 	-- Look for the ERP by address, and generate a new one if we don't find it
 	local addr = self.address:getstr()
 	local rec = self.choicemap[addr]
 	if rec then
 		-- Do anything that needs to be done if the parameters have changed.
-		rec:checkForParamChanges(erp, ...)
+		rec:checkForParamChanges(...)
 		rec.reachable = true
 	else
 		-- Make a new record
