@@ -25,6 +25,7 @@ local Particle = S.memoize(function(Trace)
 		self.finished = false
 		self.currSyncIndex = 1
 		self.stopSyncIndex = 0
+		self.lastStopSyncIndex = 0
 		return self
 	end
 
@@ -33,11 +34,12 @@ local Particle = S.memoize(function(Trace)
 		self.finished = other.finished
 		self.currSyncIndex = other.currSyncIndex
 		self.stopSyncIndex = other.stopSyncIndex
+		self.lastStopSyncIndex = other.lastStopSyncIndex
 		return self
 	end
 
-	function Particle:willStopAtNextSync()
-		return self.currSyncIndex == self.stopSyncIndex
+	function Particle:isReplaying()
+		return self.currSyncIndex <= self.lastStopSyncIndex
 	end
 
 	function Particle:sync()
@@ -48,11 +50,12 @@ local Particle = S.memoize(function(Trace)
 		end
 	end
 
-	function Particle:step()
+	function Particle:step(nSteps)
+		nSteps = nSteps or 1
 		if not self.finished then
 			local prevGlobalParticle = globalParticle
 			globalParticle = self
-			self.stopSyncIndex = self.stopSyncIndex + 1
+			self.stopSyncIndex = self.stopSyncIndex + nSteps
 			self.currSyncIndex = 1
 			local succ, err = pcall(function() self.trace:run() end)
 			if succ then
@@ -61,6 +64,7 @@ local Particle = S.memoize(function(Trace)
 				-- Propagate error if it's not due to a sync point
 				error(err)
 			end
+			self.lastStopSyncIndex = self.stopSyncIndex
 			globalParticle = prevGlobalParticle
 		end
 	end
@@ -206,7 +210,7 @@ local function SIR(program, args, opts)
 		-- --------------
 		-- Step
 		for i,p in ipairs(particles) do
-			p:step()
+			p:step(1)
 			if p.finished then
 				numfinished = numfinished + 1
 			end
@@ -245,7 +249,7 @@ local function SIR(program, args, opts)
 		-- Resampling
 		beforeResample(particles)
 		if doFunnel then
-			local t = math.min(generation / nAnnealSteps, 1.0)
+			local t = math.min(generation / nFunnelSteps, 1.0)
 			nParticles = (1.0-t)*funnelStartNum + t*funnelEndNum
 		end
 		particles = resample(particles, weights, nParticles)
@@ -272,8 +276,8 @@ return
 {
 	Resample = Resample,
 	SIR = SIR,
-	willStopAtNextSync = function()
-		return globalParticle and globalParticle:willStopAtNextSync()
+	isReplaying = function()
+		return globalParticle and globalParticle:isReplaying()
 	end,
 	sync = function()
 		if globalParticle then globalParticle:sync() end

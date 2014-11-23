@@ -15,10 +15,10 @@ local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
-local VOXEL_FACTOR_WEIGHT = 0.01
+local VOXEL_FACTOR_WEIGHT = 0.02
 -- local VOXEL_FILLED_FACTOR_WEIGHT = 0.01
 -- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.08
-local OUTSIDE_FACTOR_WEIGHT = 0.01
+local OUTSIDE_FACTOR_WEIGHT = 0.02
 
 ---------------------------------------------------------------
 
@@ -166,7 +166,7 @@ local function SIR(module, outgenerations, opts)
 		return function(...)
 			-- smc.sync()
 			-- prob.future.yield()
-			if smc.willStopAtNextSync() then
+			if not smc.isReplaying() then
 				-- smc.sync()
 				-- local score = predictScore(...)
 				-- prob.future.yield(score)

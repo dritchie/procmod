@@ -13,16 +13,16 @@ local program = terralib.require("lua.weird_building_future")
 ---------------------------------------------------------------
 
 local opts = {
-	nParticles = 1000,
+	nParticles = 2000,
 
 	-- doAnneal = true,
 	-- nAnnealSteps = 20,
 	-- annealStartTemp = 100,
 
 	-- doFunnel = true,
-	-- nFunnelSteps = 20,
-	-- funnelStartNum = 10000,
-	-- funnelEndNum = 100,
+	-- nFunnelSteps = 30,
+	-- funnelStartNum = 5000,
+	-- funnelEndNum = 200,
 	
 	recordHistory = true,
 	verbose = true
