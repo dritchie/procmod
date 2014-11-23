@@ -45,6 +45,20 @@ return function(makeGeoPrim)
 	-- local DOWN_PROB = 1.0
 	-- local UP_PROB = 1.0
 
+	-- local function towerType(leftok, rightok, downok, upok)
+	-- 	if leftok and rightok and downok and upok then
+	-- 		return "central"
+	-- 	elseif not leftok then
+	-- 		return "right"
+	-- 	elseif not rightok then
+	-- 		return "left"
+	-- 	elseif not downok then
+	-- 		return "up"
+	-- 	else
+	-- 		return "down"
+	-- 	end
+	-- end
+
 	tower = function(ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
 		local finished = false
 		local iter = 0

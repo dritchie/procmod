@@ -165,6 +165,18 @@ function squeue:selectrandom_uniform()
 	return self.activequeue[randidx]
 end
 function squeue:selectrandom_priority()
+	-- If we have any futures with infinite weight, then we must sample them first
+	local infs = {}
+	for _,f in ipairs(self.activequeue) do
+		if f.priority == math.huge then
+			table.insert(infs, f)
+		end
+	end
+	if #infs > 0 then
+		local randidx = math.ceil(trace.uniform(0, #infs))
+		return infs[randidx]
+	end
+	-- Otherwise, we sample proportional to priority
 	local weights = {}
 	for _,f in ipairs(self.activequeue) do
 		table.insert(weights, f.priority)
@@ -173,8 +185,8 @@ function squeue:selectrandom_priority()
 	local randidx = trace.multinomial(weights)
 	return self.activequeue[randidx]
 end
--- squeue.selectrandom = squeue.selectrandom_uniform
-squeue.selectrandom = squeue.selectrandom_priority
+squeue.selectrandom = squeue.selectrandom_uniform
+-- squeue.selectrandom = squeue.selectrandom_priority
 
 
 
@@ -196,8 +208,8 @@ function StochasticFuture:init(fn, ...)
 	self.resumevals = {...}
 	self.retvals = {}
 	self.finished = false
-	-- self.priority = math.huge
-	self.priority = 1
+	self.priority = math.huge
+	-- self.priority = 1
 	squeue:add(self)
 	return self
 end
@@ -247,8 +259,8 @@ function StochasticFuture:resume()
 		self.finished = true
 	-- Handle situation where coroutine has yielded, potentially with a priority
 	else
-		-- self.priority = self.retvals[1]
-		self.priority = 1
+		self.priority = self.retvals[2] or 1
+		-- self.priority = 1
 	end
 end
 

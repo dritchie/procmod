@@ -164,18 +164,20 @@ local function SIR(module, outgenerations, opts)
 		-- Now we wrap this in a Lua function that checks whether this work
 		--    needs to be done at all
 		return function(...)
+			-- smc.sync()
+			-- prob.future.yield()
 			if smc.willStopAtNextSync() then
+				-- smc.sync()
 				-- local score = predictScore(...)
 				-- prob.future.yield(score)
 				update(...)
 			-- else
+			-- 	smc.sync()
 			-- 	prob.future.yield()
 			end
-			prob.future.yield()
-			-- Always set the trace likelihood to be the current score
 			prob.likelihood(globalState:get():currentScore())
-			-- SMC barrier synchronization
 			smc.sync()
+			prob.future.yield()
 		end
 	end
 
