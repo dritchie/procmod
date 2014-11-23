@@ -17,29 +17,33 @@ return function(makeGeoPrim)
 	-- Forward declare
 	local tower
 
-	local function centralTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, true, true, true)
+	local function centralTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, true, true, true)
 	end
-	local function leftTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, false, true, true)
+	local function leftTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, false, true, true)
 	end
-	local function rightTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, false, true, true, true)
+	local function rightTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, false, true, true, true)
 	end
-	local function downTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, true, true, false)
+	local function downTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, true, true, false)
 	end
-	local function upTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, true, false, true)
+	local function upTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, true, false, true)
 	end
 
-	local CONTINUE_PROB = 0.5
-	local LEFT_PROB = 0.5
-	local RIGHT_PROB = 0.5
-	local DOWN_PROB = 0.5
-	local UP_PROB = 0.5
 
-	tower = function(ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
+
+	local function stackProb(depth)
+		return math.exp(-0.4*depth)
+	end
+
+	local function spreadProb(depth)
+		return math.exp(-0.4*depth)
+	end
+
+	tower = function(depth, ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
 		local finished = false
 		local iter = 0
 		repeat
@@ -70,23 +74,23 @@ return function(makeGeoPrim)
 			box(cx, ybot + 0.5*height, cz, width, height, depth)
 			if iter == 0 then
 				if leftok then
-					if flip(LEFT_PROB) then
-						leftTower(ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
+					if flip(spreadProb(depth)) then
+						leftTower(depth+1, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
 					end
 				end
 				if rightok then
-					if flip(RIGHT_PROB) then
-						rightTower(ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
+					if flip(spreadProb(depth)) then
+						rightTower(depth+1, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
 					end
 				end
 				if downok then
-					if flip(DOWN_PROB) then
-						downTower(ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
+					if flip(spreadProb(depth)) then
+						downTower(depth+1, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
 					end
 				end
 				if upok then
-					if flip(UP_PROB) then
-						upTower(ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
+					if flip(spreadProb(depth)) then
+						upTower(depth+1, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
 					end
 				end
 			end
@@ -95,13 +99,13 @@ return function(makeGeoPrim)
 			xmax = cx + 0.5*width
 			zmin = cz - 0.5*depth
 			zmax = cz + 0.5*depth
-			finished = flip(1-CONTINUE_PROB)
+			finished = flip(1-stackProb(iter))
 			iter = iter + 1
 		until finished
 	end
 
 	return function()
-		centralTower(0, -2, 2, -2, 2)
+		centralTower(0, 0, -2, 2, -2, 2)
 	end
 end
 

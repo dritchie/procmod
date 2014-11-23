@@ -18,48 +18,33 @@ return function(makeGeoPrim)
 	-- Forward declare
 	local tower
 
-	local function centralTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, true, true, true)
+	local function centralTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, true, true, true)
 	end
-	local function leftTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, false, true, true)
+	local function leftTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, false, true, true)
 	end
-	local function rightTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, false, true, true, true)
+	local function rightTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, false, true, true, true)
 	end
-	local function downTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, true, true, false)
+	local function downTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, true, true, false)
 	end
-	local function upTower(ybot, xmin, xmax, zmin, zmax)
-		return tower(ybot, xmin, xmax, zmin, zmax, true, true, false, true)
+	local function upTower(depth, ybot, xmin, xmax, zmin, zmax)
+		return tower(depth, ybot, xmin, xmax, zmin, zmax, true, true, false, true)
 	end
 
-	local CONTINUE_PROB = 0.5
-	local LEFT_PROB = 0.5
-	local RIGHT_PROB = 0.5
-	local DOWN_PROB = 0.5
-	local UP_PROB = 0.5
-	-- local CONTINUE_PROB = 1.0
-	-- local LEFT_PROB = 1.0
-	-- local RIGHT_PROB = 1.0
-	-- local DOWN_PROB = 1.0
-	-- local UP_PROB = 1.0
 
-	-- local function towerType(leftok, rightok, downok, upok)
-	-- 	if leftok and rightok and downok and upok then
-	-- 		return "central"
-	-- 	elseif not leftok then
-	-- 		return "right"
-	-- 	elseif not rightok then
-	-- 		return "left"
-	-- 	elseif not downok then
-	-- 		return "up"
-	-- 	else
-	-- 		return "down"
-	-- 	end
-	-- end
 
-	tower = function(ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
+	local function stackProb(depth)
+		return math.exp(-0.4*depth)
+	end
+
+	local function spreadProb(depth)
+		return math.exp(-0.4*depth)
+	end
+
+	tower = function(depth, ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
 		local finished = false
 		local iter = 0
 		repeat
@@ -91,29 +76,29 @@ return function(makeGeoPrim)
 			if iter == 0 then
 				if leftok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(LEFT_PROB) then
-							leftTower(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							leftTower(depth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
 				end
 				if rightok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(RIGHT_PROB) then
-							rightTower(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							rightTower(depth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
 				end
 				if downok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(DOWN_PROB) then
-							downTower(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							downTower(depth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
 				end
 				if upok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(UP_PROB) then
-							upTower(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							upTower(depth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
 				end
@@ -123,13 +108,13 @@ return function(makeGeoPrim)
 			xmax = cx + 0.5*width
 			zmin = cz - 0.5*depth
 			zmax = cz + 0.5*depth
-			finished = flip(1-CONTINUE_PROB)
+			finished = flip(1-stackProb(iter))
 			iter = iter + 1
 		until finished
 	end
 
 	return function()
-		future.create(centralTower, 0, -2, 2, -2, 2)
+		future.create(centralTower, 0, 0, -2, 2, -2, 2)
 		future.finishall()
 	end
 end
