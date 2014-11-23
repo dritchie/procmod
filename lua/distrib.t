@@ -7,6 +7,9 @@ local bernoulli =
 	logprob = function(val, p)
 		local prob = val and p or 1-p
 		return math.log(prob)
+	end,
+	propose = function(val, p)
+		return (not val), 0, 0
 	end
 }
 

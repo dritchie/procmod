@@ -1,3 +1,4 @@
+local S = terralib.require("qs.lib.std")
 local LS = terralib.require("lua.std")
 local distrib = terralib.require("lua.distrib")
 
@@ -65,8 +66,8 @@ function Trace:run()
 end
 
 function Trace:makeRandomChoice(erp, ...)
-	local val = self:makeRandomChoiceImpl(erp, ...)
-	self.logprior = self.logprior + erp.logprob(val, ...)
+	local val, logprob = self:makeRandomChoiceImpl(erp, ...)
+	self.logprior = self.logprior + logprob
 	self.logposterior = self.logprior + self.loglikelihood
 	return val
 end
@@ -85,9 +86,15 @@ function Trace:setLoglikelihood(num)
 	self.logposterior = self.logprior + self.loglikelihood
 end
 
+-- Address stack management functions. These are no-ops for all Trace types
+--    except the StructuredERPTrace.
+function Trace:pushAddress(name) end
+function Trace:popAddress() end
+function Trace:setAddressLoopIndex(i) end
+
 ---------------------------------------------------------------
 
--- Simple trace that stores the values of random choices in a flat list.
+-- Simple trace that stores the values (and logprobs) of random choices in a flat list.
 -- Sufficent to replay an execution, and that's about it.
 local FlatValueTrace = LS.LObject()
 setmetatable(FlatValueTrace, Trace)
@@ -95,6 +102,7 @@ setmetatable(FlatValueTrace, Trace)
 function FlatValueTrace:init(program, ...)
 	Trace.init(self, program, ...)
 	self.choicevals = {}
+	self.choicelogprobs = {}
 	self.choiceindex = 1
 	return self
 end
@@ -105,17 +113,21 @@ function FlatValueTrace:copy(other)
 	for _,v in ipairs(other.choicevals) do
 		table.insert(self.choicevals, v)
 	end
+	self.choicelogprobs = {}
+	for _,lp in ipairs(other.choicelogprobs) do
+		table.insert(self.choicelogprobs, lp)
+	end
 	self.choiceindex = other.choiceindex
 	return self
 end
 
 function FlatValueTrace:clear()
 	self.choicevals = {}
+	self.choicelogprobs = {}
 	self.choiceindex = 1
 end
 
 function FlatValueTrace:run()
-	-- print("-------------------")
 	self.choiceindex = 1
 	Trace.run(self)
 end
@@ -123,27 +135,198 @@ end
 -- Look up the value, or sample a new one if we're past
 --    the end of the list
 function FlatValueTrace:makeRandomChoiceImpl(erp, ...)
-	local val
+	local val, lp
 	if self.choiceindex <= #self.choicevals then
 		val = self.choicevals[self.choiceindex]
+		lp = self.choicelogprobs[self.choiceindex]
 	else
 		val = erp.sample(...)
+		lp = erp.logprob(val, ...)
 		table.insert(self.choicevals, val)
+		table.insert(self.choicelogprobs, lp)
 	end
 	self.choiceindex = self.choiceindex + 1
-	return val
+	return val, lp
 end
 
 ---------------------------------------------------------------
 
--- TODO: FlatERPTrace?
+-- ERP record type needed by StructuredERPTrace
+local ERPRec = LS.LObject()
 
--- TODO: StructuredERPTrace?
+function ERPRec:init(erp, ...)
+	self.value = erp.sample(...)
+	self.logprob = erp.logprob(self.value, ...)
+	self.params = {...}
+	self.reachable = true
+	return self
+end
+
+function ERPRec:copy(other)
+	self.value = other.value
+	self.logprob = other.logprob
+	self.params = {}
+	for _,p in ipairs(other.params) do
+		table.insert(self.params, p)
+	end
+	self.reachable = other.reachable
+	return self
+end
+
+function ERPRec:checkForParamChanges(erp, ...)
+	local params = {...}
+	local hasChanges = false
+	for i,p in ipairs(self.params) do
+		if p ~= params[i] then
+			hasChanges = true
+			break
+		end 
+	end
+	if hasChanges then
+		self.params = params
+		self.logprob = erp.logprob(self.val, ...)
+	end
+end
+
+
+-- Address type abstracts the actual implementation of the address stack
+local Address = LS.LObject()
+
+local currid = 1
+local name2id = S.memoize(function(name)
+	local id = currid
+	currid = currid + 1
+	return id
+end)
+
+function Address:init()
+	self.str = "|0:0:0"
+	self.data = {
+		blockid = 0,
+		loopid = 0,
+		varid = 0
+	}
+	return self
+end
+
+-- Addresses only hold data *during* the run of a program, so when we copy them, 
+--    they're always empty
+function Address:copy(other)
+	return self:init()
+end
+
+function Address:getstr() return self.str end
+
+function Address:push(name)
+	local id = name2id(name)
+	table.insert(self.data, {
+		blockid = id,
+		loopid = 0,
+		varid = 0
+	})
+	self.addressString = string.format("%s|%u:0:0", self.addressString, id)
+end
+
+function Address:pop()
+	table.remove(self.data)
+	local endindex = string.find(self.addressString, "|[^|]*$")
+	self.addressString = string.sub(1, endindex-1)
+end
+
+function Address:setLoopIndex(i)
+	local d = self.data[#self.data]
+	d.loopid = i
+	if i == 0 then
+		d.varid = 0
+	end
+	local endindex = string.find(self.addressString, "|[^|]*$")
+	self.addressString = string.format("%s|%u:%u:%u", 
+		string.sub(1, endindex-1), d.blockid, d.loopid, d.varid)
+end
+
+function Address:incrementVarIndex()
+	local d = self.data[#self.data]
+	d.varid = d.varid + 1
+	local endindex = string.find(self.addressString, "|[^|]*$")
+	self.addressString = string.format("%s|%u:%u:%u", 
+		string.sub(1, endindex-1), d.blockid, d.loopid, d.varid)
+end
+
+
+-- Trace that indexes ERPs by their structural address in the program.
+-- Needed to do efficient MH.
+local StructuredERPTrace = LS.LObject()
+setmetatable(StructuredERPTrace, Trace)
+
+function StructuredERPTrace:init(program, ...)
+	Trace.init(self, program, ...)
+	self.choicemap = {}
+	self.address = Address.alloc():init()
+	return self
+end
+
+function StructuredERPTrace:copy(other)
+	Trace.copy(self, other)
+	self.choicemap = {}
+	for addr, rec in pairs(other.choicemap) do
+		self[addr] = rec:newcopy()
+	end
+	self.address = other.address:newcopy()
+end
+
+function StructuredERPTrace:clear()
+	self.choicemap = {}
+end
+
+function StructuredERPTrace:run()
+	Trace.run(self)
+	-- Clear out any random choices that are no longer reachable
+	for addr,rec in pairs(self.choicemap) do
+		if not rec.reachable then
+			self.choicemap[addr] = nil
+		end
+	end
+end
+
+function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
+	-- Look for the ERP by address, and generate a new one if we don't find it
+	local addr = self.address:getstr()
+	local rec = self.choicemap[addr]
+	if rec then
+		-- Do anything that needs to be done if the parameters have changed.
+		rec:checkForParamChanges(erp, ...)
+		rec.reachable = true
+	else
+		-- Make a new record
+		rec = ERPRec.alloc():init(erp, ...)
+		self.choicemap[addr] = rec
+	end
+	self.address:incrementVarIndex()
+	return rec.val, rec.logprob
+end
+
+function StructuredERPTrace:pushAddress(name)
+	self.address:push(name)
+end
+
+function StructuredERPTrace:popAddress()
+	self.address:pop()
+end
+
+function StructuredERPTrace:setAddressLoopIndex(i)
+	self.address:setLoopIndex(i)
+end
 
 ---------------------------------------------------------------
 
 -- ERP is a table consisting of sample, logprob, and (optionally) propose
 local function makeSampler(ERP)
+	ERP.propose = ERP.propose or function(val, ...)
+		local pval = ERP.sample(...)
+		local fwdlp = ERP.logprob(pval, ...)
+		local rvslp = ERP.logprob(val, ...)
+		return pval, fwdlp, rvslp
+	end
 	return function(...)
 		if globalTrace then
 			return globalTrace:makeRandomChoice(ERP, ...)
@@ -174,8 +357,7 @@ end
 return
 {
 	FlatValueTrace = FlatValueTrace,
-	addPreRunEvent = function(e) table.insert(Trace.preRunEvents, e) end,
-	addPostRunEvent = function(e) table.insert(Trace.postRunEvents, e) end,
+	StructuredERPTrace = StructuredERPTrace,
 	isrunning = function() return globalTrace ~= nil end,
 	flip = flip,
 	uniform = uniform,
