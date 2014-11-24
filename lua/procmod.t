@@ -6,6 +6,7 @@ local BBox = terralib.require("bbox")
 local BinaryGrid = terralib.require("binaryGrid3d")
 local prob = terralib.require("lua.prob")
 local smc = terralib.require("lua.smc")
+local mcmc = terralib.require("lua.mcmc")
 local distrib = terralib.require("qs.distrib")
 
 local Vec3 = Vec(double, 3)
@@ -52,6 +53,8 @@ terra State:clear()
 	self.hasSelfIntersections = false
 	self.score = 0.0
 end
+
+terra State:prepareForRun() end
 
 State.methods.doUpdate = terra(newmesh: &Mesh, mesh: &Mesh, grid: &BinaryGrid, hasSelfIntersections: bool, updateScore: bool)
 	if updateScore then
@@ -107,19 +110,69 @@ terra State:currentScore()
 	return self.score
 end
 
--- State for the currently executing program
-local globalState = global(&State, 0)
+---------------------------------------------------------------
+
+-- A State object designed to work with MH
+local struct MHState(S.Object)
+{
+	-- TODO: I really should use a tree structured according to the address stack...
+	states: S.Vector(State)
+	currIndex: uint
+}
+LS.Object(MHState)
+
+terra MHState:prepareForRun()
+	self.currIndex = 0
+end
+
+terra MHState:update(newmesh: &Mesh)
+	-- CASE 1: This is the first primitive
+	if self.currIndex == 0 then
+		var state = self.states:insert()
+		state:init()
+		state:update(newmesh, true)
+	-- CASE 2: We're adding new stuff to the end of the trace
+	elseif self.currIndex == self.states:size() then
+		var state = self.states:insert()
+		state:copy(self.states:get(self.currIndex-1))
+		state:update(newmesh, true)
+	-- CASE 3: We're overwriting stuff somehwere in the middle of the trace
+	else
+		var state = self.states:get(self.currIndex)
+		state:destruct()
+		state:copy(self.states:get(self.currIndex-1))
+		state:update(newmesh, true)
+	end
+end
+
+terra MHState:currentScore()
+	return self.states(self.currIndex):currentScore()
+end
+
+terra MHState:lastMesh()
+	return &self.states(self.states:size()-1).mesh
+end
+
+terra MHState:advance()
+	self.currIndex = self.currIndex + 1
+end
 
 ---------------------------------------------------------------
 
+-- A global variable for a given type of State
+local globalState = S.memoize(function(StateType)
+	return global(&StateType, 0)
+end)
+
 -- Wrap a generative procedural modeling function such that it takes
 --    a State as an argument and does the right thing with it.
-local function statewrap(fn)
+local function statewrap(fn, StateType)
 	return function(state)
-		local prevstate = globalState:get()
-		globalState:set(state)
+		local prevstate = globalState(StateType):get()
+		globalState(StateType):set(state)
+		state:prepareForRun()
 		local succ, err = pcall(fn)
-		globalState:set(prevstate)
+		globalState(StateType):set(prevstate)
 		if not succ then
 			error(err)
 		end
@@ -146,6 +199,8 @@ end
 --    * any other options recognized by smc.SIR
 local function SIR(module, outgenerations, opts)
 
+	local globState = globalState(State)
+
 	local function makeGeoPrim(geofn)
 		-- First, we make a Terra function that does all the perf-critical stuff:
 		--    creates new geometry, tests for intersections, voxelizes, etc.
@@ -153,13 +208,13 @@ local function SIR(module, outgenerations, opts)
 		local terra update([args])
 			var tmpmesh = Mesh.salloc():init()
 			geofn(tmpmesh, [args])
-			globalState:update(tmpmesh, true)
+			globState:update(tmpmesh, true)
 		end
 		args = geofnargs(geofn)
 		local terra predictScore([args])
 			var tmpmesh = Mesh.salloc():init()
 			geofn(tmpmesh, [args])
-			return globalState:predictScore(tmpmesh)
+			return globState:predictScore(tmpmesh)
 		end
 		-- Now we wrap this in a Lua function that checks whether this work
 		--    needs to be done at all
@@ -175,7 +230,7 @@ local function SIR(module, outgenerations, opts)
 			-- 	smc.sync()
 			-- 	prob.future.yield()
 			end
-			prob.likelihood(globalState:get():currentScore())
+			prob.likelihood(globState:get():currentScore())
 			smc.sync()
 			prob.future.yield()
 		end
@@ -199,7 +254,7 @@ local function SIR(module, outgenerations, opts)
 	-- Install the SMC geo prim generator
 	local program = module(makeGeoPrim)
 	-- Wrap program so that it takes procmod State as argument
-	program = statewrap(program)
+	program = statewrap(program, State)
 	-- Create the beforeResample, afterResample, and exit callbacks
 	local function dorecord(particles)
 		copyMeshes(particles, outgenerations)
@@ -217,20 +272,68 @@ end
 
 ---------------------------------------------------------------
 
+-- Metropolis hastings inference
+-- IMPORTANT: Don't use this with future-ized versions of programs: the co-routine
+--    switching will mess up the address stack (this is fixable, but I don't see a
+--    reason to bother with it right now)
+local function MH(module, outgenerations, opts)
+
+	local globState = globalState(MHState)
+
+	local function makeGeoPrim(geofn)
+		local args = geofnargs(geofn)
+		local terra update([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			globState:update(tmpmesh)
+		end
+		return function(...)
+			if not mcmc.isReplaying() then
+				update(...)
+			end
+			local gstate = globState:get()
+			prob.likelihood(gstate:currentScore())
+			gstate:advance()
+		end
+	end
+
+	local function recordSample(trace)
+		if outgenerations:size() == 0 then
+			local v = outgenerations:insert()
+			LS.luainit(v)
+		end
+		local v = outgenerations:get(0)
+		local samp = v:insert()
+		samp.value:copy(trace.args[1]:lastMesh())
+		samp.logprob = trace.loglikelihood
+	end
+
+	local program = statewrap(module(makeGeoPrim), MHState)
+	local newopts = LS.copytable(opts)
+	newopts.onSample = recordSample
+	local initstate = MHState.luaalloc():luainit()
+	mcmc.MH(program, {initstate}, newopts)
+end
+
+
+---------------------------------------------------------------
+
 -- Just run the program forward without enforcing any constraints
 -- Useful for development and debugging
 local function ForwardSample(module, outgenerations, numsamples)
+
+	local globState = globalState(State)
 
 	local function makeGeoPrim(geofn)
 		local args = geofnargs(geofn)
 		return terra([args])
 			var tmpmesh = Mesh.salloc():init()
 			geofn(tmpmesh, [args])
-			globalState:update(tmpmesh, false)
+			globState:update(tmpmesh, false)
 		end
 	end
 
-	local program = statewrap(module(makeGeoPrim))
+	local program = statewrap(module(makeGeoPrim), State)
 	local state = State.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
@@ -248,17 +351,19 @@ end
 -- Like forward sampling, but reject any 0-probability samples
 -- Keep running until numsamples have been accumulated
 local function RejectionSample(module, outgenerations, numsamples)
+
+	local globState = globalState(State)
 	
 	local function makeGeoPrim(geofn)
 		local args = geofnargs(geofn)
 		return terra([args])
 			var tmpmesh = Mesh.salloc():init()
 			geofn(tmpmesh, [args])
-			globalState:update(tmpmesh, true)
+			globState:update(tmpmesh, true)
 		end
 	end
 
-	local program = statewrap(module(makeGeoPrim))
+	local program = statewrap(module(makeGeoPrim), State)
 	local state = State.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
@@ -279,6 +384,7 @@ return
 {
 	Sample = terralib.require("qs").Sample(Mesh),
 	SIR = SIR,
+	MH = MH,
 	ForwardSample = ForwardSample,
 	RejectionSample = RejectionSample
 }

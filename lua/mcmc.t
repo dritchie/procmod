@@ -1,5 +1,25 @@
 local trace = terralib.require("lua.trace")
 
+
+-- Bookkeeping to help us tell whether an MH-run is replaying still-valid trace or is
+--    generating new trace.
+local propVarIndex = -1
+local function setPropVarIndex(i)
+	propVarIndex = i
+end
+local function unsetPropVarIndex()
+	propVarIndex = -1
+end
+local function isReplaying()
+	local nextVarIndex = trace.nextVarIndex()
+	if nextVarIndex then
+		return nextVarIndex <= propVarIndex
+	else
+		return false
+	end
+end
+
+
 -- Do lightweight MH
 -- Options are:
 --    * nSamples: how many samples to collect?
@@ -29,11 +49,14 @@ local function MH(program, args, opts)
 		local fwdlp, rvslp = rec:propose()
 		fwdlp = fwdlp - math.log(#recs)
 		-- Re-run trace to propagate changes
+		setPropVarIndex(rec.index)
 		newtrace:run()
+		unsetPropVarIndex()
+		fwdlp = fwdlp + newtrace.newlogprob
 		recs = newtrace:records()
-		rvslp = rvslp - math.log(#recs)
+		rvslp = rvslp - math.log(#recs) + newtrace.oldlogprob
 		-- Accept/reject
-		local accept = math.log(math.random()) < newtrace.logposterior - trace.logposterior + rvslp - fwdlp then
+		local accept = math.log(math.random()) < newtrace.logposterior - trace.logposterior + rvslp - fwdlp
 		if accept then
 			trace = newtrace
 			numAccept = numAccept + 1
@@ -58,7 +81,8 @@ end
 
 return
 {
-	MH = MH
+	MH = MH,
+	isReplaying = isReplaying
 }
 
 

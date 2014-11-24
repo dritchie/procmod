@@ -17,6 +17,7 @@ function Trace:init(program, ...)
 	self.logprior = 0.0
 	self.loglikelihood = 0.0
 	self.logposterior = 0.0
+	self.nextVarIndex = 1
 	return self
 end
 
@@ -33,11 +34,13 @@ function Trace:copy(other)
 	self.logprior = other.logprior
 	self.loglikelihood = other.loglikelihood
 	self.logposterior = other.logposterior
+	self.nextVarIndex = other.nextVarIndex
 	return self
 end
 
 -- Find a complete trace of nonzero probability via rejection sampling
 function Trace:rejectionSample()
+	self.logposterior = -math.huge
 	repeat
 		self:clear()
 		self:run()
@@ -55,6 +58,7 @@ function Trace:run()
 	self.logprior = 0.0
 	self.loglikelihood = 0.0
 	self.logposterior = 0.0
+	self.nextVarIndex = 1
 	local retvals = { pcall(self.program, unpack(self.args)) }
 	globalTrace = prevGlobalTrace
 	if retvals[1] then
@@ -69,12 +73,15 @@ function Trace:makeRandomChoice(erp, ...)
 	local val, logprob = self:makeRandomChoiceImpl(erp, ...)
 	self.logprior = self.logprior + logprob
 	self.logposterior = self.logprior + self.loglikelihood
+	self.nextVarIndex = self.nextVarIndex + 1
 	return val
 end
 
 function Trace:makeRandomChoiceImpl(erp, ...)
 	error("Trace: 'makeRandomChoiceImpl' method not implemented.")
 end
+
+function Trace:getNextVarIndex() return self.nextVarIndex end
 
 function Trace:addFactor(num)
 	self.loglikelihood = self.loglikelihood + num
@@ -160,6 +167,7 @@ function ERPRec:init(erp, ...)
 	self.logprob = erp.logprob(self.value, ...)
 	self.params = {...}
 	self.reachable = true
+	self.index = nil
 	return self
 end
 
@@ -172,10 +180,11 @@ function ERPRec:copy(other)
 		table.insert(self.params, p)
 	end
 	self.reachable = other.reachable
+	self.index = other.index
 	return self
 end
 
-function ERPRec:checkForParamChanges(...)
+function ERPRec:checkForChanges(erp, ...)
 	local params = {...}
 	local hasChanges = false
 	for i,p in ipairs(self.params) do
@@ -186,14 +195,14 @@ function ERPRec:checkForParamChanges(...)
 	end
 	if hasChanges then
 		self.params = params
-		self.logprob = self.erp.logprob(self.val, ...)
+		self.logprob = self.erp.logprob(self.value, ...)
 	end
 end
 
 function ERPRec:propose()
-	local newval, fwdlp, rvslp = self.erp.propose(self.val, unpack(self.params))
+	local newval, fwdlp, rvslp = self.erp.propose(self.value, unpack(self.params))
 	self.logprob = self.erp.logprob(newval, unpack(self.params))
-	self.val = newval
+	self.value = newval
 	return fwdlp, rvslp
 end
 
@@ -210,11 +219,11 @@ end)
 
 function Address:init()
 	self.str = "|0:0:0"
-	self.data = {
+	self.data = {{
 		blockid = 0,
 		loopid = 0,
 		varid = 0
-	}
+	}}
 	return self
 end
 
@@ -233,31 +242,29 @@ function Address:push(name)
 		loopid = 0,
 		varid = 0
 	})
-	self.addressString = string.format("%s|%u:0:0", self.addressString, id)
+	self.str = string.format("%s|%u:0:0", self.str, id)
 end
 
 function Address:pop()
 	table.remove(self.data)
-	local endindex = string.find(self.addressString, "|[^|]*$")
-	self.addressString = string.sub(1, endindex-1)
+	local endindex = string.find(self.str, "|[^|]*$")
+	self.str = string.sub(1, endindex-1)
 end
 
 function Address:setLoopIndex(i)
 	local d = self.data[#self.data]
 	d.loopid = i
-	if i == 0 then
-		d.varid = 0
-	end
-	local endindex = string.find(self.addressString, "|[^|]*$")
-	self.addressString = string.format("%s|%u:%u:%u", 
+	d.varid = 0
+	local endindex = string.find(self.str, "|[^|]*$")
+	self.str = string.format("%s|%u:%u:%u", 
 		string.sub(1, endindex-1), d.blockid, d.loopid, d.varid)
 end
 
 function Address:incrementVarIndex()
 	local d = self.data[#self.data]
 	d.varid = d.varid + 1
-	local endindex = string.find(self.addressString, "|[^|]*$")
-	self.addressString = string.format("%s|%u:%u:%u", 
+	local endindex = string.find(self.str, "|[^|]*$")
+	self.str = string.format("%s|%u:%u:%u", 
 		string.sub(1, endindex-1), d.blockid, d.loopid, d.varid)
 end
 
@@ -271,6 +278,8 @@ function StructuredERPTrace:init(program, ...)
 	Trace.init(self, program, ...)
 	self.choicemap = {}
 	self.address = Address.alloc():init()
+	self.oldlogprob = 0
+	self.newlogprob = 0
 	return self
 end
 
@@ -278,9 +287,12 @@ function StructuredERPTrace:copy(other)
 	Trace.copy(self, other)
 	self.choicemap = {}
 	for addr, rec in pairs(other.choicemap) do
-		self[addr] = rec:newcopy()
+		self.choicemap[addr] = rec:newcopy()
 	end
 	self.address = other.address:newcopy()
+	self.oldlogprob = other.oldlogprob
+	self.newlogprob = other.newlogprob
+	return self
 end
 
 function StructuredERPTrace:clear()
@@ -288,10 +300,13 @@ function StructuredERPTrace:clear()
 end
 
 function StructuredERPTrace:run()
+	self.newlogprob = 0
 	Trace.run(self)
 	-- Clear out any random choices that are no longer reachable
+	self.oldlogprob = 0
 	for addr,rec in pairs(self.choicemap) do
 		if not rec.reachable then
+			self.oldlogprob = self.oldlogprob + rec.logprob
 			self.choicemap[addr] = nil
 		end
 	end
@@ -310,17 +325,19 @@ function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
 	-- Look for the ERP by address, and generate a new one if we don't find it
 	local addr = self.address:getstr()
 	local rec = self.choicemap[addr]
-	if rec then
+	if rec and rec.erp == erp then
 		-- Do anything that needs to be done if the parameters have changed.
-		rec:checkForParamChanges(...)
+		rec:checkForChanges(erp, ...)
 		rec.reachable = true
 	else
 		-- Make a new record
 		rec = ERPRec.alloc():init(erp, ...)
 		self.choicemap[addr] = rec
+		self.newlogprob = self.newlogprob + rec.logprob
 	end
+	rec.index = self.nextVarIndex 
 	self.address:incrementVarIndex()
-	return rec.val, rec.logprob
+	return rec.value, rec.logprob
 end
 
 function StructuredERPTrace:pushAddress(name)
@@ -381,7 +398,8 @@ return
 	uniform = uniform,
 	multinomial = multinomial,
 	factor = function(num) if globalTrace then globalTrace:addFactor(num) end end,
-	likelihood = function(num) if globalTrace then globalTrace:setLoglikelihood(num) end end
+	likelihood = function(num) if globalTrace then globalTrace:setLoglikelihood(num) end end,
+	nextVarIndex = function() if globalTrace then return globalTrace:getNextVarIndex() end end
 }
 
 
