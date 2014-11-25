@@ -243,12 +243,14 @@ function Address:push(name)
 		varid = 0
 	})
 	self.str = string.format("%s|%u:0:0", self.str, id)
+	-- print("push", self.str)
 end
 
 function Address:pop()
 	table.remove(self.data)
 	local endindex = string.find(self.str, "|[^|]*$")
-	self.str = string.sub(1, endindex-1)
+	self.str = string.sub(self.str, 1, endindex-1)
+	-- print("pop", self.str)
 end
 
 function Address:setLoopIndex(i)
@@ -257,7 +259,8 @@ function Address:setLoopIndex(i)
 	d.varid = 0
 	local endindex = string.find(self.str, "|[^|]*$")
 	self.str = string.format("%s|%u:%u:%u", 
-		string.sub(1, endindex-1), d.blockid, d.loopid, d.varid)
+		string.sub(self.str, 1, endindex-1), d.blockid, d.loopid, d.varid)
+	-- print("loop", self.str)
 end
 
 function Address:incrementVarIndex()
@@ -265,7 +268,8 @@ function Address:incrementVarIndex()
 	d.varid = d.varid + 1
 	local endindex = string.find(self.str, "|[^|]*$")
 	self.str = string.format("%s|%u:%u:%u", 
-		string.sub(1, endindex-1), d.blockid, d.loopid, d.varid)
+		string.sub(self.str, 1, endindex-1), d.blockid, d.loopid, d.varid)
+	-- print("var", self.str)
 end
 
 
@@ -399,7 +403,10 @@ return
 	multinomial = multinomial,
 	factor = function(num) if globalTrace then globalTrace:addFactor(num) end end,
 	likelihood = function(num) if globalTrace then globalTrace:setLoglikelihood(num) end end,
-	nextVarIndex = function() if globalTrace then return globalTrace:getNextVarIndex() end end
+	nextVarIndex = function() if globalTrace then return globalTrace:getNextVarIndex() end end,
+	pushAddress = function(name) if globalTrace then globalTrace:pushAddress(name) end end,
+	popAddress = function() if globalTrace then globalTrace:popAddress() end end,
+	setAddressLoopIndex = function(i) if globalTrace then globalTrace:setAddressLoopIndex(i) end end
 }
 
 

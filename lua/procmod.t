@@ -126,23 +126,24 @@ terra MHState:prepareForRun()
 end
 
 terra MHState:update(newmesh: &Mesh)
-	-- CASE 1: This is the first primitive
-	if self.currIndex == 0 then
-		var state = self.states:insert()
-		state:init()
-		state:update(newmesh, true)
-	-- CASE 2: We're adding new stuff to the end of the trace
-	elseif self.currIndex == self.states:size() then
-		var state = self.states:insert()
-		state:copy(self.states:get(self.currIndex-1))
-		state:update(newmesh, true)
-	-- CASE 3: We're overwriting stuff somehwere in the middle of the trace
+	var state : &State
+	-- We're either adding a new state, or we're overwriting something
+	--    we've already done.
+	if self.currIndex == self.states:size() then
+		state = self.states:insert()
 	else
-		var state = self.states:get(self.currIndex)
+		state = self.states:get(self.currIndex)
 		state:destruct()
-		state:copy(self.states:get(self.currIndex-1))
-		state:update(newmesh, true)
 	end
+	-- If this is the first state in runtime order, then we initialize it fresh
+	-- Otherwise, we start by copying the previous state.
+	if self.currIndex == 0 then
+		state:init()
+	else
+		state:copy(self.states:get(self.currIndex-1))
+	end
+	-- Finally, we add the new geometry and update
+	state:update(newmesh, true)
 end
 
 terra MHState:currentScore()
@@ -150,7 +151,7 @@ terra MHState:currentScore()
 end
 
 terra MHState:lastMesh()
-	return &self.states(self.states:size()-1).mesh
+	return &self.states(self.currIndex-1).mesh
 end
 
 terra MHState:advance()
@@ -306,6 +307,16 @@ local function MH(module, outgenerations, opts)
 		local samp = v:insert()
 		samp.value:copy(trace.args[1]:lastMesh())
 		samp.logprob = trace.loglikelihood
+		---------------------------------------------
+		-- local v = outgenerations:insert()
+		-- LS.luainit(v)
+		-- local state = trace.args[1]
+		-- for i=0,tonumber(state.states:size()-1) do
+		-- 	local sstate = state.states:get(i)
+		-- 	local samp = v:insert()
+		-- 	samp.value:copy(sstate.mesh)
+		-- 	samp.logprob = trace.loglikelihood
+		-- end
 	end
 
 	local program = statewrap(module(makeGeoPrim), MHState)

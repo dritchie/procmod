@@ -25,6 +25,7 @@ return function(makeGeoPrim)
 	local function genWing(xbase, zlo, zhi)
 		local i = 0
 		repeat
+			prob.setAddressLoopIndex(i)
 			local zbase = uniform(zlo, zhi)
 			local xlen = uniform(0.25, 2.0)
 			local ylen = uniform(0.25, 1.25)
@@ -41,6 +42,7 @@ return function(makeGeoPrim)
 	local function genFin(ybase, zlo, zhi, xmax)
 		local i = 0
 		repeat
+			prob.setAddressLoopIndex(i)
 			local xlen = uniform(0.5, 1.0) * xmax
 			xmax = xlen
 			local ylen = uniform(0.1, 0.5)
@@ -58,6 +60,7 @@ return function(makeGeoPrim)
 	local function genShip(rearz)
 		local i = 0
 		repeat
+			prob.setAddressLoopIndex(i)
 			local xlen = uniform(1.0, 3.0)
 			local ylen = uniform(0.5, 1.0) * xlen
 			local zlen = uniform(2.0, 5.0)
@@ -69,7 +72,9 @@ return function(makeGeoPrim)
 				local xbase = 0.5*xlen
 				local zlo = rearz - zlen + 0.5
 				local zhi = rearz - 0.5
+				prob.pushAddress("wing")
 				genWing(xbase, zlo, zhi)
+				prob.popAddress()
 			end
 			-- Gen fin?
 			local finprob = 0.7
@@ -78,7 +83,9 @@ return function(makeGeoPrim)
 				local zlo = rearz - zlen
 				local zhi = rearz
 				local xmax = 0.6*xlen
+				prob.pushAddress("fin")
 				genFin(ybase, zlo, zhi, xmax)
+				prob.popAddress()
 			end
 			local keepGenerating = flip(wi(i, 0.4))
 			i = i + 1
@@ -86,7 +93,9 @@ return function(makeGeoPrim)
 	end
 
 	return function()
+		prob.pushAddress("body")
 		genShip(-5.0)
+		prob.popAddress()
 	end
 
 end
