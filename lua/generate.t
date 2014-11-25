@@ -3,12 +3,12 @@ local procmod = terralib.require("lua.procmod")
 
 ---------------------------------------------------------------
 
--- local program = terralib.require("lua.spaceship")
--- local program = terralib.require("lua.spaceship_future")
-local program = terralib.require("lua.weird_building")
--- local program = terralib.require("lua.weird_building_future")
--- local program = terralib.require("lua.random_walk")
--- local program = terralib.require("lua.cube_fractal")
+-- local program = terralib.require("lua.models.spaceship")
+-- local program = terralib.require("lua.models.spaceship_future")
+-- local program = terralib.require("lua.models.weird_building")
+local program = terralib.require("lua.models.weird_building_future")
+-- local program = terralib.require("lua.models.random_walk")
+-- local program = terralib.require("lua.models.cube_fractal")
 
 ---------------------------------------------------------------
 
@@ -34,8 +34,8 @@ local mhopts = {
 }
 
 local function run(generations)
-	-- procmod.SIR(program, generations, smcopts)
-	procmod.MH(program, generations, mhopts)
+	procmod.SIR(program, generations, smcopts)
+	-- procmod.MH(program, generations, mhopts)
 	-- procmod.RejectionSample(program, generations, 1)
 	-- procmod.ForwardSample(program, generations, 1)
 end

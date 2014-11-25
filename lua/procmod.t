@@ -9,6 +9,7 @@ local smc = terralib.require("lua.smc")
 local mcmc = terralib.require("lua.mcmc")
 local distrib = terralib.require("qs.distrib")
 
+
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
 
@@ -16,10 +17,10 @@ local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
-local VOXEL_FACTOR_WEIGHT = 0.005
+local VOXEL_FACTOR_WEIGHT = 0.02
 -- local VOXEL_FILLED_FACTOR_WEIGHT = 0.01
 -- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.08
-local OUTSIDE_FACTOR_WEIGHT = 0.005
+local OUTSIDE_FACTOR_WEIGHT = 0.02
 
 ---------------------------------------------------------------
 
@@ -113,6 +114,8 @@ end
 ---------------------------------------------------------------
 
 -- A State object designed to work with MH
+-- After a proposal, it'll recompute everything that happens after that variable
+--    in runtime order.
 local struct MHState(S.Object)
 {
 	-- TODO: I really should use a tree structured according to the address stack...
@@ -150,7 +153,7 @@ terra MHState:currentScore()
 	return self.states(self.currIndex):currentScore()
 end
 
-terra MHState:lastMesh()
+terra MHState:getMesh()
 	return &self.states(self.currIndex-1).mesh
 end
 
@@ -305,7 +308,7 @@ local function MH(module, outgenerations, opts)
 		end
 		local v = outgenerations:get(0)
 		local samp = v:insert()
-		samp.value:copy(trace.args[1]:lastMesh())
+		samp.value:copy(trace.args[1]:getMesh())
 		samp.logprob = trace.loglikelihood
 		---------------------------------------------
 		-- local v = outgenerations:insert()
