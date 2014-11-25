@@ -3,9 +3,9 @@ local procmod = terralib.require("lua.procmod")
 
 ---------------------------------------------------------------
 
-local program = terralib.require("lua.spaceship")
+-- local program = terralib.require("lua.spaceship")
 -- local program = terralib.require("lua.spaceship_future")
--- local program = terralib.require("lua.weird_building")
+local program = terralib.require("lua.weird_building")
 -- local program = terralib.require("lua.weird_building_future")
 -- local program = terralib.require("lua.random_walk")
 -- local program = terralib.require("lua.cube_fractal")
@@ -13,7 +13,7 @@ local program = terralib.require("lua.spaceship")
 ---------------------------------------------------------------
 
 local smcopts = {
-	nParticles = 2000,
+	nParticles = 300,
 
 	-- doAnneal = true,
 	-- nAnnealSteps = 20,
@@ -29,7 +29,7 @@ local smcopts = {
 }
 
 local mhopts = {
-	nSamples = 2000,
+	nSamples = 3000,
 	verbose = true
 }
 

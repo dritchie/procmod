@@ -47,6 +47,7 @@ return function(makeGeoPrim)
 		local finished = false
 		local iter = 0
 		repeat
+			prob.setAddressLoopIndex(iter)
 			local maxwidth = xmax-xmin
 			local maxdepth = zmax-zmin
 			local width = uniform(0.5*maxwidth, maxwidth)
@@ -75,22 +76,30 @@ return function(makeGeoPrim)
 			if iter == 0 then
 				if leftok then
 					if flip(spreadProb(depth)) then
+						prob.pushAddress("left")
 						leftTower(depth+1, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
+						prob.popAddress()
 					end
 				end
 				if rightok then
 					if flip(spreadProb(depth)) then
+						prob.pushAddress("right")
 						rightTower(depth+1, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
+						prob.popAddress()
 					end
 				end
 				if downok then
 					if flip(spreadProb(depth)) then
+						prob.pushAddress("down")
 						downTower(depth+1, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
+						prob.popAddress()
 					end
 				end
 				if upok then
 					if flip(spreadProb(depth)) then
+						prob.pushAddress("up")
 						upTower(depth+1, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
+						prob.popAddress()
 					end
 				end
 			end
@@ -105,7 +114,9 @@ return function(makeGeoPrim)
 	end
 
 	return function()
+		prob.pushAddress("central")
 		centralTower(0, 0, -2, 2, -2, 2)
+		prob.popAddress()
 	end
 end
 
