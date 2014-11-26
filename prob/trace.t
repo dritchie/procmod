@@ -377,6 +377,7 @@ end
 
 local flip = makeSampler(distrib.bernoulli)
 local multinomial = makeSampler(distrib.multinomial)
+local gaussian = makeSampler(distrib.gaussian)
 
 -- Decided to do uniform this way so that we don't have range-invalidation
 --    problems if and when we ever do MH.

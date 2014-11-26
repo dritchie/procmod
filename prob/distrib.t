@@ -52,6 +52,32 @@ local multinomial =
 	end
 }
 
+local gaussian = 
+{
+	sample = function(mu, sigma)
+		local u, v, x, y, q
+		repeat
+			u = 1 - math.random()
+			v = 1.7156 * (math.random() - 0.5)
+			x = u - 0.449871
+			y = math.abs(v) + 0.386595
+			q = x*x + y*(0.196*y - 0.25472*x)
+		until not(q >= 0.27597 and (q > 0.27846 or v*v > -4 * u * u * math.log(u)))
+		return mu + sigma*v/u
+	end,
+	logprob = function(x, mu, sigma)
+		local xminusmu = x - mu
+		return -.5*(1.8378770664093453 + 2*math.log(sigma) + xminusmu*xminusmu/(sigma*sigma))
+	end
+}
+function gaussian.propose(currval, mu, sigma)
+	local newval = gaussian.sample(currval, sigma)
+	local fwdlp = gaussian.logprob(newval, currval, sigma)
+	local rvslp = gaussian.logprob(currval, newval, sigma)
+	return newval, fwdlp, rvslp
+end
+
+
 
 return
 {
