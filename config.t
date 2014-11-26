@@ -15,20 +15,24 @@ end
 function Config:init(filename)
 	for line in io.lines(filename) do
 		local toks = splitstring(line, " \t")
-		-- Skip comments and empty lines
 		local key = toks[1]
-		if key and not (key == "#") then
-			assert(#toks == 2, string.format("Found malformed config line:\n%s", line))
-			local val = toks[2]
-			-- Check for an include directive
-			if key == "#include" then
-				self:init(val)	-- val is the filename
-			-- Check if the parameter is a boolean
-			elseif val == "true" then val = true elseif val == "false" then val = false
-			-- Check if it's a number
-			elseif tonumber(val) then val = tonumber(val) end
-			-- Just leave it as a raw string
-			self[key] = val
+		-- Skip comments and empty lines
+		local isEmpty = not key
+		if not isEmpty then
+			local isComment = ((string.sub(key, 1, 1) == "#") and (not (key == "#include")))
+			if not isComment then
+				assert(#toks == 2, string.format("Found malformed config line:\n%s", line))
+				local val = toks[2]
+				-- Check for an include directive
+				if key == "#include" then
+					self:init(val)	-- val is the filename
+				-- Check if the parameter is a boolean
+				elseif val == "true" then val = true elseif val == "false" then val = false
+				-- Check if it's a number
+				elseif tonumber(val) then val = tonumber(val) end
+				-- Just leave it as a raw string
+				self[key] = val
+			end
 		end
 	end
 	return self
