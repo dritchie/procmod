@@ -47,7 +47,7 @@ local Mesh = S.memoize(function(real)
 
 	terra Mesh:draw()
 		-- Just simple immediate mode drawing for now
-		gl.glBegin(gl.mGL_TRIANGLES())
+		gl.glBegin(gl.GL_TRIANGLES)
 		for i in self.indices do
 			glNormal(&(self.normals(i.normal).entries[0]))
 			glVertex(&(self.vertices(i.vertex).entries[0]))

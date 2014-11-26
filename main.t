@@ -14,18 +14,6 @@ local C = terralib.includecstring [[
 ]]
 
 gl.exposeConstants({
-	"GLUT_LEFT_BUTTON",
-	"GLUT_MIDDLE_BUTTON",
-	"GLUT_RIGHT_BUTTON",
-	"GLUT_UP",
-	"GLUT_DOWN",
-	"GL_POLYGON_OFFSET_FILL",
-	"GLUT_ACTIVE_ALT",
-	"GL_VIEWPORT",
-	"GLUT_KEY_LEFT",
-	"GLUT_KEY_RIGHT",
-	"GLUT_KEY_UP",
-	"GLUT_KEY_DOWN",
 	{"GLUT_BITMAP_HELVETICA_18", "void*"}
 })
 
@@ -38,10 +26,6 @@ local Samples = S.Vector(Sample)
 local Generations = S.Vector(Samples)
 
 -- Constants
--- local GENERATE_FILE = "generate.t"
--- local GENERATE_FILE = "smc/generate_randorder_recursive_deferifs.t"
--- local GENERATE_FILE = "smc/generate_recursive.t"
--- local GENERATE_FILE = "mhsmc/generate.t"
 local GENERATE_FILE = "lua/generate.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
@@ -194,9 +178,9 @@ end
 
 local terra init()
 	gl.glClearColor(0.2, 0.2, 0.2, 1.0)
-	gl.glEnable(gl.mGL_DEPTH_TEST())
-	-- gl.glEnable(gl.mGL_CULL_FACE())
-	gl.glEnable(gl.mGL_NORMALIZE())
+	gl.glEnable(gl.GL_DEPTH_TEST)
+	-- gl.glEnable(gl.GL_CULL_FACE)
+	gl.glEnable(gl.GL_NORMALIZE)
 
 	generations:init()
 	voxelMesh:init()
@@ -209,11 +193,11 @@ end
 
 
 local terra shadingMeshDrawPass()
-	gl.glEnable(gl.mGL_LIGHTING())
-	gl.glShadeModel(gl.mGL_FLAT())
-	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_FILL())
+	gl.glEnable(gl.GL_LIGHTING)
+	gl.glShadeModel(gl.GL_FLAT)
+	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
 	-- Offset solid face pass so that we can render lines on top
-	gl.glEnable(gl.mGL_POLYGON_OFFSET_FILL())
+	gl.glEnable(gl.GL_POLYGON_OFFSET_FILL)
 	gl.glPolygonOffset(1.0, 1.0)	-- are these good numbers? maybe use camera zmin/zmax?
 
 	light:setupGLLight(0)
@@ -224,27 +208,27 @@ end
 
 
 local terra wireframeMeshDrawPass()
-	gl.glDisable(gl.mGL_POLYGON_OFFSET_FILL())
-	gl.glDisable(gl.mGL_LIGHTING())
+	gl.glDisable(gl.GL_POLYGON_OFFSET_FILL)
+	gl.glDisable(gl.GL_LIGHTING)
 	gl.glColor4d(0.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
-	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
+	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
 
 	displayMesh:draw()
 end
 
 local terra drawGrid()
-	gl.glDisable(gl.mGL_POLYGON_OFFSET_FILL())
-	gl.glDisable(gl.mGL_LIGHTING())
+	gl.glDisable(gl.GL_POLYGON_OFFSET_FILL)
+	gl.glDisable(gl.GL_LIGHTING)
 	gl.glColor4d(1.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
-	gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_LINE())
+	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
 	var extents = bounds:extents()
 	var numvox = (extents / globals.VOXEL_SIZE):ceil()
 	var xsize = extents(0) / numvox(0)
 	var ysize = extents(1) / numvox(1)
 	var zsize = extents(2) / numvox(2)
-	gl.glMatrixMode(gl.mGL_MODELVIEW())
+	gl.glMatrixMode(gl.GL_MODELVIEW)
 	gl.glPushMatrix()
 	gl.glTranslated(bounds.mins(0), bounds.mins(1), bounds.mins(2))
 	gl.glScaled(xsize, ysize, zsize)
@@ -254,7 +238,7 @@ local terra drawGrid()
 			var y = double(yi)
 			for zi=0,uint(numvox(2)) do
 				var z = double(zi)
-				gl.glBegin(gl.mGL_QUADS())
+				gl.glBegin(gl.GL_QUADS)
 					-- Face
 					gl.glVertex3d(x, y, z)
 					gl.glVertex3d(x, y, z+1)
@@ -343,7 +327,7 @@ local moveToNewLine = macro(function(y)
 end)
 
 local terra screenQuad(x: double, y: double, w: double, h: double)
-	gl.glBegin(gl.mGL_QUADS())
+	gl.glBegin(gl.GL_QUADS)
 		gl.glVertex2d(x, y)
 		gl.glVertex2d(x+w, y)
 		gl.glVertex2d(x+w, y+h)
@@ -352,18 +336,18 @@ local terra screenQuad(x: double, y: double, w: double, h: double)
 end
 local terra drawOverlay()
 	-- Set up the viewing transform
-	gl.glDisable(gl.mGL_DEPTH_TEST())
-	gl.glMatrixMode(gl.mGL_PROJECTION())
+	gl.glDisable(gl.GL_DEPTH_TEST)
+	gl.glMatrixMode(gl.GL_PROJECTION)
 	gl.glPushMatrix()
 	gl.glLoadIdentity()
 	var viewport : int[4]
-	gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
+	gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
 	var vxstart = viewport[0]
 	var vystart = viewport[1]
 	var vwidth = viewport[2]
 	var vheight = viewport[3]
 	gl.gluOrtho2D(double(viewport[0]), double(viewport[2]), double(viewport[1]), double(viewport[3]))
-	gl.glMatrixMode(gl.mGL_MODELVIEW())
+	gl.glMatrixMode(gl.GL_MODELVIEW)
 	gl.glPushMatrix()
 	gl.glLoadIdentity()
 
@@ -414,7 +398,7 @@ local terra drawOverlay()
 
 	-- Draw a little 'navigation bar' at the bottom
 	if isDisplayingSample() and samples:size() > 1 then
-		gl.glPolygonMode(gl.mGL_FRONT_AND_BACK(), gl.mGL_FILL())
+		gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
 		-- First, draw a bar across the screen colored by score
 		var height = 20.0
 		var width = vwidth / double(samples:size())
@@ -434,13 +418,13 @@ local terra drawOverlay()
 	end
 
 	gl.glPopMatrix()
-	gl.glMatrixMode(gl.mGL_PROJECTION())
+	gl.glMatrixMode(gl.GL_PROJECTION)
 	gl.glPopMatrix()
-	gl.glEnable(gl.mGL_DEPTH_TEST())
+	gl.glEnable(gl.GL_DEPTH_TEST)
 end
 
 local terra display()
-	gl.glClear(gl.mGL_COLOR_BUFFER_BIT() or gl.mGL_DEPTH_BUFFER_BIT())
+	gl.glClear(gl.GL_COLOR_BUFFER_BIT or gl.GL_DEPTH_BUFFER_BIT)
 
 	if displayMesh ~= nil then
 		shadingMeshDrawPass()
@@ -466,11 +450,11 @@ end
 
 
 local terra mouse(button: int, state: int, x: int, y: int)
-	if state == gl.mGLUT_DOWN() then
+	if state == gl.GLUT_DOWN then
 		prevbutton = button
 		prevx = x
 		prevy = y
-		alt = (gl.glutGetModifiers() == gl.mGLUT_ACTIVE_ALT())
+		alt = (gl.glutGetModifiers() == gl.GLUT_ACTIVE_ALT)
 	end
 end
 
@@ -478,13 +462,13 @@ end
 local terra cameraMotion(x: int, y: int)
 	var dx = x - prevx
 	var dy = y - prevy
-	if prevbutton == gl.mGLUT_LEFT_BUTTON() then
+	if prevbutton == gl.GLUT_LEFT_BUTTON then
 		camera:orbitLeft(-dx * ORBIT_SPEED)
 		camera:orbitUp(dy * ORBIT_SPEED)
-	elseif prevbutton == gl.mGLUT_MIDDLE_BUTTON() then
+	elseif prevbutton == gl.GLUT_MIDDLE_BUTTON then
 		camera:dollyLeft(dx * DOLLY_SPEED)
 		camera:dollyUp(dy * DOLLY_SPEED)
-	elseif prevbutton == gl.mGLUT_RIGHT_BUTTON() then
+	elseif prevbutton == gl.GLUT_RIGHT_BUTTON then
 		var val = dx
 		if dy*dy > dx*dx then
 			val = dy
@@ -499,9 +483,9 @@ end
 
 
 local terra sampleIndexScrub(x: int, y: int)
-	if prevbutton == gl.mGLUT_LEFT_BUTTON() and samples ~= nil then
+	if prevbutton == gl.GLUT_LEFT_BUTTON and samples ~= nil then
 		var viewport : int[4]
-		gl.glGetIntegerv(gl.mGL_VIEWPORT(), viewport)
+		gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
 		var w = viewport[2]
 		if x < 0 then x = 0 end
 		if x >= w then x = w-1 end
@@ -548,13 +532,13 @@ end
 
 
 local terra special(key: int, x: int, y: int)
-	if key == gl.mGLUT_KEY_LEFT() then
+	if key == gl.GLUT_KEY_LEFT then
 		setSampleIndex(currSampleIndex - 1)
-	elseif key == gl.mGLUT_KEY_RIGHT() then
+	elseif key == gl.GLUT_KEY_RIGHT then
 		setSampleIndex(currSampleIndex + 1)
-	elseif key == gl.mGLUT_KEY_UP() then
+	elseif key == gl.GLUT_KEY_UP then
 		setGenerationIndex(currGenIndex - 1, false)
-	elseif key == gl.mGLUT_KEY_DOWN() then
+	elseif key == gl.GLUT_KEY_DOWN then
 		setGenerationIndex(currGenIndex + 1, false)
 	end
 end
@@ -565,7 +549,7 @@ local terra main()
 	var argc = 0
 	gl.glutInit(&argc, nil)
 	gl.glutInitWindowSize(INITIAL_RES, INITIAL_RES)
-	gl.glutInitDisplayMode(gl.mGLUT_RGB() or gl.mGLUT_DOUBLE() or gl.mGLUT_DEPTH())
+	gl.glutInitDisplayMode(gl.GLUT_RGB or gl.GLUT_DOUBLE or gl.GLUT_DEPTH)
 	gl.glutCreateWindow("Procedural Modeling")
 
 	gl.glutReshapeFunc(reshape)

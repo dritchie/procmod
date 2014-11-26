@@ -70,12 +70,12 @@ local Camera = S.memoize(function(real)
 
 	-- OpenGL 1.1 style
 	terra Camera:setupGLPerspectiveView()
-		gl.glMatrixMode(gl.mGL_MODELVIEW())
+		gl.glMatrixMode(gl.GL_MODELVIEW)
 		gl.glLoadIdentity()
 		gl.gluLookAt(self.eye(0), self.eye(1), self.eye(2),
 					 self.target(0), self.target(1), self.target(2),
 					 self.up(0), self.up(1), self.up(2))
-		gl.glMatrixMode(gl.mGL_PROJECTION())
+		gl.glMatrixMode(gl.GL_PROJECTION)
 		gl.glLoadIdentity()
 		gl.gluPerspective(self.fovy, self.aspect, self.znear, self.zfar)
 	end
@@ -195,21 +195,21 @@ local Light = S.memoize(function(real)
 
 	-- OpenGL 1.1 style
 	terra Light:setupGLLight(lightID: int)
-		if lightID < 0 or lightID >= gl.mGL_MAX_LIGHTS() then
-			S.printf("lightID must be in the range [0,%d); got %d instead\n", 0, gl.mGL_MAX_LIGHTS(), lightID)
+		if lightID < 0 or lightID >= gl.GL_MAX_LIGHTS then
+			S.printf("lightID must be in the range [0,%d); got %d instead\n", 0, gl.GL_MAX_LIGHTS, lightID)
 			S.assert(false)
 		end
-		var lightNumFlag = gl.mGL_LIGHT0() + lightID
+		var lightNumFlag = gl.GL_LIGHT0 + lightID
 		gl.glEnable(lightNumFlag)
 		var floatArr = arrayof(float, elems(self.ambient))
-		gl.glLightfv(lightNumFlag, gl.mGL_AMBIENT(), floatArr)
+		gl.glLightfv(lightNumFlag, gl.GL_AMBIENT, floatArr)
 		floatArr = arrayof(float, elems(self.diffuse))
-		gl.glLightfv(lightNumFlag, gl.mGL_DIFFUSE(), floatArr)
+		gl.glLightfv(lightNumFlag, gl.GL_DIFFUSE, floatArr)
 		floatArr = arrayof(float, elems(self.specular))
-		gl.glLightfv(lightNumFlag, gl.mGL_SPECULAR(), floatArr)
+		gl.glLightfv(lightNumFlag, gl.GL_SPECULAR, floatArr)
 		-- Leverage the fact that the light type flags correspond to the value of the w coordinate
 		floatArr = arrayof(float, elems(self.pos), self.type)
-		gl.glLightfv(lightNumFlag, gl.mGL_POSITION(), floatArr)
+		gl.glLightfv(lightNumFlag, gl.GL_POSITION, floatArr)
 	end
 
 	return Light
@@ -256,14 +256,14 @@ local Material = S.memoize(function(real)
 	-- OpenGL 1.1 style
 	terra Material:setupGLMaterial()
 		-- Just default everything to only affecting the front faces
-		var flag = gl.mGL_FRONT()
+		var flag = gl.GL_FRONT
 		var floatArr = arrayof(float, elems(self.ambient))
-		gl.glMaterialfv(flag, gl.mGL_AMBIENT(), floatArr)
+		gl.glMaterialfv(flag, gl.GL_AMBIENT, floatArr)
 		floatArr = arrayof(float, elems(self.diffuse))
-		gl.glMaterialfv(flag, gl.mGL_DIFFUSE(), floatArr)
+		gl.glMaterialfv(flag, gl.GL_DIFFUSE, floatArr)
 		floatArr = arrayof(float, elems(self.specular))
-		gl.glMaterialfv(flag, gl.mGL_SPECULAR(), floatArr)
-		gl.glMaterialf(flag, gl.mGL_SHININESS(), self.shininess)
+		gl.glMaterialfv(flag, gl.GL_SPECULAR, floatArr)
+		gl.glMaterialf(flag, gl.GL_SHININESS, self.shininess)
 	end
 
 	return Material
