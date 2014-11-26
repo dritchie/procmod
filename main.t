@@ -3,10 +3,10 @@ local qs = terralib.require("qs")
 local globals = terralib.require("globals")
 local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
-local Mesh = terralib.require("mesh")
+local Mesh = terralib.require("geometry.mesh")
 local Vec = terralib.require("linalg.vec")
-local BinaryGrid = terralib.require("binaryGrid3d")
-local BBox = terralib.require("bbox")
+local BinaryGrid = terralib.require("geometry.binaryGrid3d")
+local BBox = terralib.require("geometry.bbox")
 
 
 local C = terralib.includecstring [[
@@ -26,7 +26,7 @@ local Samples = S.Vector(Sample)
 local Generations = S.Vector(Samples)
 
 -- Constants
-local GENERATE_FILE = "lua/generate.t"
+local GENERATE_FILE = "generate.t"
 local INITIAL_RES = 800
 local ORBIT_SPEED = 0.01
 local DOLLY_SPEED = 0.01

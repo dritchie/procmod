@@ -1,6 +1,6 @@
 local S = terralib.require("qs.lib.std")
-local LS = terralib.require("lua.std")
-local distrib = terralib.require("lua.distrib")
+local LS = terralib.require("std")
+local distrib = terralib.require("prob.distrib")
 
 ---------------------------------------------------------------
 

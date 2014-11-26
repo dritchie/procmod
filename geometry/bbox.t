@@ -1,5 +1,5 @@
 local S = terralib.require("qs.lib.std")
-local Intersections = terralib.require("intersection")
+local Intersections = terralib.require("geometry.intersection")
 
 local BBox = S.memoize(function(Vec)
 

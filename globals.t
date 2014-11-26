@@ -1,8 +1,8 @@
 local S = terralib.require("qs.lib.std")
-local Mesh = terralib.require("mesh")(double)
-local BinaryGrid = terralib.require("binaryGrid3d")
+local Mesh = terralib.require("geometry.mesh")(double)
+local BinaryGrid = terralib.require("geometry.binaryGrid3d")
 local Vec3 = terralib.require("linalg.vec")(double, 3)
-local BBox3 = terralib.require("bbox")(Vec3)
+local BBox3 = terralib.require("geometry.bbox")(Vec3)
 
 -- Anything that needs to be global to multiple files
 
@@ -13,11 +13,11 @@ local G = {}
 G.VOXEL_SIZE = 0.25
 G.BOUNDS_EXPAND = 0.1
 G.SOLID_VOXELIZE = true
--- local TARGET_MESH = "geom/shipProxy1.obj"
--- local TARGET_MESH = "geom/shipProxy2.obj"
--- local TARGET_MESH = "geom/buildingProxy1.obj"
-local TARGET_MESH = "geom/buildingProxy1_thicker.obj"
--- local TARGET_MESH = "geom/buildingProxy2.obj"
+-- local TARGET_MESH = "targetgeom/shipProxy1.obj"
+-- local TARGET_MESH = "targetgeom/shipProxy2.obj"
+-- local TARGET_MESH = "targetgeom/buildingProxy1.obj"
+local TARGET_MESH = "targetgeom/buildingProxy1_thicker.obj"
+-- local TARGET_MESH = "targetgeom/buildingProxy2.obj"
 
 
 -- Globals

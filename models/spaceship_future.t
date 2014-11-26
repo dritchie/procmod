@@ -1,6 +1,6 @@
-local prob = terralib.require("lua.prob")
-local Shapes = terralib.require("shapes")(double)
-local Mesh = terralib.require("mesh")(double)
+local prob = terralib.require("prob.prob")
+local Shapes = terralib.require("geometry.shapes")(double)
+local Mesh = terralib.require("geometry.mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 local flip = prob.flip

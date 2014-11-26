@@ -1,10 +1,11 @@
-local prob = terralib.require("lua.prob")
-local Shapes = terralib.require("shapes")(double)
-local Mesh = terralib.require("mesh")(double)
+local prob = terralib.require("prob.prob")
+local Shapes = terralib.require("geometry.shapes")(double)
+local Mesh = terralib.require("geometry.mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 local flip = prob.flip
 local uniform = prob.uniform
+local future = prob.future
 
 ---------------------------------------------------------------
 
@@ -47,7 +48,6 @@ return function(makeGeoPrim)
 		local finished = false
 		local iter = 0
 		repeat
-			prob.setAddressLoopIndex(iter)
 			local maxwidth = xmax-xmin
 			local maxdepth = zmax-zmin
 			local width = uniform(0.5*maxwidth, maxwidth)
@@ -75,32 +75,32 @@ return function(makeGeoPrim)
 			box(cx, ybot + 0.5*height, cz, width, height, depth)
 			if iter == 0 then
 				if leftok then
-					if flip(spreadProb(depth)) then
-						prob.pushAddress("left")
-						leftTower(depth+1, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
-						prob.popAddress()
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							leftTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
 				end
 				if rightok then
-					if flip(spreadProb(depth)) then
-						prob.pushAddress("right")
-						rightTower(depth+1, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
-						prob.popAddress()
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							rightTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
 				end
 				if downok then
-					if flip(spreadProb(depth)) then
-						prob.pushAddress("down")
-						downTower(depth+1, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
-						prob.popAddress()
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							downTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
 				end
 				if upok then
-					if flip(spreadProb(depth)) then
-						prob.pushAddress("up")
-						upTower(depth+1, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
-						prob.popAddress()
-					end
+					future.create(function(ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(depth)) then
+							upTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						end
+					end, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
 				end
 			end
 			ybot = ybot + height
@@ -114,9 +114,8 @@ return function(makeGeoPrim)
 	end
 
 	return function()
-		prob.pushAddress("central")
-		centralTower(0, 0, -2, 2, -2, 2)
-		prob.popAddress()
+		future.create(centralTower, 0, 0, -2, 2, -2, 2)
+		future.finishall()
 	end
 end
 

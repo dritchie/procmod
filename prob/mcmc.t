@@ -1,4 +1,4 @@
-local trace = terralib.require("lua.trace")
+local trace = terralib.require("prob.trace")
 
 
 -- Bookkeeping to help us tell whether an MH-run is replaying still-valid trace or is

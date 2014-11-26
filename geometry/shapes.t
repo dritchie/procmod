@@ -1,5 +1,5 @@
 local S = terralib.require("qs.lib.std")
-local Mesh = terralib.require("mesh")
+local Mesh = terralib.require("geometry.mesh")
 local Vec = terralib.require("linalg.vec")
 
 

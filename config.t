@@ -1,4 +1,4 @@
-local LS = terralib.require("lua.std")
+local LS = terralib.require("std")
 
 
 -- Holds a bunch of config options loaded from a file.

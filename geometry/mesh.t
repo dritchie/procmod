@@ -2,9 +2,9 @@ local S = terralib.require("qs.lib.std")
 local gl = terralib.require("gl.gl")
 local Vec = terralib.require("linalg.vec")
 local Mat = terralib.require("linalg.mat")
-local BBox = terralib.require("bbox")
-local BinaryGrid = terralib.require("binaryGrid3d")
-local Intersections = terralib.require("intersection")
+local BBox = terralib.require("geometry.bbox")
+local BinaryGrid = terralib.require("geometry.binaryGrid3d")
+local Intersections = terralib.require("geometry.intersection")
 
 
 -- Super simple mesh struct that can accumulate geometry and draw itself
