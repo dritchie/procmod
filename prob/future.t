@@ -27,6 +27,7 @@ end
 
 
 local edfuture = {}
+edfuture.__index = edfuture
 
 function edfuture.create(fn, ...)
 	return EagerDeterministicFuture.alloc():init(fn, ...)
@@ -81,7 +82,7 @@ local ldfuture =
 {
 	isrunning = false
 }
-
+ldfuture.__index = ldfuture
 
 
 local LazyDeterministicFuture = LS.LObject()
@@ -196,7 +197,7 @@ local sfuture =
 	isrunning = false,
 	currentlyRunningFuture = nil
 }
-
+sfuture.__index = sfuture
 
 
 -- The future objects themselves need to store more information than just a simple thunk
@@ -290,10 +291,23 @@ end
 
 ---------------------------------------------------------------
 
--- Can switch which implementation of futures we expose
--- local future = edfuture
--- local future = ldfuture
-local future = sfuture
+local future = {}
+
+-- Can switch which implementation of futures we're using
+function future.setImpl(implname)
+	if implname == "eager" then
+		setmetatable(future, edfuture)
+	elseif implname == "lazy" then
+		setmetatable(future, ldfuture)
+	elseif implname == "stochastic" then
+		setmetatable(future, sfuture)
+	else
+		error(string.format("Unrecognized future implementation %s", implname))
+	end
+end
+
+-- We default to stochastic
+future.setImpl("stochastic")
 
 return future
 
