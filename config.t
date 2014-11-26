@@ -14,7 +14,7 @@ end
 
 function Config:init(filename)
 	for line in io.lines(filename) do
-		local toks = splitstring(line)
+		local toks = splitstring(line, " \t")
 		-- Skip comments and empty lines
 		local key = toks[1]
 		if key and not (key == "#") then

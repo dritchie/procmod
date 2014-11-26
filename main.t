@@ -70,7 +70,7 @@ local terra updateBounds()
 	else
 		bounds = displayMesh:bbox()
 	end
-	bounds:expand(globals.BOUNDS_EXPAND)
+	bounds:expand(globals.config.boundsExpand)
 end
 
 
@@ -94,7 +94,7 @@ local terra displayVoxelMesh()
 	--    that would lead to wonky double voxelization
 	if displayMesh ~= nil and displayMesh ~= &voxelMesh then
 		var grid = BinaryGrid.salloc():init()
-		displayMesh:voxelize(grid, &bounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+		displayMesh:voxelize(grid, &bounds, globals.config.voxelSize, globals.config.solidVoxelize)
 		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &bounds)
 		displayMesh = &voxelMesh
 		gl.glutPostRedisplay()
@@ -224,7 +224,7 @@ local terra drawGrid()
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
 	var extents = bounds:extents()
-	var numvox = (extents / globals.VOXEL_SIZE):ceil()
+	var numvox = (extents / globals.config.voxelSize):ceil()
 	var xsize = extents(0) / numvox(0)
 	var ysize = extents(1) / numvox(1)
 	var zsize = extents(2) / numvox(2)

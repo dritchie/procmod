@@ -1,19 +1,15 @@
 local S = terralib.require("qs.lib.std")
 local procmod = terralib.require("procmod")
+local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
--- local program = terralib.require("models.spaceship")
--- local program = terralib.require("models.spaceship_future")
--- local program = terralib.require("models.weird_building")
-local program = terralib.require("models.weird_building_future")
--- local program = terralib.require("models.random_walk")
--- local program = terralib.require("models.cube_fractal")
+local program = terralib.require(globals.config.program)
 
 ---------------------------------------------------------------
 
 local smcopts = {
-	nParticles = 300,
+	nParticles = globals.config.smc_nParticles,
 
 	-- doAnneal = true,
 	-- nAnnealSteps = 20,
@@ -24,20 +20,28 @@ local smcopts = {
 	-- funnelStartNum = 5000,
 	-- funnelEndNum = 200,
 	
-	recordHistory = true,
-	verbose = true
+	recordHistory = globals.config.smc_recordHistory,
+	verbose = globals.config.smc_verbose
 }
 
 local mhopts = {
-	nSamples = 3000,
-	verbose = true
+	nSamples = globals.config.mh_nSamples,
+	verbose = globals.config.mh_verbose
 }
 
 local function run(generations)
-	procmod.SIR(program, generations, smcopts)
-	-- procmod.MH(program, generations, mhopts)
-	-- procmod.RejectionSample(program, generations, 1)
-	-- procmod.ForwardSample(program, generations, 1)
+	local method = globals.config.method
+	if method == "smc" then
+		procmod.SIR(program, generations, smcopts)
+	elseif method == "mh" then
+		procmod.MH(program, generations, mhopts)
+	elseif method == "reject" then
+		procmod.RejectionSample(program, generations, 1)
+	elseif method == "forward" then
+		procmod.ForwardSample(program, generations, 1)
+	else
+		error(string.format("Unrecognized sampling method %s", method))
+	end
 end
 local runterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample))}->{}, run)
 return terra(generations: &S.Vector(S.Vector(procmod.Sample)))

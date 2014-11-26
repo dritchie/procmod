@@ -17,10 +17,10 @@ local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
-local VOXEL_FACTOR_WEIGHT = 0.02
+local VOXEL_FACTOR_WEIGHT = globals.config.voxelFactorWeight
 -- local VOXEL_FILLED_FACTOR_WEIGHT = 0.01
 -- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.08
-local OUTSIDE_FACTOR_WEIGHT = 0.02
+local OUTSIDE_FACTOR_WEIGHT = globals.config.outsideFactorWeight
 
 ---------------------------------------------------------------
 
@@ -64,7 +64,7 @@ State.methods.doUpdate = terra(newmesh: &Mesh, mesh: &Mesh, grid: &BinaryGrid, h
 			grid:resize(globals.targetGrid.rows,
 						globals.targetGrid.cols,
 						globals.targetGrid.slices)
-			newmesh:voxelize(grid, &globals.targetBounds, globals.VOXEL_SIZE, globals.SOLID_VOXELIZE)
+			newmesh:voxelize(grid, &globals.targetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
 		end
 	end
 	mesh:append(newmesh)

@@ -1,0 +1,21 @@
+# Master config file
+# All other config files inherit from (read: #include) this one
+# NOTE: Config files inheriting from this one can override any of these settings,
+#   as well as add new ones
+
+voxelSize				0.25
+boundsExpand			0.1
+solidVoxelize			true
+voxelFactorWeight		0.02
+outsideFactorWeight		0.02
+
+targetMesh				targetgeom/set_me_to_something_valid
+program					models.set_me_to_something_valid
+method					set_me_to_smc_or_mh_or_forward_or_reject
+
+smc_nParticles			a_number
+smc_recordHistory		a_boolean
+smc_verbose				a_boolean
+
+mh_nSamples				a_number
+mh_verbose				a_boolean
