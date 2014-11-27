@@ -270,7 +270,7 @@ local Intersection = S.memoize(function(real)
 		-- Same sign on all + not equal 0 --> no intersection
 		var du0du1 = du0*du1
 		var du0du2 = du0*du2
-		if du0du1 > 0.0 and du0du2 > 0.0 then return false end
+		if du0du1 >= 0.0 and du0du2 >= 0.0 then return false end
 		-- Compute plane equation of triangle u0, u1, u2 (n2.x + d2 = 0)
 		e1 = u1 - u0
 		e2 = u2 - u0
@@ -287,7 +287,7 @@ local Intersection = S.memoize(function(real)
 		-- Same sign on all + not equal 0 --> no intersection
 		var dv0dv1 = dv0*dv1
 		var dv0dv2 = dv0*dv2
-		if dv0dv1 > 0.0 and dv0dv2 > 0.0 then return false end
+		if dv0dv1 >= 0.0 and dv0dv2 >= 0.0 then return false end
 		-- Compute direction of intersection line
 		var D = n1:cross(n2)
 		-- Compute index to largest component of D
@@ -307,6 +307,7 @@ local Intersection = S.memoize(function(real)
 		-- Compute interval for triangle 1
 		var a: real, b: real, c: real, x0: real, x1: real
 		if NEWCOMPUTE_INTERVALS(vp0, vp1, vp2, dv0, dv1, dv2, dv0dv1, dv0dv2, &a, &b, &c, &x0, &x1) then
+			-- S.printf("coplanar\n")
 			if coplanarCounts then
 				return coplanar_tri_tri(n1, v0, v1, v2, u0, u1, u2)
 			else
@@ -315,6 +316,7 @@ local Intersection = S.memoize(function(real)
 		end
 		var d: real, e: real, f: real, y0: real, y1: real
 		if NEWCOMPUTE_INTERVALS(up0, up1, up2, du0, du1, du2, du0du1, du0du2, &d, &e, &f, &y0, &y1) then
+			-- S.printf("coplanar\n")
 			if coplanarCounts then
 				return coplanar_tri_tri(n1, v0, v1, v2, u0, u1, u2)
 			else
@@ -335,7 +337,7 @@ local Intersection = S.memoize(function(real)
 		isect2(1) = tmp + f*xx*y0
 		SORT(isect1(0), isect1(1))
 		SORT(isect2(0), isect2(1))
-		if isect1(1) < isect2(0) or isect2(1) < isect1(0) then return false end
+		if isect1(1) <= isect2(0) or isect2(1) <= isect1(0) then return false end
 		return true
 	end
 
