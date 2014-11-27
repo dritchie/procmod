@@ -83,6 +83,7 @@ return
 {
 	bernoulli = bernoulli,
 	uniform = uniform,
-	multinomial = multinomial
+	multinomial = multinomial,
+	gaussian = gaussian
 }
 

@@ -5,10 +5,14 @@ local prob = {
 	-- ERPs
 	flip = trace.flip,
 	uniform = trace.uniform,
-	factor = trace.factor,
+	multinomial = trace.multinomial,
+	gaussian = trace.gaussian,
 
 	-- Likelihood adjustments
+	factor = trace.factor,
 	likelihood = trace.likelihood,
+
+	-- Futures
 	future = future,
 
 	-- Address management

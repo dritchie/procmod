@@ -20,6 +20,12 @@ function U.includecstring_path(str)
 	return terralib.includecstring(str, "-I", cpath)
 end
 
+function U.appendTable(t1, t2)
+	for _,v in ipairs(t2) do
+		table.insert(t1, v)
+	end
+end
+
 -- The log of the minimum-representable double precision float
 -- TODO: Replace with log of the minimum-representable *non-denormalized* double?
 local LOG_DBL_MIN = -708.39641853226

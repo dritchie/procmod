@@ -10,7 +10,7 @@ local shapes = S.memoize(function(real)
 	local shapes = {}
 
 	-- Builds a quad using existing vertices and adding in a new normal
-	local terra quad(mesh: &MeshT, i0: uint, i1: uint, i2: uint, i3: uint)
+	local terra quad(mesh: &MeshT, i0: uint, i1: uint, i2: uint, i3: uint) : {}
 		var ni = mesh:numNormals()
 		var v0 = mesh:getVertex(i0)
 		var v1 = mesh:getVertex(i1)
@@ -26,7 +26,7 @@ local shapes = S.memoize(function(real)
 		mesh:addIndex(i0, ni)
 	end
 
-	terra shapes.Quad(mesh: &MeshT, v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3)
+	terra shapes.addQuad(mesh: &MeshT, v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3) : {}
 		var vi = mesh:numVertices()
 		mesh:addVertex(v0)
 		mesh:addVertex(v1)
@@ -35,7 +35,9 @@ local shapes = S.memoize(function(real)
 		quad(mesh, vi+0, vi+1, vi+2, vi+3)
 	end
 
-	terra shapes.Box(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real)
+	shapes.addQuad:adddefinition(quad:getdefinitions()[1])
+
+	terra shapes.addBox(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real) : {}
 		var xh = xlen*0.5
 		var yh = ylen*0.5
 		var zh = zlen*0.5
@@ -59,26 +61,7 @@ local shapes = S.memoize(function(real)
 		quad(mesh, vi+2, vi+3, vi+7, vi+6) -- Top
 	end
 
-	-- Two versions of every generator:
-	--    * 'add' - appends the geometry to an existing mesh
-	--    * 'make' - creates a new mesh with the geometry
-	local finalshapes = {}
-	for name,func in pairs(shapes) do
-		finalshapes[string.format("add%s", name)] = func
-		finalshapes[string.format("make%s", name)] = macro(function(...)
-			local args = {...}
-			return quote
-				-- Caller assumes ownership of mesh's memory
-				var mesh : Mesh(real)
-				mesh:init()
-				func(mesh, [args])
-			in
-				mesh
-			end
-		end)
-	end
-
-	return finalshapes
+	return shapes
 end)
 
 

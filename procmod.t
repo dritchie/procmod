@@ -214,12 +214,12 @@ local function SIR(module, outgenerations, opts)
 			geofn(tmpmesh, [args])
 			globState:update(tmpmesh, true)
 		end
-		args = geofnargs(geofn)
-		local terra predictScore([args])
-			var tmpmesh = Mesh.salloc():init()
-			geofn(tmpmesh, [args])
-			return globState:predictScore(tmpmesh)
-		end
+		-- args = geofnargs(geofn)
+		-- local terra predictScore([args])
+		-- 	var tmpmesh = Mesh.salloc():init()
+		-- 	geofn(tmpmesh, [args])
+		-- 	return globState:predictScore(tmpmesh)
+		-- end
 		-- Now we wrap this in a Lua function that checks whether this work
 		--    needs to be done at all
 		return function(...)

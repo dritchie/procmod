@@ -402,6 +402,7 @@ return
 	flip = flip,
 	uniform = uniform,
 	multinomial = multinomial,
+	gaussian = gaussian,
 	factor = function(num) if globalTrace then globalTrace:addFactor(num) end end,
 	likelihood = function(num) if globalTrace then globalTrace:setLoglikelihood(num) end end,
 	nextVarIndex = function() if globalTrace then return globalTrace:getNextVarIndex() end end,
