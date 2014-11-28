@@ -26,34 +26,35 @@ return S.memoize(function(N)
 	end
 
 	function Vec:__unm()
-		var v = self:newcopy()
-		for i-1,N do v[i] = -v[i] end
+		local v = self:newcopy()
+		for i=1,N do v[i] = -v[i] end
+		return v
 	end
 
 	function Vec.__add(v1, v2)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = v[i] + v2[i] end
 		return v
 	end
 
 	function Vec.__sub(v1, v2)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = v[i] - v2[i] end
 		return v
 	end
 
 	function Vec.vecVecMul(v1, v2)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = v[i] * v2[i] end
 		return v
 	end
 	function Vec.scalarVecMul(s, v1)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = s * v[i] end
 		return v
 	end
 	function Vec.vecScalarMul(v1, s)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = s * v[i] end
 		return v
 	end
@@ -68,12 +69,12 @@ return S.memoize(function(N)
 	end
 
 	function Vec.vecScalarDiv(v1, s)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = v[i] / s end
 		return v
 	end
 	function Vec.vecVecDiv(v1, v2)
-		var v = v1:newcopy()
+		local v = v1:newcopy()
 		for i=1,N do v[i] = v[i] / v2[i] end
 		return v
 	end
@@ -131,7 +132,6 @@ return S.memoize(function(N)
 	function Vec:normalize()
 		local n = self:norm()
 		for i=1,N do self[i] = self[i] / n end
-		end
 	end
 
 	function Vec:normalized()

@@ -6,6 +6,8 @@ local Mat4 = terralib.require("linalg.mat")(double, 4, 4)
 local util = terralib.require("util")
 local S = terralib.require("qs.lib.std")
 local cmath = terralib.includec("math.h")
+local LVec3 = terralib.require("linalg.luavec")(3)
+local LTransform = terralib.require("linalg.luaxform")
 
 local flip = prob.flip
 local uniform = prob.uniform
@@ -14,6 +16,8 @@ local gaussian = prob.gaussian
 ---------------------------------------------------------------
 
 return function(makeGeoPrim)
+
+	local function lerp(lo, hi, t) return (1-t)*lo + t*hi end
 
 	local function unpackFrame(frame)
 		return frame.center[1], frame.center[2], frame.center[3],
@@ -24,92 +28,52 @@ return function(makeGeoPrim)
 
 	local function packFrame(cx, cy, cz, fx, fy, fz, ux, uy, uz, r)
 		return {
-			center = {cx, cy, cz},
-			forward = {fx, fy, fz},
-			up = {ux, uy, uz},
+			center = LVec3.new(cx, cy, cz),
+			forward = LVec3.new(fx, fy, fz),
+			up = LVec3.new(ux, uy, uz),
 			radius = r
 		}
 	end
 
-	local terra _advanceFrame(f0_cx: double, f0_cy: double, f0_cz: double,
-							  f0_fx: double, f0_fy: double, f0_fz: double,
-							  f0_ux: double, f0_uy: double, f0_uz: double,
-							  f0_r: double,
-							  uprot: double, leftrot: double, len: double, endradius: double)
-		var c = Vec3.create(f0_cx, f0_cy, f0_cz)
-		var fwd = Vec3.create(f0_fx, f0_fy, f0_fz)
-		var up = Vec3.create(f0_ux, f0_uy, f0_uz)
-		var left = up:cross(fwd)
-		var uprotmat = Mat4.rotate(up, uprot)
-		var leftrotmat = Mat4.rotate(left, leftrot)
-		var newup = leftrotmat:transformVector(up)
-		var newfwd = (leftrotmat*uprotmat):transformVector(fwd)
-		-- var newup = up
-		-- var newfwd = fwd
-		var newc = c + len*newfwd
-		return newc(0), newc(1), newc(2),
-			   newfwd(0), newfwd(1), newfwd(2),
-			   newup(0), newup(1), newup(2),
-			   endradius
-	end
 	local function advanceFrame(frame, uprot, leftrot, len, endradius)
-		local args = {unpackFrame(frame)}
-		table.insert(args, uprot)
-		table.insert(args, leftrot)
-		table.insert(args, len)
-		table.insert(args, endradius)
-		return packFrame(unpacktuple(_advanceFrame(unpack(args))))
+		local c = frame.center
+		local fwd = frame.forward
+		local up = frame.up
+		local left = up:cross(fwd)
+		local uprotmat = LTransform.rotate(up, uprot)
+		local leftrotmat = LTransform.rotate(left, leftrot)
+		local newup = leftrotmat:transformVector(up)
+		local newfwd = (leftrotmat*uprotmat):transformVector(fwd)
+		local newc = c + len*newfwd
+		return {
+			center = newc,
+			forward = newfwd,
+			up = newup,
+			radius = endradius
+		}
 	end
 
-	local lerp = macro(function(lo, hi, t) return `(1.0-t)*lo + t*hi end)
-	local terra _branchFrame(f0_cx: double, f0_cy: double, f0_cz: double,
-						     f0_fx: double, f0_fy: double, f0_fz: double,
-						     f0_ux: double, f0_uy: double, f0_uz: double,
-						     f0_r: double,
-						     f1_cx: double, f1_cy: double, f1_cz: double,
-						     f1_fx: double, f1_fy: double, f1_fz: double,
-						     f1_ux: double, f1_uy: double, f1_uz: double,
-						     f1_r: double,
-						     t: double, theta: double, radius: double)
-		var c0 = Vec3.create(f0_cx, f0_cy, f0_cz)
-		var fwd0 = Vec3.create(f0_fx, f0_fy, f0_fz)
-		var up0 = Vec3.create(f0_ux, f0_uy, f0_uz)
-		var r0 = f0_r
-		var c1 = Vec3.create(f1_cx, f1_cy, f1_cz)
-		var fwd1 = Vec3.create(f1_fx, f1_fy, f1_fz)
-		var up1 = Vec3.create(f1_ux, f1_uy, f1_uz)
-		var r1 = f1_r
-
+	local function branchFrame(startFrame, endFrame, t, theta, radius)
 		-- Construct the frame at the given t value
-		var ct = lerp(c0, c1, t)
-		var rt = lerp(r0, r1, t)
+		local ct = lerp(startFrame.center, endFrame.center, t)
+		local rt = lerp(startFrame.radius, endFrame.radius, t)
 
 		-- Construct the branch frame
-		var m = Mat4.rotate(fwd1, theta, ct)
-		var m1 = Mat4.rotate(fwd1, theta, c1)
-		var cbf = m:transformPoint(ct + up1*rt)
-		var upbf = m1:transformPoint(c1 + up1*r1) - cbf; upbf:normalize()
-		var fwdbf = cbf - ct; fwdbf:normalize()
-		var leftbf = upbf:cross(fwdbf)
+		local m = LTransform.pivot(endFrame.forward, theta, ct)
+		local m1 = LTransform.pivot(endFrame.forward, theta, endFrame.center)
+		local cbf = m:transformPoint(ct + rt*endFrame.up)
+		local upbf = (m1:transformPoint(endFrame.center + endFrame.radius*endFrame.up) - cbf):normalized()
+		local fwdbf = (cbf - ct):normalized()
+		local leftbf = upbf:cross(fwdbf)
 		fwdbf = leftbf:cross(upbf)
 
 		-- TODO: Actually compute correct 'previous trunk radius' values
-		return cbf(0), cbf(1), cbf(2),
-			   fwdbf(0), fwdbf(1), fwdbf(2),
-			   upbf(0), upbf(1), upbf(2),
-			   radius,
-			   0.0, 0.0 
-	end
-	local function branchFrame(startFrame, endFrame, t, theta, radius)
-		local args = {unpackFrame(startFrame)}
-		util.appendTable(args, {unpackFrame(endFrame)})
-		table.insert(args, t)
-		table.insert(args, theta)
-		table.insert(args, radius)
-		local retvals = {unpacktuple(_branchFrame(unpack(args)))}
-		local ptr1 = retvals[#retvals]; retvals[#retvals] = nil
-		local ptr0 = retvals[#retvals]; retvals[#retvals] = nil
-		return packFrame(unpack(retvals)), ptr0, ptr1
+		return {
+			center = cbf,
+			forward = fwdbf,
+			up = upbf,
+			radius = radius
+		}, 0, 0
 	end
 
 	local terra circleOfVerts(mesh: &Mesh, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
@@ -140,55 +104,6 @@ return function(makeGeoPrim)
 			Shapes.addQuad(mesh, bvi + (n/2)+i, bvi + (n/2)+i+1, bvi + n-i-1, bvi + (n-i)%n)
 		end
 	end
-
-
-
-	local terra _branchVis(mesh: &Mesh, 
-							f0_cx: double, f0_cy: double, f0_cz: double,
-						     f0_fx: double, f0_fy: double, f0_fz: double,
-						     f0_ux: double, f0_uy: double, f0_uz: double,
-						     f0_r: double,
-						     f1_cx: double, f1_cy: double, f1_cz: double,
-						     f1_fx: double, f1_fy: double, f1_fz: double,
-						     f1_ux: double, f1_uy: double, f1_uz: double,
-						     f1_r: double)
-		var c0 = Vec3.create(f0_cx, f0_cy, f0_cz)
-		var fwd0 = Vec3.create(f0_fx, f0_fy, f0_fz)
-		var up0 = Vec3.create(f0_ux, f0_uy, f0_uz)
-		var r0 = f0_r
-		var c1 = Vec3.create(f1_cx, f1_cy, f1_cz)
-		var fwd1 = Vec3.create(f1_fx, f1_fy, f1_fz)
-		var up1 = Vec3.create(f1_ux, f1_uy, f1_uz)
-		var r1 = f1_r
-
-		var t = 0.5
-		var theta = 0.0
-
-		-- Construct the frame at the given t value
-		var ct = lerp(c0, c1, t)
-		var rt = lerp(r0, r1, t)
-
-		-- -- Visualize where this actually is
-		var bvi = mesh:numVertices()
-		-- circleOfVerts(mesh, ct, up1, fwd1, rt, 10)
-		-- cylinderCap(mesh, bvi, 10)
-
-		-- Construct the branch frame
-		var m = Mat4.rotate(fwd1, theta, ct)
-		var m1 = Mat4.rotate(fwd1, theta, c1)
-		var cbf = m:transformPoint(ct + up1*rt)
-		var upbf = m1:transformPoint(c1 + up1*r1) - cbf; upbf:normalize()
-		var fwdbf = cbf - ct; fwdbf:normalize()
-		var leftbf = upbf:cross(fwdbf)
-		fwdbf = leftbf:cross(upbf)
-
-		-- Visualize where this actually is
-		bvi = mesh:numVertices()
-		circleOfVerts(mesh, cbf, upbf, fwdbf, r1*0.7, 10)
-		cylinderCap(mesh, bvi, 10)
-	end
-
-
 
 	local _treeSegment = makeGeoPrim(terra(mesh: &Mesh,
 										   nSegs: uint,
@@ -223,10 +138,6 @@ return function(makeGeoPrim)
 		cylinderCap(mesh, bvi, nSegs)
 		-- ...and add quads across the top of the cylinder
 		cylinderCap(mesh, bvi+nSegs, nSegs)
-
-		-- _branchVis(mesh,
-		-- 		   f0_cx, f0_cy, f0_cz, f0_fx, f0_fy, f0_fz, f0_ux, f0_uy, f0_uz, f0_r,
-		-- 		   f1_cx, f1_cy, f1_cz, f1_fx, f1_fy, f1_fz, f1_ux, f1_uy, f1_uz, f1_r)
 	end)
 	local function treeSegment(nsegs, prevTrunkRadius0, prevTrunkRadius1, startFrame, endFrame)
 		local args = {nsegs, prevTrunkRadius0, prevTrunkRadius1}
@@ -273,6 +184,7 @@ return function(makeGeoPrim)
 
 			if flip(branchProb(depth)) then
 				-- local theta = uniform(0, 2*math.pi)
+				-- TODO: Theta mean/variance based on avg weighted by 'up-facing-ness'
 				local theta = gaussian(0, math.pi/6)
 				local branchradius = uniform(0.5, 0.9) * endradius
 				local t = 0.5
@@ -289,9 +201,9 @@ return function(makeGeoPrim)
 
 	return function()
 		local startFrame = {
-			center = {0, 0, 0},
-			forward = {0, 1, 0},
-			up = {0, 0, -1},
+			center = LVec3.new(0, 0, 0),
+			forward = LVec3.new(0, 1, 0),
+			up = LVec3.new(0, 0, -1),
 			radius = uniform(0.5, 1)
 		}
 		branch(startFrame, -1, -1, 0)

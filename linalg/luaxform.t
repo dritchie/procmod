@@ -75,7 +75,7 @@ end
 
 function Transform.identity()
 	local t = Transform.alloc():init()
-	for i=1,N do self:__set(i, i, 1) end
+	for i=1,N do t:__set(i, i, 1) end
 	return t
 end
 
