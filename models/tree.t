@@ -183,7 +183,7 @@ return function(makeGeoPrim)
 		local t = -(p0-p2):dot(endFrame.forward) / (p1-p0):dot(endFrame.forward)
 		local p3 = lerp(p0, p1, t)
 		local r = (p3 - p2):norm() * 0.5
-		p2 = p2 + 0.2*r*endFrame.forward 	-- fudge factor
+		p2 = p2 + 0.1*r*endFrame.forward 	-- fudge factor
 		local c = 0.5*(p2 + p3)
 		return {
 			center = c,

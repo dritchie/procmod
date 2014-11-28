@@ -108,6 +108,7 @@ local Mesh = S.memoize(function(real)
 			v2 = v2 - (v2 - centroid)*CONTRACT_EPS
 		end
 	end)
+	local FUDGE_FACTOR = 1e-10
 	terra Mesh:intersects(other: &Mesh) : bool
 		-- First, check that the overall bboxes of the two meshes actually intersect
 		var selfbbox = self:bbox()
@@ -138,7 +139,7 @@ local Mesh = S.memoize(function(real)
 					var othertribbox = BBox3.salloc():init()
 					othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
 					if selftribbox:intersects(othertribbox) then
-						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
+						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false, FUDGE_FACTOR) then
 							return true
 						end	
 					end
@@ -191,7 +192,7 @@ local Mesh = S.memoize(function(real)
 					var othertribbox = BBox3.salloc():init()
 					othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
 					if selftribbox:intersects(othertribbox) then
-						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
+						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false, FUDGE_FACTOR) then
 							hasIntersections = true
 							var bvi = outmesh:numVertices()
 							var bni = outmesh:numNormals()

@@ -253,7 +253,7 @@ local Intersection = S.memoize(function(real)
 
 	local EPSILON = 0.000001
 	terra Intersection.intersectTriangleTriangle(v0: Vec3, v1: Vec3, v2: Vec3, u0: Vec3, u1: Vec3, u2: Vec3,
-												 coplanarCounts: bool)
+												 coplanarCounts: bool, fudgeFactor: double)
 		-- Compute plane equation of triangle v0, v1, v2 (n1.x + d1 = 0)
 		var e1 = v1 - v0
 		var e2 = v2 - v0
@@ -337,7 +337,7 @@ local Intersection = S.memoize(function(real)
 		isect2(1) = tmp + f*xx*y0
 		SORT(isect1(0), isect1(1))
 		SORT(isect2(0), isect2(1))
-		if isect1(1) <= isect2(0) or isect2(1) <= isect1(0) then return false end
+		if isect1(1) <= isect2(0) + fudgeFactor or isect2(1) <= isect1(0) + fudgeFactor then return false end
 		return true
 	end
 
