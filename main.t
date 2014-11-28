@@ -47,6 +47,7 @@ local currSampleIndex = global(int, 0)
 local MAPIndex = global(int)
 local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
+local intersectionMesh = global(Mesh(double))
 local meshSelfIntersects = global(bool, 0)
 local bounds = global(BBox3)
 local camera = global(glutils.Camera(double))
@@ -84,7 +85,13 @@ end
 
 local terra displayNormalMesh()
 	displayMesh = &(samples(currSampleIndex).value)
-	meshSelfIntersects = displayMesh:selfIntersects()
+	updateBounds()
+	gl.glutPostRedisplay()
+end
+
+
+local terra displayIntersectionMesh()
+	displayMesh = &intersectionMesh
 	updateBounds()
 	gl.glutPostRedisplay()
 end
@@ -100,6 +107,18 @@ local terra displayVoxelMesh()
 		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &bounds)
 		displayMesh = &voxelMesh
 		gl.glutPostRedisplay()
+	end
+end
+
+
+local terra setSampleIndex(i: int)
+	if samples ~= nil then
+		if i < 0 then i = samples:size()-1 end
+		if i >= samples:size() then i = 0 end
+		currSampleIndex = i
+		intersectionMesh:clear()
+		meshSelfIntersects = samples(currSampleIndex).value:findAllSelfIntersectingTris(&intersectionMesh)
+		displayNormalMesh()
 	end
 end
 
@@ -127,17 +146,7 @@ local terra setGenerationIndex(i: int, setSampIndexToMAP: bool)
 		if setSampIndexToMAP then
 			currSampleIndex = MAPIndex
 		end
-		displayNormalMesh()
-	end
-end
-
-
-local terra setSampleIndex(i: int)
-	if samples ~= nil then
-		if i < 0 then i = samples:size()-1 end
-		if i >= samples:size() then i = 0 end
-		currSampleIndex = i
-		displayNormalMesh()
+		setSampleIndex(currSampleIndex)
 	end
 end
 
@@ -186,7 +195,9 @@ local terra init()
 
 	generations:init()
 	voxelMesh:init()
+	intersectionMesh:init()
 	camera:init()
+	camera.znear = 0.1
 	light:init()
 	material:init()
 
@@ -523,6 +534,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		displayVoxelMesh()
 	elseif key == char('t') then
 		displayTargetMesh()
+	elseif key == char('i') then
+		displayIntersectionMesh()
 	elseif key == char('m') then
 		setSampleIndex(MAPIndex)
 	elseif key == char('b') then

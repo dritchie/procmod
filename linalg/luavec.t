@@ -150,6 +150,12 @@ return S.memoize(function(N)
 		end
 	end
 
+	function Vec:projectToPlane(p, n)
+		n = n:normalized()
+		local v = self - p
+		return p + (v - v:dot(n)*n)
+	end
+
 	return Vec
 end)
 

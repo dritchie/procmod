@@ -115,7 +115,11 @@ return function(makeGeoPrim)
 										   f1_cx: double, f1_cy: double, f1_cz: double,
 										   f1_fx: double, f1_fy: double, f1_fz: double,
 										   f1_ux: double, f1_uy: double, f1_uz: double,
-										   f1_r: double)
+										   f1_r: double,
+										   f2_cx: double, f2_cy: double, f2_cz: double,
+										   f2_fx: double, f2_fy: double, f2_fz: double,
+										   f2_ux: double, f2_uy: double, f2_uz: double,
+										   f2_r: double)
 		var c0 = Vec3.create(f0_cx, f0_cy, f0_cz)
 		var fwd0 = Vec3.create(f0_fx, f0_fy, f0_fz)
 		var up0 = Vec3.create(f0_ux, f0_uy, f0_uz)
@@ -124,24 +128,33 @@ return function(makeGeoPrim)
 		var fwd1 = Vec3.create(f1_fx, f1_fy, f1_fz)
 		var up1 = Vec3.create(f1_ux, f1_uy, f1_uz)
 		var r1 = f1_r
+		var c2 = Vec3.create(f2_cx, f2_cy, f2_cz)
+		var fwd2 = Vec3.create(f2_fx, f2_fy, f2_fz)
+		var up2 = Vec3.create(f2_ux, f2_uy, f2_uz)
+		var r2 = f2_r
 
 		var bvi = mesh:numVertices()
 
-		-- Vertices 0,nSegs are the bottom outline of the cylinder
+		-- Vertices 0,nSegs are the bottom outline of the base
 		-- TODO: Deal with the 'prev trunk radius' stuff
 		circleOfVerts(mesh, c0, up0, fwd0, r0, nSegs)
-		-- Vertices nSegs+1,2*nSegs are the top outline of the cylinder
+		-- Vertices nSegs+1,2*nSegs are the outline of the split frame
 		circleOfVerts(mesh, c1, up1, fwd1, r1, nSegs)
-		-- Add quads for the outside of the cylinder
+		-- Finally, we have the vertices of the end frame
+		circleOfVerts(mesh, c2, up2, fwd2, r2, nSegs)
+		-- Add quads for the outside between the base and split
 		cylinderSides(mesh, bvi, nSegs)
+		-- Add quads for the outside between the split and end
+		cylinderSides(mesh, bvi+nSegs, nSegs)
 		-- Finally, add quads across the bottom of the cylinder
 		cylinderCap(mesh, bvi, nSegs)
 		-- ...and add quads across the top of the cylinder
-		cylinderCap(mesh, bvi+nSegs, nSegs)
+		cylinderCap(mesh, bvi+2*nSegs, nSegs)
 	end)
-	local function treeSegment(nsegs, prevTrunkRadius0, prevTrunkRadius1, startFrame, endFrame)
+	local function treeSegment(nsegs, prevTrunkRadius0, prevTrunkRadius1, startFrame, splitFrame, endFrame)
 		local args = {nsegs, prevTrunkRadius0, prevTrunkRadius1}
 		util.appendTable(args, {unpackFrame(startFrame)})
+		util.appendTable(args, {unpackFrame(splitFrame)})
 		util.appendTable(args, {unpackFrame(endFrame)})
 		_treeSegment(unpack(args))
 	end
@@ -149,46 +162,65 @@ return function(makeGeoPrim)
 
 	
 	local function continueProb(depth)
-		return math.exp(-0.4*depth)
+		return math.exp(-0.2*depth)
 	end
 	local function branchProb(depth)
-		return math.exp(-0.4*depth)
+		return math.exp(-0.8*depth)
 	end
 
 	local N_SEGS = 10
 	assert(N_SEGS >= 6 and (N_SEGS-2)%4 == 0,
 		"N_SEGS must be one of 6, 10, 14, 18, ...")
 
+
+	local vzero = LVec3.new(0, 0, 0)
+	local function findSplitFrame(startFrame, endFrame)
+		local v = endFrame.forward:projectToPlane(vzero, startFrame.forward):normalized() * startFrame.radius
+		local p0 = startFrame.center - v
+		local p2 = startFrame.center + v
+		local v2 = v:projectToPlane(vzero, endFrame.forward):normalized() * endFrame.radius
+		local p1 = endFrame.center - v2
+		local t = -(p0-p2):dot(endFrame.forward) / (p1-p0):dot(endFrame.forward)
+		local p3 = lerp(p0, p1, t)
+		local r = (p3 - p2):norm() * 0.5
+		p2 = p2 + 0.2*r*endFrame.forward 	-- fudge factor
+		local c = 0.5*(p2 + p3)
+		return {
+			center = c,
+			forward = endFrame.forward,
+			up = endFrame.up,
+			radius = r
+		}
+	end
+
 	local function branch(frame, prevTrunkRadius0, prevTrunkRadius1, depth)
+		-- if depth > 2 then return end
 		local finished = false
 		local i = 0
 		repeat
 			local uprot = gaussian(0, math.pi/12)
 			local leftrot = gaussian(0, math.pi/12)
-			-- TODO: Make len params dependent on the extremity of the chosen rotation
-			local len = uniform(0.1, 0.5)
-			local endradius = uniform(0.8, 0.99) * frame.radius
+			local len = uniform(3, 5) * frame.radius
+			local endradius = uniform(0.7, 0.9) * frame.radius
 
+			-- Figure out where we need to split the segment
+			-- (This is so the part that we branch from is a pure conic section)
 			local nextframe = advanceFrame(frame, uprot, leftrot, len, endradius)
-			treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, nextframe)
-			frame = nextframe
+			local splitFrame = findSplitFrame(frame, nextframe)
 
-			-- TODO: Length params dependent on radius (smaller radius -> shorter branch)
-			len = uniform(0.5, 1.5)
-			uprot = 0.0
-			leftrot = 0.0
-			endradius = uniform(0.7, 0.9) * frame.radius
+			-- Place geometry
+			-- treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, splitFrame)
+			-- treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, splitFrame, nextframe)
+			treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, splitFrame, nextframe)
 
-			nextframe = advanceFrame(frame, uprot, leftrot, len, endradius)
-			treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, nextframe)
 
 			if flip(branchProb(depth)) then
 				-- local theta = uniform(0, 2*math.pi)
 				-- TODO: Theta mean/variance based on avg weighted by 'up-facing-ness'
 				local theta = gaussian(0, math.pi/6)
-				local branchradius = uniform(0.5, 0.9) * endradius
-				local t = 0.5
-				local bframe, ptr0, ptr1 = branchFrame(frame, nextframe, t, theta, branchradius)
+				local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
+				local branchradius = math.min(uniform(0.7, 0.9) * endradius, maxbranchradius)
+				local bframe, ptr0, ptr1 = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius)
 				branch(bframe, ptr0, ptr1, depth+1)
 			end
 			-- local finished = true
@@ -204,7 +236,7 @@ return function(makeGeoPrim)
 			center = LVec3.new(0, 0, 0),
 			forward = LVec3.new(0, 1, 0),
 			up = LVec3.new(0, 0, -1),
-			radius = uniform(0.5, 1)
+			radius = uniform(1, 2)
 		}
 		branch(startFrame, -1, -1, 0)
 	end

@@ -163,6 +163,60 @@ local Mesh = S.memoize(function(real)
 		return false
 	end
 
+	-- Find all triangles involved in intersection, store them in another mesh
+	terra Mesh:findAllIntersectingTris(other: &Mesh, outmesh: &Mesh) : bool
+		-- First, check that the overall bboxes of the two meshes actually intersect
+		var selfbbox = self:bbox()
+		var otherbbox = other:bbox()
+		if not selfbbox:intersects(&otherbbox) then
+			return false
+		end 
+		-- Now, for every triangle in self, see if other intersects with it (checking overall bbox first)
+		var hasIntersections = false
+		var numSelfTris = int(self:numTris())
+		var numOtherTris = int(other:numTris())
+		for j=numSelfTris-1,-1,-1 do
+			var u0 = self.vertices(self.indices(3*j).vertex)
+			var u1 = self.vertices(self.indices(3*j + 1).vertex)
+			var u2 = self.vertices(self.indices(3*j + 2).vertex)
+			contractTri(u0, u1, u2)
+			var selftribbox = BBox3.salloc():init()
+			selftribbox:expand(u0); selftribbox:expand(u1); selftribbox:expand(u2)
+			if selftribbox:intersects(&otherbbox) then
+				for i=0,numOtherTris do
+					var v0 = other.vertices(other.indices(3*i).vertex)
+					var v1 = other.vertices(other.indices(3*i + 1).vertex)
+					var v2 = other.vertices(other.indices(3*i + 2).vertex)
+					contractTri(v0, v1, v2)
+					var othertribbox = BBox3.salloc():init()
+					othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
+					if selftribbox:intersects(othertribbox) then
+						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false) then
+							hasIntersections = true
+							var bvi = outmesh:numVertices()
+							var bni = outmesh:numNormals()
+							outmesh:addVertex(u0); outmesh:addVertex(u1); outmesh:addVertex(u2)
+							var n = (u1 - u0):cross(u2 - u0); n:normalize()
+							outmesh:addNormal(n)
+							outmesh:addIndex(bvi, bni); outmesh:addIndex(bvi+1, bni); outmesh:addIndex(bvi+2, bni)
+							bvi = outmesh:numVertices()
+							bni = outmesh:numNormals()
+							outmesh:addVertex(v0); outmesh:addVertex(v1); outmesh:addVertex(v2)
+							n = (v1 - v0):cross(v2 - v0); n:normalize()
+							outmesh:addNormal(n)
+							outmesh:addIndex(bvi, bni); outmesh:addIndex(bvi+1, bni); outmesh:addIndex(bvi+2, bni)
+						end	
+					end
+				end
+			end
+		end
+		return hasIntersections
+	end
+
+	terra Mesh:findAllSelfIntersectingTris(outmesh: &Mesh) : bool
+		return self:findAllIntersectingTris(self, outmesh)
+	end
+
 	-- Returns a bounding box of the voxels touched by this triangle
 	local Vec3u = Vec(uint, 3)
 	local BBox3u = BBox(Vec3u)
