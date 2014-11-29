@@ -35,47 +35,6 @@ return function(makeGeoPrim)
 		}
 	end
 
-	local function advanceFrame(frame, uprot, leftrot, len, endradius)
-		local c = frame.center
-		local fwd = frame.forward
-		local up = frame.up
-		local left = up:cross(fwd)
-		local uprotmat = LTransform.rotate(up, uprot)
-		local leftrotmat = LTransform.rotate(left, leftrot)
-		local newup = leftrotmat:transformVector(up)
-		local newfwd = (leftrotmat*uprotmat):transformVector(fwd)
-		local newc = c + len*newfwd
-		return {
-			center = newc,
-			forward = newfwd,
-			up = newup,
-			radius = endradius
-		}
-	end
-
-	local function branchFrame(startFrame, endFrame, t, theta, radius)
-		-- Construct the frame at the given t value
-		local ct = lerp(startFrame.center, endFrame.center, t)
-		local rt = lerp(startFrame.radius, endFrame.radius, t)
-
-		-- Construct the branch frame
-		local m = LTransform.pivot(endFrame.forward, theta, ct)
-		local m1 = LTransform.pivot(endFrame.forward, theta, endFrame.center)
-		local cbf = m:transformPoint(ct + rt*endFrame.up)
-		local upbf = (m1:transformPoint(endFrame.center + endFrame.radius*endFrame.up) - cbf):normalized()
-		local fwdbf = (cbf - ct):normalized()
-		local leftbf = upbf:cross(fwdbf)
-		fwdbf = leftbf:cross(upbf)
-
-		-- TODO: Actually compute correct 'previous trunk radius' values
-		return {
-			center = cbf,
-			forward = fwdbf,
-			up = upbf,
-			radius = radius
-		}, 0, 0
-	end
-
 	local terra circleOfVerts(mesh: &Mesh, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
 		var v = c + r*up
 		mesh:addVertex(v)
@@ -173,6 +132,48 @@ return function(makeGeoPrim)
 		"N_SEGS must be one of 6, 10, 14, 18, ...")
 
 
+	local function advanceFrame(frame, uprot, leftrot, len, endradius)
+		local c = frame.center
+		local fwd = frame.forward
+		local up = frame.up
+		local left = up:cross(fwd)
+		local uprotmat = LTransform.rotate(up, uprot)
+		local leftrotmat = LTransform.rotate(left, leftrot)
+		local newup = leftrotmat:transformVector(up)
+		local newfwd = (leftrotmat*uprotmat):transformVector(fwd)
+		local newc = c + len*newfwd
+		return {
+			center = newc,
+			forward = newfwd,
+			up = newup,
+			radius = endradius
+		}
+	end
+
+	local function branchFrame(startFrame, endFrame, t, theta, radius)
+		-- Construct the frame at the given t value
+		local ct = lerp(startFrame.center, endFrame.center, t)
+		local rt = lerp(startFrame.radius, endFrame.radius, t)
+
+		-- Construct the branch frame
+		local m = LTransform.pivot(endFrame.forward, theta, ct)
+		local m1 = LTransform.pivot(endFrame.forward, theta, endFrame.center)
+		local cbf = m:transformPoint(ct + rt*endFrame.up)
+		local upbf = (m1:transformPoint(endFrame.center + endFrame.radius*endFrame.up) - cbf):normalized()
+		local fwdbf = (cbf - ct):normalized()
+		local leftbf = upbf:cross(fwdbf)
+		fwdbf = leftbf:cross(upbf)
+
+		-- TODO: Actually compute correct 'previous trunk radius' values
+		return {
+			center = cbf,
+			forward = fwdbf,
+			up = upbf,
+			radius = radius
+		}, 0, 0
+	end
+
+
 	local vzero = LVec3.new(0, 0, 0)
 	local function findSplitFrame(startFrame, endFrame)
 		local v = endFrame.forward:projectToPlane(vzero, startFrame.forward):normalized() * startFrame.radius
@@ -193,6 +194,33 @@ return function(makeGeoPrim)
 		}
 	end
 
+	local N_THETA_SAMPS = 8
+	local worldup = LVec3.new(0, 1, 0)
+	local function estimateThetaDistrib(f0, f1)
+		local v = f1.up
+		local w = 0.5*(v:dot(worldup) + 1)
+		local minweight = w
+		local maxweight = w
+		local mini = 0
+		local maxi = 0
+		local rotmat = LTransform.rotate(f1.forward, math.pi*2/N_THETA_SAMPS)
+		for i=1,N_THETA_SAMPS-1 do
+			v = rotmat:transformVector(v)
+			w = 0.5*(v:dot(worldup) + 1)
+			if w < minweight then
+				minweight = w
+				mini = i
+			end
+			if w > maxweight then
+				maxweight = w
+				maxi = i
+			end
+		end
+		local wdiff = maxweight - minweight
+		local stddev = lerp(math.pi, math.pi/8, wdiff)
+		return math.pi*2*(maxi/N_THETA_SAMPS), stddev
+	end
+
 	local function branch(frame, prevTrunkRadius0, prevTrunkRadius1, depth)
 		-- if depth > 2 then return end
 		local finished = false
@@ -209,17 +237,15 @@ return function(makeGeoPrim)
 			local splitFrame = findSplitFrame(frame, nextframe)
 
 			-- Place geometry
-			-- treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, splitFrame)
-			-- treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, splitFrame, nextframe)
 			treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, splitFrame, nextframe)
 
 
 			if flip(branchProb(depth)) then
-				-- local theta = uniform(0, 2*math.pi)
-				-- TODO: Theta mean/variance based on avg weighted by 'up-facing-ness'
-				local theta = gaussian(0, math.pi/6)
+				-- Theta mean/variance based on avg weighted by 'up-facing-ness'
+				local theta_mu, theta_sigma = estimateThetaDistrib(splitFrame, nextframe)
+				local theta = gaussian(theta_mu, theta_sigma)
 				local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
-				local branchradius = math.min(uniform(0.7, 0.9) * endradius, maxbranchradius)
+				local branchradius = math.min(uniform(0.7, 0.9) * frame.radius, maxbranchradius)
 				local bframe, ptr0, ptr1 = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius)
 				branch(bframe, ptr0, ptr1, depth+1)
 			end
