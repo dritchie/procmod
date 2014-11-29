@@ -156,6 +156,26 @@ return S.memoize(function(N)
 		return p + (v - v:dot(n)*n)
 	end
 
+	function Vec:projectToRay(p, d)
+		d = d:normalized()
+		return p + (self - p):dot(d)*d
+	end
+
+	function Vec:projectToLineSeg(p0, p1)
+		return self:projectToRay(p0, p1-p0)
+	end
+
+	-- What t value would interpolate the two provided points
+	--    to produce this point?
+	-- (Assumes the three points are collinear)
+	function Vec:inverseLerp(p0, p1)
+		local d = p1 - p0
+		local dnorm = d:norm()
+		-- dot / dnorm gives us absolute length of self-p0;
+		--    divide by dnorm again to get length as percentage of dnorm
+		return (self - p0):dot(d) / (dnorm*dnorm)
+	end
+
 	return Vec
 end)
 

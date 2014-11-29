@@ -46,6 +46,26 @@ return function(makeGeoPrim)
 		end
 	end
 
+	local terra weldCircleOfVerts(mesh: &Mesh, d: Vec3, p0: Vec3, p1: Vec3, r0: double, r1: double, bvi: uint, n: uint)
+		var center = 0.5*(p0+p1)
+		var a = d:dot(d)
+		for i=0,n do
+			var v = mesh:getVertex(bvi+i)
+			var p = v:projectToLineSeg(p0, p1)
+			var t = p:inverseLerp(p0, p1)
+			var radius = (1.0-t)*r0 + t*r1
+			var r2 = radius*radius
+			var b = 2*d:dot(v - p)
+			var c = (v - p):dot(v - p) - r2
+			var disc = b*b - 4*a*c
+			if disc	< 0.0 then disc = 0.0 end
+			disc = cmath.sqrt(disc)
+			var rayt = (-b - disc)/(2*a)
+			mesh:getVertex(bvi+i) = v + rayt*d
+
+		end
+	end
+
 	local terra cylinderSides(mesh: &Mesh, baseIndex: uint, n: uint)
 		var bvi = baseIndex
 		for i=0,n do
@@ -66,7 +86,9 @@ return function(makeGeoPrim)
 
 	local _treeSegment = makeGeoPrim(terra(mesh: &Mesh,
 										   nSegs: uint,
-										   prevTrunkRadius0: double, prevTrunkRadius1: double,
+										   prevPoint0_x: double, prevPoint0_y: double, prevPoint0_z: double,
+										   prevPoint1_x: double, prevPoint1_y: double, prevPoint1_z: double,
+										   prevRadius0: double, prevRadius1: double,
 										   f0_cx: double, f0_cy: double, f0_cz: double,
 										   f0_fx: double, f0_fy: double, f0_fz: double,
 										   f0_ux: double, f0_uy: double, f0_uz: double,
@@ -79,6 +101,8 @@ return function(makeGeoPrim)
 										   f2_fx: double, f2_fy: double, f2_fz: double,
 										   f2_ux: double, f2_uy: double, f2_uz: double,
 										   f2_r: double)
+		var p0 = Vec3.create(prevPoint0_x, prevPoint0_y, prevPoint0_z)
+		var p1 = Vec3.create(prevPoint1_x, prevPoint1_y, prevPoint1_z)
 		var c0 = Vec3.create(f0_cx, f0_cy, f0_cz)
 		var fwd0 = Vec3.create(f0_fx, f0_fy, f0_fz)
 		var up0 = Vec3.create(f0_ux, f0_uy, f0_uz)
@@ -95,7 +119,6 @@ return function(makeGeoPrim)
 		var bvi = mesh:numVertices()
 
 		-- Vertices 0,nSegs are the bottom outline of the base
-		-- TODO: Deal with the 'prev trunk radius' stuff
 		circleOfVerts(mesh, c0, up0, fwd0, r0, nSegs)
 		-- Vertices nSegs+1,2*nSegs are the outline of the split frame
 		circleOfVerts(mesh, c1, up1, fwd1, r1, nSegs)
@@ -109,9 +132,22 @@ return function(makeGeoPrim)
 		cylinderCap(mesh, bvi, nSegs)
 		-- ...and add quads across the top of the cylinder
 		cylinderCap(mesh, bvi+2*nSegs, nSegs)
+		-- Deal with the 'prev trunk radius' stuff by welding the first circle of verts to the parent branch
+		if prevRadius0 > 0.0 then
+			var d = 0.5*(p0+p1) - c0; d:normalize()
+			weldCircleOfVerts(mesh, d, p0, p1, prevRadius0, prevRadius1, bvi, nSegs)
+		end
 	end)
-	local function treeSegment(nsegs, prevTrunkRadius0, prevTrunkRadius1, startFrame, splitFrame, endFrame)
-		local args = {nsegs, prevTrunkRadius0, prevTrunkRadius1}
+	local function treeSegment(nsegs, prev, startFrame, splitFrame, endFrame)
+		local args
+		if prev then
+			args = {nsegs,
+				    prev.p0[1], prev.p0[2], prev.p0[3],
+				    prev.p1[1], prev.p1[2], prev.p1[3],
+				    prev.r0, prev.r1}
+		else
+			args = {nsegs, 0, 0, 0, 0, 0, 0, -1, -1}
+		end
 		util.appendTable(args, {unpackFrame(startFrame)})
 		util.appendTable(args, {unpackFrame(splitFrame)})
 		util.appendTable(args, {unpackFrame(endFrame)})
@@ -140,10 +176,14 @@ return function(makeGeoPrim)
 		}
 	end
 
-	local function branchFrame(startFrame, endFrame, t, theta, radius)
+	local function branchFrame(startFrame, endFrame, t, theta, radius, n)
 		-- Construct the frame at the given t value
 		local ct = lerp(startFrame.center, endFrame.center, t)
 		local rt = lerp(startFrame.radius, endFrame.radius, t)
+		-- This is just the inradius; need to compute the outradius, since we branches
+		--    are polygonal approximations
+		rt = rt/math.cos(math.pi/n)
+
 
 		-- Construct the branch frame
 		local m = LTransform.pivot(endFrame.forward, theta, ct)
@@ -154,13 +194,30 @@ return function(makeGeoPrim)
 		local leftbf = upbf:cross(fwdbf)
 		fwdbf = leftbf:cross(upbf)
 
+		-- Compute the effective radius of the parent branch at the extremes of this new branch frame
+		local lopoint = (cbf - radius*upbf):projectToLineSeg(startFrame.center, endFrame.center)
+		local lot = lopoint:inverseLerp(startFrame.center, endFrame.center)
+		local hipoint = (cbf + radius*upbf):projectToLineSeg(startFrame.center, endFrame.center)
+		local hit = hipoint:inverseLerp(startFrame.center, endFrame.center)
+		local loradius = lerp(startFrame.radius, endFrame.radius, lot)
+		local hiradius = lerp(startFrame.radius, endFrame.radius, hit)
+		-- Also turn these into outradii
+		loradius = loradius/math.cos(math.pi/n)
+		hiradius = hiradius/math.cos(math.pi/n)
+
 		-- TODO: Actually compute correct 'previous trunk radius' values
 		return {
 			center = cbf,
 			forward = fwdbf,
 			up = upbf,
 			radius = radius
-		}, 0, 0
+		},
+		{
+			p0 = lopoint,
+			p1 = hipoint,
+			r0 = loradius,
+			r1 = hiradius
+		}
 	end
 
 
@@ -224,7 +281,7 @@ return function(makeGeoPrim)
 		return math.exp(-0.75*depth)
 	end
 
-	local function branch(frame, prevTrunkRadius0, prevTrunkRadius1, depth)
+	local function branch(frame, prev, depth)
 		-- if depth > 2 then return end
 		local finished = false
 		local i = 0
@@ -240,7 +297,7 @@ return function(makeGeoPrim)
 			local splitFrame = findSplitFrame(frame, nextframe)
 
 			-- Place geometry
-			treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, splitFrame, nextframe)
+			treeSegment(N_SEGS, prev, frame, splitFrame, nextframe)
 
 
 			if flip(branchProb(depth, i)) then
@@ -248,15 +305,17 @@ return function(makeGeoPrim)
 				local theta_mu, theta_sigma = estimateThetaDistrib(splitFrame, nextframe)
 				local theta = gaussian(theta_mu, theta_sigma)
 				local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
-				local branchradius = math.min(uniform(0.7, 0.9) * frame.radius, maxbranchradius)
-				local bframe, ptr0, ptr1 = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius)
-				branch(bframe, ptr0, ptr1, depth+1)
+				local branchradius = math.min(uniform(0.8, 0.95) * nextframe.radius, maxbranchradius)
+				local bframe, prev = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius, N_SEGS)
+				branch(bframe, prev, depth+1)
 			end
 			-- local finished = true
 			local finished = flip(1-continueProb(i))
 			-- local finished = endradius < 0.2
 			i = i + 1
 			frame = nextframe
+			-- 'Blank' this out, since it only matters for the first segment in a branch
+			prev = nil
 		until finished
 	end
 
@@ -267,7 +326,7 @@ return function(makeGeoPrim)
 			up = LVec3.new(0, 0, -1),
 			radius = uniform(1.5, 2)
 		}
-		branch(startFrame, -1, -1, 0)
+		branch(startFrame, nil, 0)
 	end
 end
 

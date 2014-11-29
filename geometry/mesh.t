@@ -37,9 +37,9 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:numIndices() return self.indices:size() end
 	terra Mesh:numTris() return self:numIndices()/3 end
 
-	terra Mesh:getVertex(i: uint) return self.vertices(i) end
-	terra Mesh:getNormal(i: uint) return self.normals(i) end
-	terra Mesh:getIndex(i: uint) return self.indices(i) end
+	Mesh.methods.getVertex = macro(function(self, i) return `self.vertices(i) end)
+	Mesh.methods.getNormal = macro(function(self, i) return `self.normals(i) end)
+	Mesh.methods.getIndex = macro(function(self, i) return `self.indices(i) end)
 
 	terra Mesh:addVertex(vert: Vec3) self.vertices:insert(vert) end
 	terra Mesh:addNormal(norm: Vec3) self.normals:insert(norm) end
