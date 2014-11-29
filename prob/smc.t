@@ -194,20 +194,8 @@ local function SIR(program, args, opts)
 	-- Step all particles forward in lockstep until they are all finished
 	local t0 = terralib.currenttimeinseconds()
 	local generation = 1
-	-- -- TESTING --
-	-- local data = io.open("tableau/scores_over_time.csv", "w")
-	-- data:write("generation,avglikelihood,maxlikelihood,minlikelihood,avgposterior,maxposterior,minposterior\n")
-	-- --------------
 	repeat
 		local numfinished = 0
-		-- -- TESTING --
-		-- local avglikelihood = 0
-		-- local maxlikelihood = -math.huge
-		-- local minlikelihood = math.huge
-		-- local avgposterior = 0
-		-- local maxposterior = -math.huge
-		-- local minposterior = math.huge
-		-- --------------
 		-- Step
 		for i,p in ipairs(particles) do
 			p:step(1)
@@ -220,25 +208,8 @@ local function SIR(program, args, opts)
 				local temp = (1.0-t)*annealStartTemp + t*annealEndTemp
 				weights[i] = weights[i]/temp
 			end
-			-- -- TESTING --
-			-- if weights[i] ~= -math.huge then
-			-- 	avglikelihood = avglikelihood + p.trace.loglikelihood
-			-- 	maxlikelihood = math.max(maxlikelihood, p.trace.loglikelihood)
-			-- 	minlikelihood = math.min(minlikelihood, p.trace.loglikelihood)
-			-- 	avgposterior = avgposterior + p.trace.logposterior
-			-- 	maxposterior = math.max(maxposterior, p.trace.logposterior)
-			-- 	minposterior = math.min(minposterior, p.trace.logposterior)
-			-- end
-			-- --------------
 		end
 		local allfinished = (numfinished == nParticles)
-		-- -- TESTING --
-		-- avglikelihood = avglikelihood / nParticles
-		-- avgposterior = avgposterior / nParticles
-		-- data:write(string.format("%u,%g,%g,%g,%g,%g,%g\n",
-		-- 	generation, avglikelihood, maxlikelihood, minlikelihood, avgposterior, maxposterior, minposterior))
-		-- allfinished = generation == 85
-		-- --------------
 		if verbose then
 			io.write(string.format("Generation %u: Finished %u/%u particles.        \r",
 				generation, numfinished, nParticles))
@@ -257,10 +228,6 @@ local function SIR(program, args, opts)
 		afterResample(particles)
 		generation = generation + 1
 	until allfinished
-
-	-- -- TESTING --
-	-- data:close()
-	-- --------------
 
 	if verbose then
 		local t1 = terralib.currenttimeinseconds()

@@ -74,6 +74,8 @@ local terra updateBounds()
 		bounds = displayMesh:bbox()
 	end
 	bounds:expand(globals.config.boundsExpand)
+	-- var dims = bounds:extents()
+	-- S.printf("dims: %g, %g, %g\n", dims(0), dims(1), dims(2))
 end
 
 

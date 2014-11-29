@@ -1,12 +1,13 @@
 local S = terralib.require("qs.lib.std")
 local procmod = terralib.require("procmod")
 local globals = terralib.require("globals")
+local future = terralib.require("prob.future")
 
----------------------------------------------------------------
 
 local program = terralib.require(globals.config.program)
 
----------------------------------------------------------------
+future.setImpl(globals.config.futureImpl)
+
 
 local smcopts = {
 	nParticles = globals.config.smc_nParticles,

@@ -12,6 +12,7 @@ local LTransform = terralib.require("linalg.luaxform")
 local flip = prob.flip
 local uniform = prob.uniform
 local gaussian = prob.gaussian
+local future = prob.future
 
 ---------------------------------------------------------------
 
@@ -280,7 +281,7 @@ return function(makeGeoPrim)
 		return math.exp(-0.75*depth)
 	end
 
-	local function branch(frame, prev, depth)
+	local function branch(frame, depth, prev)
 		-- if depth > 2 then return end
 		local finished = false
 		local i = 0
@@ -298,16 +299,17 @@ return function(makeGeoPrim)
 			-- Place geometry
 			treeSegment(N_SEGS, prev, frame, splitFrame, nextframe)
 
-
-			if flip(branchProb(depth, i)) then
-				-- Theta mean/variance based on avg weighted by 'up-facing-ness'
-				local theta_mu, theta_sigma = estimateThetaDistrib(splitFrame, nextframe)
-				local theta = gaussian(theta_mu, theta_sigma)
-				local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
-				local branchradius = math.min(uniform(0.8, 0.95) * nextframe.radius, maxbranchradius)
-				local bframe, prev = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius, N_SEGS)
-				branch(bframe, prev, depth+1)
-			end
+			future.create(function(i, frame, prev)
+				if flip(branchProb(depth, i)) then
+					-- Theta mean/variance based on avg weighted by 'up-facing-ness'
+					local theta_mu, theta_sigma = estimateThetaDistrib(splitFrame, nextframe)
+					local theta = gaussian(theta_mu, theta_sigma)
+					local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
+					local branchradius = math.min(uniform(0.8, 0.95) * nextframe.radius, maxbranchradius)
+					local bframe, prev = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius, N_SEGS)
+					branch(bframe, depth+1, prev)
+				end
+			end, i, frame, prev)
 			-- local finished = true
 			local finished = flip(1-continueProb(i))
 			-- local finished = endradius < 0.2
@@ -325,7 +327,8 @@ return function(makeGeoPrim)
 			up = LVec3.new(0, 0, -1),
 			radius = uniform(1.5, 2)
 		}
-		branch(startFrame, nil, 0)
+		future.create(branch, startFrame, 0, nil)
+		future.finishall()
 	end
 end
 
