@@ -47,6 +47,7 @@ local currSampleIndex = global(int, 0)
 local MAPIndex = global(int)
 local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
+local checkingForSelfIntersections = global(bool, 0)
 local intersectionMesh = global(Mesh(double))
 local meshSelfIntersects = global(bool, 0)
 local bounds = global(BBox3)
@@ -116,8 +117,10 @@ local terra setSampleIndex(i: int)
 		if i < 0 then i = samples:size()-1 end
 		if i >= samples:size() then i = 0 end
 		currSampleIndex = i
-		intersectionMesh:clear()
-		meshSelfIntersects = samples(currSampleIndex).value:findAllSelfIntersectingTris(&intersectionMesh)
+		if checkingForSelfIntersections then
+			intersectionMesh:clear()
+			meshSelfIntersects = samples(currSampleIndex).value:findAllSelfIntersectingTris(&intersectionMesh)
+		end
 		displayNormalMesh()
 	end
 end
@@ -313,6 +316,11 @@ local terra toggleTargetBoundsVoxelization()
 	gl.glutPostRedisplay()
 end
 
+local terra toggleCheckSelfIntersections()
+	checkingForSelfIntersections = not checkingForSelfIntersections
+	gl.glutPostRedisplay()
+end
+
 local terra displayString(font: &opaque, str: rawstring, x: int, y: int)
 	if str ~= nil and C.strlen(str) > 0 then
 		gl.glRasterPos2f(x, y)
@@ -400,7 +408,11 @@ local terra drawOverlay()
 		displayString(TEXT_FONT, str, xleft + 65, ytop)
 		moveToNewLine(ytop)
 		gl.glColor3f([TEXT_COLOR])
-		S.sprintf(str, "Has self-intersections: %u\n", meshSelfIntersects)
+		if checkingForSelfIntersections then
+			S.sprintf(str, "Has self-intersections: %u\n", meshSelfIntersects)
+		else
+			S.sprintf(str, "(Not checking for self-intersections)\n")
+		end
 		displayString(TEXT_FONT, str, xleft, ytop)
 		moveToNewLine(ytop)
 		S.sprintf(str, "Num tris/verts/norms: %u/%u/%u\n",
@@ -536,6 +548,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		displayTargetMesh()
 	elseif key == char('i') then
 		displayIntersectionMesh()
+	elseif key == char('c') then
+		toggleCheckSelfIntersections()
 	elseif key == char('m') then
 		setSampleIndex(MAPIndex)
 	elseif key == char('b') then

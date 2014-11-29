@@ -119,19 +119,8 @@ return function(makeGeoPrim)
 	end
 
 
-	
-	local function continueProb(depth)
-		return math.exp(-0.2*depth)
-	end
-	local function branchProb(depth)
-		return math.exp(-0.8*depth)
-	end
-
-	local N_SEGS = 10
-	assert(N_SEGS >= 6 and (N_SEGS-2)%4 == 0,
-		"N_SEGS must be one of 6, 10, 14, 18, ...")
-
-
+	local worldup = LVec3.new(0, 1, 0)
+	-- local upblendamt = 0.25
 	local function advanceFrame(frame, uprot, leftrot, len, endradius)
 		local c = frame.center
 		local fwd = frame.forward
@@ -141,6 +130,7 @@ return function(makeGeoPrim)
 		local leftrotmat = LTransform.rotate(left, leftrot)
 		local newup = leftrotmat:transformVector(up)
 		local newfwd = (leftrotmat*uprotmat):transformVector(fwd)
+		-- newfwd = lerp(newfwd, worldup, upblendamt):normalized()
 		local newc = c + len*newfwd
 		return {
 			center = newc,
@@ -195,7 +185,6 @@ return function(makeGeoPrim)
 	end
 
 	local N_THETA_SAMPS = 8
-	local worldup = LVec3.new(0, 1, 0)
 	local function estimateThetaDistrib(f0, f1)
 		local v = f1.up
 		local w = 0.5*(v:dot(worldup) + 1)
@@ -221,6 +210,20 @@ return function(makeGeoPrim)
 		return math.pi*2*(maxi/N_THETA_SAMPS), stddev
 	end
 
+
+	local N_SEGS = 10
+	assert(N_SEGS >= 6 and (N_SEGS-2)%4 == 0,
+		"N_SEGS must be one of 6, 10, 14, 18, ...")
+
+	local function continueProb(depth)
+		return math.exp(-0.1*depth)
+	end
+	local function branchProb(depth, i)
+		-- local ifactor = 10 - i
+		-- return math.exp(-0.8*depth - 0.05*ifactor)
+		return math.exp(-0.75*depth)
+	end
+
 	local function branch(frame, prevTrunkRadius0, prevTrunkRadius1, depth)
 		-- if depth > 2 then return end
 		local finished = false
@@ -240,7 +243,7 @@ return function(makeGeoPrim)
 			treeSegment(N_SEGS, prevTrunkRadius0, prevTrunkRadius1, frame, splitFrame, nextframe)
 
 
-			if flip(branchProb(depth)) then
+			if flip(branchProb(depth, i)) then
 				-- Theta mean/variance based on avg weighted by 'up-facing-ness'
 				local theta_mu, theta_sigma = estimateThetaDistrib(splitFrame, nextframe)
 				local theta = gaussian(theta_mu, theta_sigma)
@@ -262,7 +265,7 @@ return function(makeGeoPrim)
 			center = LVec3.new(0, 0, 0),
 			forward = LVec3.new(0, 1, 0),
 			up = LVec3.new(0, 0, -1),
-			radius = uniform(1, 2)
+			radius = uniform(1.5, 2)
 		}
 		branch(startFrame, -1, -1, 0)
 	end
