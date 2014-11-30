@@ -281,11 +281,16 @@ return function(makeGeoPrim)
 		return math.exp(-0.75*depth)
 	end
 
+	local numprims = 0
+	local origradius
 	local function branch(frame, depth, prev)
 		-- if depth > 2 then return end
 		local finished = false
 		local i = 0
 		repeat
+			-- Kill things that get too small to matter
+			if frame.radius/origradius < 0.1 then break end
+
 			local uprot = gaussian(0, math.pi/12)
 			local leftrot = gaussian(0, math.pi/12)
 			local len = uniform(3, 5) * frame.radius
@@ -298,6 +303,7 @@ return function(makeGeoPrim)
 
 			-- Place geometry
 			treeSegment(N_SEGS, prev, frame, splitFrame, nextframe)
+			numprims = numprims + 1
 
 			future.create(function(i, frame, prev)
 				if flip(branchProb(depth, i)) then
@@ -305,7 +311,7 @@ return function(makeGeoPrim)
 					local theta_mu, theta_sigma = estimateThetaDistrib(splitFrame, nextframe)
 					local theta = gaussian(theta_mu, theta_sigma)
 					local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
-					local branchradius = math.min(uniform(0.8, 0.95) * nextframe.radius, maxbranchradius)
+					local branchradius = math.min(uniform(0.9, 1) * nextframe.radius, maxbranchradius)
 					local bframe, prev = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius, N_SEGS)
 					branch(bframe, depth+1, prev)
 				end
@@ -327,8 +333,10 @@ return function(makeGeoPrim)
 			up = LVec3.new(0, 0, -1),
 			radius = uniform(1.5, 2)
 		}
+		origradius = startFrame.radius
 		future.create(branch, startFrame, 0, nil)
 		future.finishall()
+		-- print("numprims:", numprims)
 	end
 end
 

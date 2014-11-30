@@ -8,7 +8,6 @@ local program = terralib.require(globals.config.program)
 
 future.setImpl(globals.config.futureImpl)
 
-
 local smcopts = {
 	nParticles = globals.config.smc_nParticles,
 

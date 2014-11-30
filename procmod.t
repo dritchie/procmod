@@ -36,6 +36,7 @@ end)
 local struct State(S.Object)
 {
 	mesh: Mesh
+	prims: S.Vector(Mesh)	-- For collision checks
 	grid: BinaryGrid
 	hasSelfIntersections: bool
 	score: double
@@ -50,6 +51,7 @@ end
 
 terra State:clear()
 	self.mesh:clear()
+	self.prims:clear()
 	self.grid:clear()
 	self.hasSelfIntersections = false
 	self.score = 0.0
@@ -59,7 +61,8 @@ terra State:prepareForRun() end
 
 terra State:update(newmesh: &Mesh, updateScore: bool)
 	if updateScore then
-		self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.mesh)
+		-- self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.mesh)
+		self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
 		if not self.hasSelfIntersections then
 			self.grid:resize(globals.targetGrid.rows,
 							 globals.targetGrid.cols,
@@ -68,6 +71,7 @@ terra State:update(newmesh: &Mesh, updateScore: bool)
 		end
 	end
 	self.mesh:append(newmesh)
+	self.prims:insert():copy(newmesh)
 	if updateScore then
 		-- Compute score
 		if self.hasSelfIntersections then
