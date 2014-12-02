@@ -4,32 +4,33 @@ local globals = terralib.require("globals")
 local future = terralib.require("prob.future")
 
 
-local program = terralib.require(globals.config.program)
-
-future.setImpl(globals.config.futureImpl)
-
-local smcopts = {
-	nParticles = globals.config.smc_nParticles,
-
-	-- doAnneal = true,
-	-- nAnnealSteps = 20,
-	-- annealStartTemp = 100,
-
-	-- doFunnel = true,
-	-- nFunnelSteps = 30,
-	-- funnelStartNum = 5000,
-	-- funnelEndNum = 200,
-	
-	recordHistory = globals.config.smc_recordHistory,
-	verbose = globals.config.smc_verbose
-}
-
-local mhopts = {
-	nSamples = globals.config.mh_nSamples,
-	verbose = globals.config.mh_verbose
-}
-
 local function run(generations)
+
+	local program = terralib.require(globals.config.program)
+
+	future.setImpl(globals.config.futureImpl)
+
+	local smcopts = {
+		nParticles = globals.config.smc_nParticles,
+
+		-- doAnneal = true,
+		-- nAnnealSteps = 20,
+		-- annealStartTemp = 100,
+
+		-- doFunnel = true,
+		-- nFunnelSteps = 30,
+		-- funnelStartNum = 5000,
+		-- funnelEndNum = 200,
+		
+		recordHistory = globals.config.smc_recordHistory,
+		verbose = globals.config.smc_verbose
+	}
+
+	local mhopts = {
+		nSamples = globals.config.mh_nSamples,
+		verbose = globals.config.mh_verbose
+	}
+
 	local method = globals.config.method
 	if method == "smc" then
 		procmod.SIR(program, generations, smcopts)
