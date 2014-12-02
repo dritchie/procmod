@@ -17,8 +17,9 @@ end
 -- TODO: Move these to config file?
 local outfilename = "experiments/smc_vs_mh.csv"
 local startNumSamps = 100
-local endNumSamps = 3000
-local stepNumSamps = 100
+local endNumSamps = 2100
+local stepNumSamps = 200
+local numRuns = 10
 
 -- Set up persistent variables we'll need
 local methods = {"smc", "smc_fixedOrder", "mh"}
@@ -29,7 +30,8 @@ local f = io.open(outfilename, "w")
 f:write("method,numSamps,time,avgScore,maxScore\n")
 
 -- Handling one method
-local function doMethod(method, numSamps, record)
+-- Returns the time taken
+local function doMethod(method, numSamps, record, timeBudget)
 	print(string.format("=== method: %s, numSamps: %u ===", method, numSamps))
 	-- Set up config
 	if string.find(method, "smc") then
@@ -44,7 +46,12 @@ local function doMethod(method, numSamps, record)
 	else
 		globals.config.method = "mh"
 		globals.config.program = progmodule
-		globals.config.mh_nSamples = numSamps
+		if timeBudget then
+			globals.config.mh_nSamples = 10000000
+			globals.config.mh_timeBudget = timeBudget
+		else
+			globals.config.mh_nSamples = numSamps
+		end
 	end
 	-- Run it and collect timing and score info
 	local g = generations:getpointer()
@@ -65,6 +72,7 @@ local function doMethod(method, numSamps, record)
 		f:write(string.format("%s,%u,%g,%g,%g\n",
 			method, numSamps, t1-t0, avgscore, maxscore))
 	end
+	return t1 - t0
 end
 
 -- Run one iteration of all methods to make sure everything is compiled
@@ -78,13 +86,26 @@ end
 print()
 print("===== Data collection runs =====")
 for numSamps=startNumSamps,endNumSamps,stepNumSamps do
+	local timeBudget
 	for _,method in ipairs(methods) do
-		doMethod(method, numSamps, true)
+		-- We drive MH's time budget by the average time taken by SMC
+		if method == "smc" then
+			local t = 0
+			for i=1,numRuns do
+				t = t + doMethod(method, numSamps, true)
+			end
+			timeBudget = t/numRuns
+		else
+			for i=1,numRuns do
+				doMethod(method, numSamps, true, timeBudget)
+			end
+		end
 	end
 end
 
--- TODO: I should do multiple runs of each one and plot the mean/variance...
--- TODO: Adjust the factor weights for MH, but correct the score to be comparable with smc?
-
 
 f:close()
+
+
+
+

@@ -28,6 +28,7 @@ local function run(generations)
 
 	local mhopts = {
 		nSamples = globals.config.mh_nSamples,
+		timeBudget = globals.config.mh_timeBudget,
 		verbose = globals.config.mh_verbose
 	}
 

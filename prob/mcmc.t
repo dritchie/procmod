@@ -23,12 +23,14 @@ end
 -- Do lightweight MH
 -- Options are:
 --    * nSamples: how many samples to collect?
+--    * timeBudget: how long to run for before terminating? (overrules nSamples)
 --    * lag: How many iterations between collected samples?
 --    * verbose: print verbose output
 --    * onSample: Callback that says what to do with the trace every time a sample is reached
 local function MH(program, args, opts)
 	-- Extract options
 	local nSamples = opts.nSamples or 1000
+	local timeBudget = opts.timeBudget
 	local lag = opts.lag or 1
 	local verbose = opts.verbose
 	local onSample = opts.onSample or function() end
@@ -39,6 +41,7 @@ local function MH(program, args, opts)
 	-- Do MH loop
 	local numAccept = 0
 	local t0 = terralib.currenttimeinseconds()
+	local itersdone = 0
 	for i=1,iters do
 		-- Copy the trace
 		local newtrace = trace:newcopy()
@@ -69,11 +72,19 @@ local function MH(program, args, opts)
 				io.flush()
 			end
 		end
+		itersdone = itersdone + 1
+		-- Maybe terminate, if we're on a time budget
+		if timeBudget then
+			local t = terralib.currenttimeinseconds()
+			if t - t0 >= timeBudget then
+				break
+			end
+		end
 	end
 	if verbose then
 		local t1 = terralib.currenttimeinseconds()
 		io.write("\n")
-		print("Acceptance ratio:", numAccept/iters)
+		print("Acceptance ratio:", numAccept/itersdone)
 		print("Time:", t1 - t0)
 	end
 end
