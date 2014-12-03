@@ -55,6 +55,19 @@ local Camera = S.memoize(function(real)
 		self.up = self.forward:cross(self.left)
 	end
 
+	terra Camera:__init(eye_x: real, eye_y: real, eye_z: real, target_x: real, target_y: real, target_z: real, up_x: real, up_y: real, up_z: real,
+						wup_x: real, wup_y: real, wup_z: real, fovy: real, aspect: real, znear: real, zfar: real) : {}
+		self:__init(Vec3.create(eye_x, eye_y, eye_z),			-- eye
+					Vec3.create(target_x, target_y, target_z),	-- target
+					Vec3.create(up_x, up_y, up_z),				-- up
+					Vec3.create(wup_x, wup_y, wup_z),			-- world up
+					fovy,										-- fov y
+					aspect,										-- aspect
+					znear,										-- znear,
+					zfar										-- zfar
+		)
+	end
+
 	-- Default camera is looking down -z
 	terra Camera:__init() : {}
 		self:__init(Vec3.create(0.0, 0.0, 0.0),    -- eye
@@ -63,9 +76,18 @@ local Camera = S.memoize(function(real)
 				   	Vec3.create(0.0, 1.0, 0.0),    -- world up
 				   	45.0,						   -- fov y
 				   	1.0,						   -- aspect
-				   	1.0,						   -- z near
+				   	0.1,						   -- z near
 				   	100.0						   -- z far
-				   	)
+		)
+	end
+
+	terra Camera:print()
+		S.printf("%g %g %g   %g %g %g   %g %g %g   %g %g %g   %g   %g   %g   %g\n",
+			self.eye(0), self.eye(1), self.eye(2),
+			self.target(0), self.target(1), self.target(2),
+			self.up(0), self.up(1), self.up(2),
+			self.absUp(0), self.absUp(1), self.absUp(2),
+			self.fovy, self.aspect, self.znear, self.zfar)
 	end
 
 	-- OpenGL 1.1 style

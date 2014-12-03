@@ -201,10 +201,15 @@ local terra init()
 	generations:init()
 	voxelMesh:init()
 	intersectionMesh:init()
-	camera:init()
-	camera.znear = 0.1
 	light:init()
 	material:init()
+	escape
+		if globals.config.viewCamera then
+			emit quote camera:copy(globals.config.viewCamera) end
+		else
+			emit quote camera:init() end
+		end
+	end
 
 	reload()
 end
@@ -550,7 +555,7 @@ local terra keyboard(key: uint8, x: int, y: int)
 		displayTargetMesh()
 	elseif key == char('i') then
 		displayIntersectionMesh()
-	elseif key == char('c') then
+	elseif key == char('s') then
 		toggleCheckSelfIntersections()
 	elseif key == char('m') then
 		setSampleIndex(MAPIndex)
@@ -558,6 +563,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		toggleTargetBoundsVoxelization()
 	elseif key == char('o') then
 		toggleOverlay()
+	elseif key == char('c') then
+		camera:print()
 	end
 end
 
