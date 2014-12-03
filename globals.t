@@ -15,22 +15,23 @@ local G = {}
 --    we look for configs/scratch.txt
 G.config = Config.alloc():init(arg[1] or "configs/scratch.txt")
 
--- Globals
-G.targetMesh = global(Mesh)
-G.targetGrid = global(BinaryGrid)
-G.targetBounds = global(BBox3)
 
+-- Volume match globals
+if G.config.doVolumeMatch then
+	G.targetMesh = global(Mesh)
+	G.targetGrid = global(BinaryGrid)
+	G.targetBounds = global(BBox3)
+	local terra initglobals()
+		G.targetMesh:init()
+		G.targetMesh:loadOBJ(G.config.targetMesh)
+		G.targetBounds = G.targetMesh:bbox()
+		G.targetBounds:expand(G.config.boundsExpand)
+		G.targetGrid:init()
+		G.targetMesh:voxelize(&G.targetGrid, &G.targetBounds, G.config.voxelSize, G.config.solidVoxelize)
 
-local terra initglobals()
-	G.targetMesh:init()
-	G.targetMesh:loadOBJ(G.config.targetMesh)
-	G.targetBounds = G.targetMesh:bbox()
-	G.targetBounds:expand(G.config.boundsExpand)
-	G.targetGrid:init()
-	G.targetMesh:voxelize(&G.targetGrid, &G.targetBounds, G.config.voxelSize, G.config.solidVoxelize)
-
+	end
+	initglobals()
 end
-initglobals()
 
 
 return G

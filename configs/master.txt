@@ -3,21 +3,24 @@
 # NOTE: Config files inheriting from this one can override any of these settings,
 #   as well as add new ones
 
+
+futureImpl				stochastic
+verbose					true
+saveSampleValues		true
+smc_recordHistory		true
+
+#nSamples				a_number
+#program				models.set_me_to_something_valid
+#method					set_me_to_smc_or_mh_or_forward_or_reject
+
+
+## Volume matching parameters
+doVolumeMatch			true
 voxelSize				0.25
 boundsExpand			0.1
 solidVoxelize			true
 voxelFactorWeight		0.02
 outsideFactorWeight		0.02
-
-futureImpl				stochastic
-
-verbose					true
-saveSampleValues		true
-smc_recordHistory		true
-
-#nSamples					a_number
-#targetMesh					targetgeom/set_me_to_something_valid
-#program					models.set_me_to_something_valid
-#method						set_me_to_smc_or_mh_or_forward_or_reject
+#targetMesh				targetgeom/set_me_to_something_valid
 
 

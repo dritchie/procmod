@@ -14,14 +14,6 @@ local globals = terralib.require("globals")
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
 
-
----------------------------------------------------------------
-
-local VOXEL_FACTOR_WEIGHT = globals.config.voxelFactorWeight
--- local VOXEL_FILLED_FACTOR_WEIGHT = 0.01
--- local VOXEL_EMPTY_FACTOR_WEIGHT = 0.08
-local OUTSIDE_FACTOR_WEIGHT = globals.config.outsideFactorWeight
-
 ---------------------------------------------------------------
 
 local softeq = macro(function(val, target, s)
@@ -31,74 +23,96 @@ end)
 ---------------------------------------------------------------
 
 -- The procedural-modeling specific state that gets cached with
---    every particle/trace. Stores the mesh-so-far and the
---    grid-so-far, etc.
-local struct State(S.Object)
-{
-	mesh: Mesh
-	prims: S.Vector(Mesh)	-- For collision checks
-	grid: BinaryGrid
-	hasSelfIntersections: bool
-	score: double
-}
--- Also give the State class all the lua.std metatype stuff
-LS.Object(State)
+--    every particle/trace.
+-- Stores data needed to compute scores for whatever objectives the config file specifies
+--    (e.g. volume matching)
+local State = S.memoize(function(doVolumeMatch)
 
-terra State:__init()
-	self:initmembers()
-	self:clear()
-end
+	local struct State(S.Object)
+	{
+		mesh: Mesh
+		prims: S.Vector(Mesh)	-- For collision checks
+		hasSelfIntersections: bool
+		score: double
+	}
+	if doVolumeMatch then
+		State.entries:insert({field="grid", type=BinaryGrid})
+	end
+	-- Also give the State class all the lua.std metatype stuff
+	LS.Object(State)
 
-terra State:clear()
-	self.mesh:clear()
-	self.prims:clear()
-	self.grid:clear()
-	self.hasSelfIntersections = false
-	self.score = 0.0
-end
+	terra State:__init()
+		self:initmembers()
+		self:clear()
+	end
 
-terra State:freeMemory()
-	self:clear()
-end
+	terra State:clear()
+		self.mesh:clear()
+		self.prims:clear()
+		[doVolumeMatch and quote self.grid:clear() end or quote end]
+		self.hasSelfIntersections = false
+		self.score = 0.0
+	end
 
-terra State:prepareForRun() end
+	terra State:freeMemory()
+		self:clear()
+	end
 
-terra State:update(newmesh: &Mesh, updateScore: bool)
-	if updateScore then
-		-- self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.mesh)
-		self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
-		if not self.hasSelfIntersections then
-			self.grid:resize(globals.targetGrid.rows,
-							 globals.targetGrid.cols,
-							 globals.targetGrid.slices)
-			newmesh:voxelize(&self.grid, &globals.targetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
+	terra State:prepareForRun() end
+
+	terra State:update(newmesh: &Mesh, updateScore: bool)
+		if updateScore then
+			self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
+			escape
+				if doVolumeMatch then
+					emit quote
+						if not self.hasSelfIntersections then
+							self.grid:resize(globals.targetGrid.rows,
+											 globals.targetGrid.cols,
+											 globals.targetGrid.slices)
+							newmesh:voxelize(&self.grid, &globals.targetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
+						end
+					end
+				end
+			end
+		end
+		self.mesh:append(newmesh)
+		self.prims:insert():copy(newmesh)
+		if updateScore then
+			-- Compute score
+			if self.hasSelfIntersections then
+				self.score = [-math.huge]
+			else
+				self.score = 0.0
+				escape
+					if doVolumeMatch then
+						emit quote
+							var meshbb = self.mesh:bbox()
+							var targetext = globals.targetBounds:extents()
+							var extralo = (globals.targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
+							var extrahi = (meshbb.maxs - globals.targetBounds.maxs):max(Vec3.create(0.0)) / targetext
+							var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
+							var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
+							self.score = self.score + softeq(percentSame, 1.0, [globals.config.voxelFactorWeight]) +
+										 			  softeq(percentOutside, 0.0, [globals.config.outsideFactorWeight])
+						end
+					end
+				end
+			end
 		end
 	end
-	self.mesh:append(newmesh)
-	self.prims:insert():copy(newmesh)
-	if updateScore then
-		-- Compute score
-		if self.hasSelfIntersections then
-			self.score = [-math.huge]
-		else
-			var meshbb = self.mesh:bbox()
-			var targetext = globals.targetBounds:extents()
-			var extralo = (globals.targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
-			var extrahi = (meshbb.maxs - globals.targetBounds.maxs):max(Vec3.create(0.0)) / targetext
-			var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
-			var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
-			self.score = softeq(percentSame, 1.0, VOXEL_FACTOR_WEIGHT) + softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
-			-- var percentSameFilled = globals.targetGrid:percentFilledCellsEqualPadded(&self.grid)
-			-- var percentSameEmpty = globals.targetGrid:percentEmptyCellsEqualPadded(&self.grid)
-			-- self.score = softeq(percentSameFilled, 1.0, VOXEL_FILLED_FACTOR_WEIGHT) +
-			-- 			 softeq(percentSameEmpty, 1.0, VOXEL_EMPTY_FACTOR_WEIGHT) +
-			-- 			 softeq(percentOutside, 0.0, OUTSIDE_FACTOR_WEIGHT)
-		end
-	end
-end
 
-terra State:currentScore()
-	return self.score
+	terra State:currentScore()
+		return self.score
+	end
+
+	return State
+
+end)
+
+-- Retrieve the State type specified by the global config settings
+local function GetStateType()
+	return State(globals.config.doVolumeMatch)
 end
 
 ---------------------------------------------------------------
@@ -106,53 +120,58 @@ end
 -- A State object designed to work with MH
 -- After a proposal, it'll recompute everything that happens after that variable
 --    in runtime order.
-local struct MHState(S.Object)
-{
-	states: S.Vector(State)
-	currIndex: uint
-}
-LS.Object(MHState)
+local MHState = S.memoize(function(State)
 
-terra MHState:freeMemory()
-	self.states:destruct()
-end
+	local struct MHState(S.Object)
+	{
+		states: S.Vector(State)
+		currIndex: uint
+	}
+	LS.Object(MHState)
 
-terra MHState:prepareForRun()
-	self.currIndex = 0
-end
-
-terra MHState:update(newmesh: &Mesh)
-	var state : &State
-	-- We're either adding a new state, or we're overwriting something
-	--    we've already done.
-	if self.currIndex == self.states:size() then
-		state = self.states:insert()
-	else
-		state = self.states:get(self.currIndex)
-		state:destruct()
+	terra MHState:freeMemory()
+		self.states:destruct()
 	end
-	-- If this is the first state in runtime order, then we initialize it fresh
-	-- Otherwise, we start by copying the previous state.
-	if self.currIndex == 0 then
-		state:init()
-	else
-		state:copy(self.states:get(self.currIndex-1))
+
+	terra MHState:prepareForRun()
+		self.currIndex = 0
 	end
-	-- Finally, we add the new geometry and update
-	state:update(newmesh, true)
-end
 
-terra MHState:currentScore()
-	return self.states(self.currIndex):currentScore()
-end
+	terra MHState:update(newmesh: &Mesh)
+		var state : &State
+		-- We're either adding a new state, or we're overwriting something
+		--    we've already done.
+		if self.currIndex == self.states:size() then
+			state = self.states:insert()
+		else
+			state = self.states:get(self.currIndex)
+			state:destruct()
+		end
+		-- If this is the first state in runtime order, then we initialize it fresh
+		-- Otherwise, we start by copying the previous state.
+		if self.currIndex == 0 then
+			state:init()
+		else
+			state:copy(self.states:get(self.currIndex-1))
+		end
+		-- Finally, we add the new geometry and update
+		state:update(newmesh, true)
+	end
 
-terra MHState:getMesh()
-	return &self.states(self.currIndex-1).mesh
-end
+	terra MHState:currentScore()
+		return self.states(self.currIndex):currentScore()
+	end
 
-terra MHState:advance()
-	self.currIndex = self.currIndex + 1
-end
+	terra MHState:getMesh()
+		return &self.states(self.currIndex-1).mesh
+	end
+
+	terra MHState:advance()
+		self.currIndex = self.currIndex + 1
+	end
+
+	return MHState
+end)
 
 ---------------------------------------------------------------
 
@@ -193,7 +212,8 @@ end
 -- 'outgenerations' is a cdata Vector(Vector(Sample(Mesh)))
 local function SIR(module, outgenerations, opts)
 
-	local globState = globalState(State)
+	local StateType = GetStateType()
+	local globState = globalState(StateType)
 
 	local function makeGeoPrim(geofn)
 		-- First, we make a Terra function that does all the perf-critical stuff:
@@ -236,7 +256,7 @@ local function SIR(module, outgenerations, opts)
 	-- Install the SMC geo prim generator
 	local program = module(makeGeoPrim)
 	-- Wrap program so that it takes procmod State as argument
-	program = statewrap(program, State)
+	program = statewrap(program, StateType)
 	-- Create the beforeResample, afterResample, and exit callbacks
 	local function dorecord(particles)
 		copyMeshes(particles, outgenerations)
@@ -248,7 +268,7 @@ local function SIR(module, outgenerations, opts)
 		newopts.afterResample = dorecord
 	end
 	-- Run smc.SIR with an initial empty State object as argument
-	local initstate = State.luaalloc():luainit()
+	local initstate = StateType.luaalloc():luainit()
 	smc.SIR(program, {initstate}, newopts)
 end
 
@@ -260,7 +280,8 @@ end
 --    reason to bother with it right now)
 local function MH(module, outgenerations, opts)
 
-	local globState = globalState(MHState)
+	local StateType = MHState(GetStateType())
+	local globState = globalState(StateType)
 
 	local function makeGeoPrim(geofn)
 		local args = geofnargs(geofn)
@@ -299,10 +320,10 @@ local function MH(module, outgenerations, opts)
 		samp.logprob = trace.loglikelihood
 	end
 
-	local program = statewrap(module(makeGeoPrim), MHState)
+	local program = statewrap(module(makeGeoPrim), StateType)
 	local newopts = LS.copytable(opts)
 	newopts.onSample = recordSample
-	local initstate = MHState.luaalloc():luainit()
+	local initstate = StateType.luaalloc():luainit()
 	mcmc.MH(program, {initstate}, newopts)
 end
 
@@ -313,7 +334,8 @@ end
 -- Useful for development and debugging
 local function ForwardSample(module, outgenerations, numsamples)
 
-	local globState = globalState(State)
+	local StateType = GetStateType()
+	local globState = globalState(StateType)
 
 	local function makeGeoPrim(geofn)
 		local args = geofnargs(geofn)
@@ -324,8 +346,8 @@ local function ForwardSample(module, outgenerations, numsamples)
 		end
 	end
 
-	local program = statewrap(module(makeGeoPrim), State)
-	local state = State.luaalloc():luainit()
+	local program = statewrap(module(makeGeoPrim), StateType)
+	local state = StateType.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
 	for i=1,numsamples do
@@ -343,7 +365,8 @@ end
 -- Keep running until numsamples have been accumulated
 local function RejectionSample(module, outgenerations, numsamples)
 
-	local globState = globalState(State)
+	local StateType = GetStateType()
+	local globState = globalState(StateType)
 	
 	local function makeGeoPrim(geofn)
 		local args = geofnargs(geofn)
@@ -354,8 +377,8 @@ local function RejectionSample(module, outgenerations, numsamples)
 		end
 	end
 
-	local program = statewrap(module(makeGeoPrim), State)
-	local state = State.luaalloc():luainit()
+	local program = statewrap(module(makeGeoPrim), StateType)
+	local state = StateType.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
 	while samples:size() < numsamples do
