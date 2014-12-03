@@ -38,6 +38,10 @@ local Particle = S.memoize(function(Trace)
 		return self
 	end
 
+	function Particle:freeMemory()
+		self.trace:freeMemory()
+	end
+
 	function Particle:isReplaying()
 		return self.currSyncIndex <= self.lastStopSyncIndex
 	end
@@ -223,7 +227,9 @@ local function SIR(program, args, opts)
 			local t = math.min(generation / nFunnelSteps, 1.0)
 			nParticles = (1.0-t)*funnelStartNum + t*funnelEndNum
 		end
-		particles = resample(particles, weights, nParticles)
+		local newparticles = resample(particles, weights, nParticles)
+		for _,p in ipairs(particles) do p:freeMemory() end
+		particles = newparticles
 		weights = {}
 		afterResample(particles)
 		generation = generation + 1

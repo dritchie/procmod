@@ -8,12 +8,12 @@ local prob = terralib.require("prob.prob")
 local smc = terralib.require("prob.smc")
 local mcmc = terralib.require("prob.mcmc")
 local distrib = terralib.require("qs.distrib")
+local globals = terralib.require("globals")
 
 
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
 
-local globals = terralib.require("globals")
 
 ---------------------------------------------------------------
 
@@ -55,6 +55,10 @@ terra State:clear()
 	self.grid:clear()
 	self.hasSelfIntersections = false
 	self.score = 0.0
+end
+
+terra State:freeMemory()
+	self:clear()
 end
 
 terra State:prepareForRun() end
@@ -108,6 +112,10 @@ local struct MHState(S.Object)
 	currIndex: uint
 }
 LS.Object(MHState)
+
+terra MHState:freeMemory()
+	self.states:destruct()
+end
 
 terra MHState:prepareForRun()
 	self.currIndex = 0
@@ -266,8 +274,13 @@ local function MH(module, outgenerations, opts)
 				update(...)
 			end
 			local gstate = globState:get()
-			prob.likelihood(gstate:currentScore())
+			local score = gstate:currentScore()
+			prob.likelihood(score)
 			gstate:advance()
+			-- Stop running this trace b/c we know we're going to reject it.
+			if score == -math.huge then
+				prob.throwZeroProbabilityError()
+			end
 		end
 	end
 

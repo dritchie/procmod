@@ -8,6 +8,16 @@ local distrib = terralib.require("prob.distrib")
 local Trace = LS.LObject()
 local globalTrace = nil
 
+-- Error that a trace can throw to cut off computation early if its
+--    log posterior has gone to -inf
+local ZERO_PROB_ERROR = {}
+
+local function throwZeroProbabilityError()
+	assert(globalTrace.logposterior == -math.huge,
+		"Zero probability error thrown when trace posterior probability was not zero.")
+	error(ZERO_PROB_ERROR)
+end
+
 -- Program can optionally take some arguments (typically used for some
 --    persistent store)
 function Trace:init(program, ...)
@@ -38,6 +48,15 @@ function Trace:copy(other)
 	return self
 end
 
+-- Args may be Terra objects which could free up memory when they are no longer needed.
+function Trace:freeMemory()
+	for _,a in ipairs(self.args) do
+		if a.freeMemory then
+			a:freeMemory()
+		end
+	end
+end
+
 -- Find a complete trace of nonzero probability via rejection sampling
 function Trace:rejectionSample()
 	self.logposterior = -math.huge
@@ -64,7 +83,7 @@ function Trace:run()
 	if retvals[1] then
 		table.remove(retvals, 1)
 		self.retvals = retvals
-	else
+	elseif retvals[2] ~= ZERO_PROB_ERROR then
 		error(retvals[2])
 	end
 end
@@ -396,6 +415,7 @@ end
 
 return
 {
+	throwZeroProbabilityError = throwZeroProbabilityError,
 	FlatValueTrace = FlatValueTrace,
 	StructuredERPTrace = StructuredERPTrace,
 	isrunning = function() return globalTrace ~= nil end,

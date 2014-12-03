@@ -18,7 +18,10 @@ local prob = {
 	-- Address management
 	pushAddress = trace.pushAddress,
 	popAddress = trace.popAddress,
-	setAddressLoopIndex = trace.setAddressLoopIndex
+	setAddressLoopIndex = trace.setAddressLoopIndex,
+
+	-- Misc
+	throwZeroProbabilityError = trace.throwZeroProbabilityError
 }
 
 return prob

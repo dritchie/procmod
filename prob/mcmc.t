@@ -61,8 +61,11 @@ local function MH(program, args, opts)
 		-- Accept/reject
 		local accept = math.log(math.random()) < newtrace.logposterior - trace.logposterior + rvslp - fwdlp
 		if accept then
+			trace:freeMemory()
 			trace = newtrace
 			numAccept = numAccept + 1
+		else
+			newtrace:freeMemory()
 		end
 		-- Do something with the sample
 		if i % lag == 0 then
