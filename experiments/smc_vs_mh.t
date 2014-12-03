@@ -6,16 +6,8 @@ local procmod = terralib.require("procmod")
 
 local time = terralib.currenttimeinseconds
 
-
--- Get the 'base' name of the program (minus _future, if it was provided)
-local progmodule = globals.config.program
-local fi = string.find(progmodule, "_future")
-if fi then
-	progmodule = string.sub(progmodule, 1, fi-1)
-end
-
--- TODO: Move these to config file?
-local outfilename = "experiments/smc_vs_mh.csv"
+-- Constants
+local outfilename = arg[2] or "experiments/smc_vs_mh.csv"
 local sampNums = {10, 20, 40, 80, 160, 320, 640, 1280, 2560}
 local numRuns = 10
 
@@ -33,7 +25,6 @@ local function doMethod(method, numSamps, record, timeBudget)
 	-- Set up config
 	if string.find(method, "smc") then
 		globals.config.method = "smc"
-		globals.config.program = string.format("%s_future", progmodule)
 		globals.config.nSamples = numSamps
 		if method == "smc_fixedOrder" then
 			globals.config.futureImpl = "eager"
@@ -42,7 +33,6 @@ local function doMethod(method, numSamps, record, timeBudget)
 		end
 	else
 		globals.config.method = "mh"
-		globals.config.program = progmodule
 		if timeBudget then
 			globals.config.nSamples = 10000000
 			globals.config.mh_timeBudget = timeBudget
