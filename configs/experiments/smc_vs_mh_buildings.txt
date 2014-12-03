@@ -1,0 +1,12 @@
+#include configs/master.txt
+#include configs/experiments/master.txt
+
+####################################################
+
+targetMesh				targetgeom/buildingProxy1_thicker.obj
+program					models.weird_building_future
+
+####################################################
+
+voxelFactorWeight		0.01
+outsideFactorWeight		0.01

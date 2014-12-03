@@ -183,9 +183,6 @@ end
 -- Run sequential importance sampling on a procedural modeling program,
 --    saving the generated meshes
 -- 'outgenerations' is a cdata Vector(Vector(Sample(Mesh)))
--- Options are:
---    * recordHistory: record meshes all the way through, not just the final ones
---    * any other options recognized by smc.SIR
 local function SIR(module, outgenerations, opts)
 
 	local globState = globalState(State)
@@ -219,9 +216,11 @@ local function SIR(module, outgenerations, opts)
 			local samp = newgeneration:insert()
 			-- The first arg of the particle's trace is the procmod State object.
 			-- This is a bit funky, but I think it's the best way to get a this data.
-			samp.value:copy(p.trace.args[1].mesh)
-			-- samp.logprob = p.trace.logposterior
-			-- samp.loglikelihood = p.trace.loglikelihood
+			if opts.saveSampleValues then
+				samp.value:copy(p.trace.args[1].mesh)
+			else
+				LS.luainit(samp.value)
+			end
 			samp.logprob = p.trace.loglikelihood
 		end
 	end
@@ -279,18 +278,12 @@ local function MH(module, outgenerations, opts)
 		end
 		local v = outgenerations:get(0)
 		local samp = v:insert()
-		samp.value:copy(trace.args[1]:getMesh())
+		if opts.saveSampleValues then
+			samp.value:copy(trace.args[1]:getMesh())
+		else
+			LS.luainit(samp.value)
+		end
 		samp.logprob = trace.loglikelihood
-		---------------------------------------------
-		-- local v = outgenerations:insert()
-		-- LS.luainit(v)
-		-- local state = trace.args[1]
-		-- for i=0,tonumber(state.states:size()-1) do
-		-- 	local sstate = state.states:get(i)
-		-- 	local samp = v:insert()
-		-- 	samp.value:copy(sstate.mesh)
-		-- 	samp.logprob = trace.loglikelihood
-		-- end
 	end
 
 	local program = statewrap(module(makeGeoPrim), MHState)

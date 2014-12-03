@@ -11,13 +11,13 @@ outsideFactorWeight		0.02
 
 futureImpl				stochastic
 
-targetMesh				targetgeom/set_me_to_something_valid
-program					models.set_me_to_something_valid
-method					set_me_to_smc_or_mh_or_forward_or_reject
+verbose					true
+saveSampleValues		true
+smc_recordHistory		true
 
-smc_nParticles			a_number
-smc_recordHistory		a_boolean
-smc_verbose				a_boolean
+#nSamples					a_number
+#targetMesh					targetgeom/set_me_to_something_valid
+#program					models.set_me_to_something_valid
+#method						set_me_to_smc_or_mh_or_forward_or_reject
 
-mh_nSamples				a_number
-mh_verbose				a_boolean
+

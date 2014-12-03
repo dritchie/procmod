@@ -16,16 +16,13 @@ end
 
 -- TODO: Move these to config file?
 local outfilename = "experiments/smc_vs_mh.csv"
-local startNumSamps = 100
-local endNumSamps = 2100
-local stepNumSamps = 200
+local sampNums = {10, 20, 40, 80, 160, 320, 640, 1280, 2560}
 local numRuns = 10
 
 -- Set up persistent variables we'll need
 local methods = {"smc", "smc_fixedOrder", "mh"}
-local iters = (endNumSamps - startNumSamps)/stepNumSamps
 local generations = global(S.Vector(S.Vector(procmod.Sample)))
-LS.luainit(generations:get())
+LS.luainit(generations:getpointer())
 local f = io.open(outfilename, "w")
 f:write("method,numSamps,time,avgScore,maxScore\n")
 
@@ -37,7 +34,7 @@ local function doMethod(method, numSamps, record, timeBudget)
 	if string.find(method, "smc") then
 		globals.config.method = "smc"
 		globals.config.program = string.format("%s_future", progmodule)
-		globals.config.smc_nParticles = numSamps
+		globals.config.nSamples = numSamps
 		if method == "smc_fixedOrder" then
 			globals.config.futureImpl = "eager"
 		else
@@ -47,10 +44,10 @@ local function doMethod(method, numSamps, record, timeBudget)
 		globals.config.method = "mh"
 		globals.config.program = progmodule
 		if timeBudget then
-			globals.config.mh_nSamples = 10000000
+			globals.config.nSamples = 10000000
 			globals.config.mh_timeBudget = timeBudget
 		else
-			globals.config.mh_nSamples = numSamps
+			globals.config.nSamples = numSamps
 		end
 	end
 	-- Run it and collect timing and score info
@@ -85,7 +82,7 @@ end
 -- Now actually run stuff for reals
 print()
 print("===== Data collection runs =====")
-for numSamps=startNumSamps,endNumSamps,stepNumSamps do
+for _,numSamps in ipairs(sampNums) do
 	local timeBudget
 	for _,method in ipairs(methods) do
 		-- We drive MH's time budget by the average time taken by SMC

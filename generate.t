@@ -11,25 +11,17 @@ local function run(generations)
 	future.setImpl(globals.config.futureImpl)
 
 	local smcopts = {
-		nParticles = globals.config.smc_nParticles,
-
-		-- doAnneal = true,
-		-- nAnnealSteps = 20,
-		-- annealStartTemp = 100,
-
-		-- doFunnel = true,
-		-- nFunnelSteps = 30,
-		-- funnelStartNum = 5000,
-		-- funnelEndNum = 200,
-		
+		nParticles = globals.config.nSamples,		
 		recordHistory = globals.config.smc_recordHistory,
-		verbose = globals.config.smc_verbose
+		saveSampleValues = globals.config.saveSampleValues,
+		verbose = globals.config.verbose
 	}
 
 	local mhopts = {
-		nSamples = globals.config.mh_nSamples,
+		nSamples = globals.config.nSamples,
 		timeBudget = globals.config.mh_timeBudget,
-		verbose = globals.config.mh_verbose
+		saveSampleValues = globals.config.saveSampleValues,
+		verbose = globals.config.verbose
 	}
 
 	local method = globals.config.method
