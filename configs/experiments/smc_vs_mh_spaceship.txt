@@ -4,6 +4,6 @@
 ####################################################
 
 targetMesh				targetgeom/shipProxy2.obj
-program					models.spaceship_future
+program					models.spaceship
 
 ####################################################
