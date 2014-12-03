@@ -1,2 +1,4 @@
 *.swatches
 scratch.txt
+*.csv
+*.twb
