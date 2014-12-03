@@ -67,10 +67,10 @@ local State = S.memoize(function(doVolumeMatch)
 				if doVolumeMatch then
 					emit quote
 						if not self.hasSelfIntersections then
-							self.grid:resize(globals.targetGrid.rows,
-											 globals.targetGrid.cols,
-											 globals.targetGrid.slices)
-							newmesh:voxelize(&self.grid, &globals.targetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
+							self.grid:resize(globals.matchTargetGrid.rows,
+											 globals.matchTargetGrid.cols,
+											 globals.matchTargetGrid.slices)
+							newmesh:voxelize(&self.grid, &globals.matchTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
 						end
 					end
 				end
@@ -88,13 +88,13 @@ local State = S.memoize(function(doVolumeMatch)
 					if doVolumeMatch then
 						emit quote
 							var meshbb = self.mesh:bbox()
-							var targetext = globals.targetBounds:extents()
-							var extralo = (globals.targetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
-							var extrahi = (meshbb.maxs - globals.targetBounds.maxs):max(Vec3.create(0.0)) / targetext
+							var targetext = globals.matchTargetBounds:extents()
+							var extralo = (globals.matchTargetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
+							var extrahi = (meshbb.maxs - globals.matchTargetBounds.maxs):max(Vec3.create(0.0)) / targetext
 							var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
-							var percentSame = globals.targetGrid:percentCellsEqualPadded(&self.grid)
-							self.score = self.score + softeq(percentSame, 1.0, [globals.config.voxelFactorWeight]) +
-										 			  softeq(percentOutside, 0.0, [globals.config.outsideFactorWeight])
+							var percentSame = globals.matchTargetGrid:percentCellsEqualPadded(&self.grid)
+							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchVoxelFactorWeight]) +
+										 			  softeq(percentOutside, 0.0, [globals.config.matchOutsideFactorWeight])
 						end
 					end
 				end

@@ -69,7 +69,7 @@ local voxelizeUsingTargetBounds = global(bool, 0)
 
 local terra updateBounds()
 	if voxelizeUsingTargetBounds then
-		bounds = globals.targetMesh:bbox()
+		bounds = globals.matchTargetMesh:bbox()
 	else
 		bounds = displayMesh:bbox()
 	end
@@ -80,7 +80,7 @@ end
 
 
 local terra displayTargetMesh()
-	displayMesh = &globals.targetMesh
+	displayMesh = &globals.matchTargetMesh
 	updateBounds()
 	gl.glutPostRedisplay()
 end
@@ -341,7 +341,7 @@ end
 local terra isDisplayingSample()
 	return samples ~= nil and
 		   displayMesh ~= nil and
-		   displayMesh ~= &globals.targetMesh and
+		   displayMesh ~= &globals.matchTargetMesh and
 		   displayMesh ~= &voxelMesh
 end
 
@@ -385,7 +385,7 @@ local terra drawOverlay()
 
 	-- Display the sample/generation index
 	var str : int8[64]
-	if displayMesh == &globals.targetMesh then
+	if displayMesh == &globals.matchTargetMesh then
 		S.sprintf(str, "Target Shape")
 	elseif displayMesh == &voxelMesh then
 		S.sprintf(str, "Voxelization")

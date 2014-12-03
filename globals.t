@@ -53,22 +53,26 @@ end)
 
 -- We load a config file from the first command line argument, if provided, otherwise
 --    we look for configs/scratch.txt
-G.config:load(arg[1] or "configs/scratch.txt")
+G.config:load(arg[1] or "configs/scratch.config")
 
+-- We declare all possible globals and do the minimum initialization here.
+G.matchTargetMesh = global(Mesh)
+G.matchTargetGrid = global(BinaryGrid)
+G.matchTargetBounds = global(BBox3)
+local terra initglobals()
+	G.matchTargetMesh:init()
+	G.matchTargetGrid:init()
+	G.matchTargetBounds:init()
+end
+initglobals()
 
--- Volume match globals
+-- Set up volume matching globals
 if G.config.doVolumeMatch then
-	G.targetMesh = global(Mesh)
-	G.targetGrid = global(BinaryGrid)
-	G.targetBounds = global(BBox3)
 	local terra initglobals()
-		G.targetMesh:init()
-		G.targetMesh:loadOBJ(G.config.targetMesh)
-		G.targetBounds = G.targetMesh:bbox()
-		G.targetBounds:expand(G.config.boundsExpand)
-		G.targetGrid:init()
-		G.targetMesh:voxelize(&G.targetGrid, &G.targetBounds, G.config.voxelSize, G.config.solidVoxelize)
-
+		G.matchTargetMesh:loadOBJ(G.config.matchTargetMesh)
+		G.matchTargetBounds = G.matchTargetMesh:bbox()
+		G.matchTargetBounds:expand(G.config.boundsExpand)
+		G.matchTargetMesh:voxelize(&G.matchTargetGrid, &G.matchTargetBounds, G.config.voxelSize, G.config.solidVoxelize)
 	end
 	initglobals()
 end
