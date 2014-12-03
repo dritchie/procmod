@@ -285,6 +285,7 @@ return function(makeGeoPrim)
 		local finished = false
 		local i = 0
 		repeat
+			prob.setAddressLoopIndex(i)
 			local uprot = gaussian(0, math.pi/12)
 			local leftrot = gaussian(0, math.pi/12)
 			local len = uniform(3, 5) * frame.radius
@@ -306,7 +307,9 @@ return function(makeGeoPrim)
 				local maxbranchradius = 0.5*(nextframe.center - splitFrame.center):norm()
 				local branchradius = math.min(uniform(0.8, 0.95) * nextframe.radius, maxbranchradius)
 				local bframe, prev = branchFrame(splitFrame, nextframe, 0.5, theta, branchradius, N_SEGS)
+				prob.pushAddress("branch")
 				branch(bframe, prev, depth+1)
+				prob.popAddress()
 			end
 			-- local finished = true
 			local finished = flip(1-continueProb(i))
@@ -325,7 +328,9 @@ return function(makeGeoPrim)
 			up = LVec3.new(0, 0, -1),
 			radius = uniform(1.5, 2)
 		}
+		prob.pushAddress("start")
 		branch(startFrame, nil, 0)
+		prob.popAddress()
 	end
 end
 
