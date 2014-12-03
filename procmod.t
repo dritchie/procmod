@@ -36,7 +36,10 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		score: double
 	}
 	if doVolumeMatch then
-		State.entries:insert({field="grid", type=BinaryGrid3D})
+		State.entries:insert({field="matchGrid", type=BinaryGrid3D})
+	end
+	if doVolumeAvoid then
+		State.entries:insert({field="avoidGrid", type=BinaryGrid3D})
 	end
 	-- Also give the State class all the lua.std metatype stuff
 	LS.Object(State)
@@ -47,9 +50,13 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 	end
 
 	terra State:clear()
-		self.mesh:clear()
-		self.prims:clear()
-		[doVolumeMatch and quote self.grid:clear() end or quote end]
+		escape
+			for _,e in ipairs(State.entries) do
+				if e.type:isstruct() and e.type:getmethod("clear") then
+					emit quote self.[e.field]:clear() end
+				end
+			end
+		end
 		self.hasSelfIntersections = false
 		self.score = 0.0
 	end
@@ -78,20 +85,35 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		self.prims:insert():copy(newmesh)
 		if updateScore then
 			escape
+				-- Volume avoidance score contribution
+				if doVolumeAvoid then
+					emit quote
+						if self.score > [-math.huge] then
+							self.avoidGrid:resize(globals.avoidTargetGrid.rows,
+											 	  globals.avoidTargetGrid.cols,
+											 	  globals.avoidTargetGrid.slices)
+							newmesh:voxelize(&self.avoidGrid, &globals.avoidTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
+							-- Implemented as a hard constraint, for now
+							if self.avoidGrid:numFilledCellsEqualPadded(&globals.avoidTargetGrid) > 0 then
+								self.score = [-math.huge]
+							end
+						end
+					end
+				end
 				-- Volume matching score contribution
 				if doVolumeMatch then
 					emit quote
 						if self.score > [-math.huge] then
-							self.grid:resize(globals.matchTargetGrid.rows,
-											 globals.matchTargetGrid.cols,
-											 globals.matchTargetGrid.slices)
-							newmesh:voxelize(&self.grid, &globals.matchTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
+							self.matchGrid:resize(globals.matchTargetGrid.rows,
+											 	  globals.matchTargetGrid.cols,
+												  globals.matchTargetGrid.slices)
+							newmesh:voxelize(&self.matchGrid, &globals.matchTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
 							var meshbb = self.mesh:bbox()
 							var targetext = globals.matchTargetBounds:extents()
 							var extralo = (globals.matchTargetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
 							var extrahi = (meshbb.maxs - globals.matchTargetBounds.maxs):max(Vec3.create(0.0)) / targetext
 							var percentOutside = extralo(0) + extralo(1) + extralo(2) + extrahi(0) + extrahi(1) + extrahi(2)
-							var percentSame = globals.matchTargetGrid:percentCellsEqualPadded(&self.grid)
+							var percentSame = globals.matchTargetGrid:percentCellsEqualPadded(&self.matchGrid)
 							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchVoxelFactorWeight]) +
 										 			  softeq(percentOutside, 0.0, [globals.config.matchOutsideFactorWeight])
 			 			end
