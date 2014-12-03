@@ -26,7 +26,7 @@ end)
 --    every particle/trace.
 -- Stores data needed to compute scores for whatever objectives the config file specifies
 --    (e.g. volume matching)
-local State = S.memoize(function(doVolumeMatch, doVolumeAvoid)
+local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolumeAvoid)
 
 	local struct State(S.Object)
 	{
@@ -62,11 +62,16 @@ local State = S.memoize(function(doVolumeMatch, doVolumeAvoid)
 
 	terra State:update(newmesh: &Mesh, updateScore: bool)
 		if updateScore then
-			self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
-			if self.hasSelfIntersections then
-				self.score = [-math.huge]
-			else
-				self.score = 0.0
+			self.score = 0.0
+			escape
+				if checkSelfIntersections then
+					emit quote
+						self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
+						if self.hasSelfIntersections then
+							self.score = [-math.huge]
+						end
+					end
+				end
 			end
 		end
 		self.mesh:append(newmesh)
@@ -106,7 +111,8 @@ end)
 
 -- Retrieve the State type specified by the global config settings
 local function GetStateType()
-	return State(globals.config.doVolumeMatch,
+	return State(globals.config.checkSelfIntersections,
+				 globals.config.doVolumeMatch,
 				 globals.config.doVolumeAvoid)
 end
 
