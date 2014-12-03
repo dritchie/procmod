@@ -1,7 +1,7 @@
 local S = terralib.require("qs.lib.std")
 local LS = terralib.require("std")
 local Mesh = terralib.require("geometry.mesh")(double)
-local BinaryGrid = terralib.require("geometry.binaryGrid3d")
+local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 local BBox3 = terralib.require("geometry.bbox")(Vec3)
 local Config = terralib.require("config")
@@ -57,12 +57,18 @@ G.config:load(arg[1] or "configs/scratch.config")
 
 -- We declare all possible globals and do the minimum initialization here.
 G.matchTargetMesh = global(Mesh)
-G.matchTargetGrid = global(BinaryGrid)
+G.matchTargetGrid = global(BinaryGrid3D)
 G.matchTargetBounds = global(BBox3)
+G.avoidTargetMesh = global(Mesh)
+G.avoidTargetGrid = global(BinaryGrid3D)
+G.avoidTargetBounds = global(BBox3)
 local terra initglobals()
 	G.matchTargetMesh:init()
 	G.matchTargetGrid:init()
 	G.matchTargetBounds:init()
+	G.avoidTargetMesh:init()
+	G.avoidTargetGrid:init()
+	G.avoidTargetBounds:init()
 end
 initglobals()
 
@@ -77,5 +83,20 @@ if G.config.doVolumeMatch then
 	initglobals()
 end
 
+-- Set up volume avoidance globals
+if G.config.doVolumeAvoid then
+	local terra initglobals()
+		G.avoidTargetMesh:loadOBJ(G.config.avoidTargetMesh)
+		G.avoidTargetBounds = G.avoidTargetMesh:bbox()
+		G.avoidTargetBounds:expand(G.config.boundsExpand)
+		G.avoidTargetMesh:voxelize(&G.avoidTargetGrid, &G.avoidTargetBounds, G.config.voxelSize, G.config.solidVoxelize)
+	end
+	initglobals()
+end
+
 
 return G
+
+
+
+

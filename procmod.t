@@ -3,7 +3,7 @@ local LS = terralib.require("std")
 local Mesh = terralib.require("geometry.mesh")(double)
 local Vec = terralib.require("linalg.vec")
 local BBox = terralib.require("geometry.bbox")
-local BinaryGrid = terralib.require("geometry.binaryGrid3d")
+local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
 local prob = terralib.require("prob.prob")
 local smc = terralib.require("prob.smc")
 local mcmc = terralib.require("prob.mcmc")
@@ -26,7 +26,7 @@ end)
 --    every particle/trace.
 -- Stores data needed to compute scores for whatever objectives the config file specifies
 --    (e.g. volume matching)
-local State = S.memoize(function(doVolumeMatch)
+local State = S.memoize(function(doVolumeMatch, doVolumeAvoid)
 
 	local struct State(S.Object)
 	{
@@ -36,7 +36,7 @@ local State = S.memoize(function(doVolumeMatch)
 		score: double
 	}
 	if doVolumeMatch then
-		State.entries:insert({field="grid", type=BinaryGrid})
+		State.entries:insert({field="grid", type=BinaryGrid3D})
 	end
 	-- Also give the State class all the lua.std metatype stuff
 	LS.Object(State)
@@ -63,30 +63,24 @@ local State = S.memoize(function(doVolumeMatch)
 	terra State:update(newmesh: &Mesh, updateScore: bool)
 		if updateScore then
 			self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
-			escape
-				if doVolumeMatch then
-					emit quote
-						if not self.hasSelfIntersections then
-							self.grid:resize(globals.matchTargetGrid.rows,
-											 globals.matchTargetGrid.cols,
-											 globals.matchTargetGrid.slices)
-							newmesh:voxelize(&self.grid, &globals.matchTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
-						end
-					end
-				end
+			if self.hasSelfIntersections then
+				self.score = [-math.huge]
+			else
+				self.score = 0.0
 			end
 		end
 		self.mesh:append(newmesh)
 		self.prims:insert():copy(newmesh)
 		if updateScore then
-			-- Compute score
-			if self.hasSelfIntersections then
-				self.score = [-math.huge]
-			else
-				self.score = 0.0
-				escape
-					if doVolumeMatch then
-						emit quote
+			escape
+				-- Volume matching score contribution
+				if doVolumeMatch then
+					emit quote
+						if self.score > [-math.huge] then
+							self.grid:resize(globals.matchTargetGrid.rows,
+											 globals.matchTargetGrid.cols,
+											 globals.matchTargetGrid.slices)
+							newmesh:voxelize(&self.grid, &globals.matchTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
 							var meshbb = self.mesh:bbox()
 							var targetext = globals.matchTargetBounds:extents()
 							var extralo = (globals.matchTargetBounds.mins - meshbb.mins):max(Vec3.create(0.0)) / targetext
@@ -95,7 +89,7 @@ local State = S.memoize(function(doVolumeMatch)
 							var percentSame = globals.matchTargetGrid:percentCellsEqualPadded(&self.grid)
 							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchVoxelFactorWeight]) +
 										 			  softeq(percentOutside, 0.0, [globals.config.matchOutsideFactorWeight])
-						end
+			 			end
 					end
 				end
 			end
@@ -112,7 +106,8 @@ end)
 
 -- Retrieve the State type specified by the global config settings
 local function GetStateType()
-	return State(globals.config.doVolumeMatch)
+	return State(globals.config.doVolumeMatch,
+				 globals.config.doVolumeAvoid)
 end
 
 ---------------------------------------------------------------
