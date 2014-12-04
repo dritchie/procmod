@@ -60,6 +60,7 @@ local alt = global(bool, 0)
 local prevbutton = global(int)
 local shouldDrawGrid = global(bool, 0)
 local shouldDrawOverlay = global(bool, 1)
+local shouldDrawAvoidMesh = global(bool, 0)
 local minScore = global(double)
 local maxScore = global(double)
 local voxelizeUsingTargetBounds = global(bool, 0)
@@ -84,7 +85,6 @@ local terra displayTargetMesh()
 	updateBounds()
 	gl.glutPostRedisplay()
 end
-
 
 local terra displayNormalMesh()
 	displayMesh = &(samples(currSampleIndex).value)
@@ -215,7 +215,7 @@ local terra init()
 end
 
 
-local terra shadingMeshDrawPass()
+local terra shadingMeshDrawPass(mesh: &Mesh(double))
 	gl.glEnable(gl.GL_LIGHTING)
 	gl.glShadeModel(gl.GL_FLAT)
 	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
@@ -226,18 +226,18 @@ local terra shadingMeshDrawPass()
 	light:setupGLLight(0)
 	material:setupGLMaterial()
 
-	displayMesh:draw()
+	mesh:draw()
 end
 
 
-local terra wireframeMeshDrawPass()
+local terra wireframeMeshDrawPass(mesh: &Mesh(double))
 	gl.glDisable(gl.GL_POLYGON_OFFSET_FILL)
 	gl.glDisable(gl.GL_LIGHTING)
 	gl.glColor4d(0.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
 
-	displayMesh:draw()
+	mesh:draw()
 end
 
 local terra drawGrid()
@@ -328,6 +328,11 @@ local terra toggleCheckSelfIntersections()
 	gl.glutPostRedisplay()
 end
 
+local terra toggleAvoidMesh()
+	shouldDrawAvoidMesh = not shouldDrawAvoidMesh
+	gl.glutPostRedisplay()
+end
+
 local terra displayString(font: &opaque, str: rawstring, x: int, y: int)
 	if str ~= nil and C.strlen(str) > 0 then
 		gl.glRasterPos2f(x, y)
@@ -386,7 +391,7 @@ local terra drawOverlay()
 	-- Display the sample/generation index
 	var str : int8[64]
 	if displayMesh == &globals.matchTargetMesh then
-		S.sprintf(str, "Target Shape")
+		S.sprintf(str, "Match Target Shape")
 	elseif displayMesh == &voxelMesh then
 		S.sprintf(str, "Voxelization")
 	elseif samples == nil then
@@ -427,6 +432,12 @@ local terra drawOverlay()
 		displayString(TEXT_FONT, str, xleft, ytop)
 		moveToNewLine(ytop)
 	end
+	-- Report whether we're showing the avoid mesh
+	if shouldDrawAvoidMesh then
+		S.sprintf(str, "(Showing Avoid Mesh)\n")
+		displayString(TEXT_FONT, str, xleft, ytop)
+		moveToNewLine(ytop)
+	end
 
 	-- Draw a little 'navigation bar' at the bottom
 	if isDisplayingSample() and samples:size() > 1 then
@@ -459,8 +470,12 @@ local terra display()
 	gl.glClear(gl.GL_COLOR_BUFFER_BIT or gl.GL_DEPTH_BUFFER_BIT)
 
 	if displayMesh ~= nil then
-		shadingMeshDrawPass()
-		wireframeMeshDrawPass()
+		shadingMeshDrawPass(displayMesh)
+		wireframeMeshDrawPass(displayMesh)
+	end
+	if shouldDrawAvoidMesh then
+		shadingMeshDrawPass(&globals.avoidTargetMesh)
+		wireframeMeshDrawPass(&globals.avoidTargetMesh)
 	end
 	if shouldDrawGrid then
 		drawGrid()
@@ -553,6 +568,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		displayVoxelMesh()
 	elseif key == char('t') then
 		displayTargetMesh()
+	elseif key == char('a') then
+		toggleAvoidMesh()
 	elseif key == char('i') then
 		displayIntersectionMesh()
 	elseif key == char('s') then

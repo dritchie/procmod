@@ -89,13 +89,19 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 				if doVolumeAvoid then
 					emit quote
 						if self.score > [-math.huge] then
-							self.avoidGrid:resize(globals.avoidTargetGrid.rows,
-											 	  globals.avoidTargetGrid.cols,
-											 	  globals.avoidTargetGrid.slices)
-							newmesh:voxelize(&self.avoidGrid, &globals.avoidTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
 							-- Implemented as a hard constraint, for now
-							if self.avoidGrid:numFilledCellsEqualPadded(&globals.avoidTargetGrid) > 0 then
+							var floor = [globals.config.avoidFloor or -math.huge]
+							var meshbb = self.mesh:bbox()
+							if meshbb.mins(1) < floor then
 								self.score = [-math.huge]
+							else
+								self.avoidGrid:resize(globals.avoidTargetGrid.rows,
+											 	  	  globals.avoidTargetGrid.cols,
+											 	  	  globals.avoidTargetGrid.slices)
+								newmesh:voxelize(&self.avoidGrid, &globals.avoidTargetBounds, globals.config.voxelSize, globals.config.solidVoxelize)
+								if self.avoidGrid:numFilledCellsEqualPadded(&globals.avoidTargetGrid) > 0 then
+									self.score = [-math.huge]
+								end
 							end
 						end
 					end
