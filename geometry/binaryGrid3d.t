@@ -46,9 +46,10 @@ terra BinaryGrid3D:resize(rows: uint, cols: uint, slices: uint)
 		self.cols = cols
 		self.slices = slices
 		if self.data ~= nil then
-			S.free(self.data)
+			self.data = [&uint](S.realloc(self.data, self:numuints()*sizeof(uint)))
+		else
+			self.data = [&uint](S.malloc(self:numuints()*sizeof(uint)))
 		end
-		self.data = [&uint](S.malloc(self:numuints()*sizeof(uint)))
 		self:clear()
 	end
 end

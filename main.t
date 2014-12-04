@@ -91,6 +91,8 @@ local terra displayNormalMesh()
 	if samples ~= nil then
 		displayMesh = &(samples(currSampleIndex).value)
 		updateBounds()
+	else
+		displayMesh = nil
 	end
 	voxelAvoidMesh:clear()
 	gl.glutPostRedisplay()
