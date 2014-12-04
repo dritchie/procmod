@@ -221,18 +221,18 @@ local Mesh = S.memoize(function(real)
 	-- Returns a bounding box of the voxels touched by this triangle
 	local Vec3u = Vec(uint, 3)
 	local BBox3u = BBox(Vec3u)
-	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, solid: bool)
-		var tribb = BBox3.salloc():init()
-		tribb:expand(v0); tribb:expand(v1); tribb:expand(v2)
+	local terra voxelizeTriangle(outgrid: &BinaryGrid, v0: Vec3, v1: Vec3, v2: Vec3, tribb: &BBox3, solid: bool)
 		-- If a triangle is perfectly axis-aligned, it will 'span' zero voxels, so the loops below
 		--    will do nothing. To get around this, we expand the bbox a little bit.
 		tribb:expand(0.000001)
-		var minI = tribb.mins:floor()
-		var maxI = tribb.maxs:ceil()
+		var vzero = Vec3.create(0.0)
+		var minI = tribb.mins:floor():max(vzero)
+		var maxI = tribb.maxs:ceil():max(vzero)
 		var bb = BBox3u.salloc():init(Vec3u.create(minI(0), minI(1), minI(2)),
 									  Vec3u.create(maxI(0), maxI(1), maxI(2)))
 		-- Take care to ensure that we don't loop over any voxels that are outside the actual grid.
 		bb.maxs:minInPlace(Vec3u.create(outgrid.cols, outgrid.rows, outgrid.slices))
+		var numvoxelsset = 0
 		for k=bb.mins(2),bb.maxs(2) do
 			for i=bb.mins(1),bb.maxs(1) do
 				for j=bb.mins(0),bb.maxs(0) do
@@ -244,11 +244,12 @@ local Mesh = S.memoize(function(real)
 					-- Triangle has to intersect the voxel
 					if voxel:intersects(v0, v1, v2) then
 						outgrid:setVoxel(i,j,k)
+						numvoxelsset = numvoxelsset + 1
 					end
 				end
 			end
 		end
-		return @bb
+		return @bb, numvoxelsset
 	end
 
 	-- Returns the number of triangles that fell outside the bounds
@@ -273,7 +274,7 @@ local Mesh = S.memoize(function(real)
 			var tribb = BBox3.salloc():init()
 			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
 			if tribb:intersects(gridbounds) then
-				var bb = voxelizeTriangle(outgrid, p0, p1, p2, solid)
+				var bb, nvs = voxelizeTriangle(outgrid, p0, p1, p2, tribb, solid)
 				touchedbb:unionWith(&bb)
 			else
 				numOutsideTris = numOutsideTris + 1

@@ -32,7 +32,6 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 	{
 		mesh: Mesh
 		prims: S.Vector(Mesh)	-- For collision checks
-		hasSelfIntersections: bool
 		score: double
 	}
 	if doVolumeMatch then
@@ -57,7 +56,6 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 				end
 			end
 		end
-		self.hasSelfIntersections = false
 		self.score = 0.0
 	end
 
@@ -69,12 +67,10 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 
 	terra State:update(newmesh: &Mesh, updateScore: bool)
 		if updateScore then
-			self.score = 0.0
 			escape
 				if checkSelfIntersections then
 					emit quote
-						self.hasSelfIntersections = self.hasSelfIntersections or newmesh:intersects(&self.prims)
-						if self.hasSelfIntersections then
+						if self.score ~= [-math.huge] and newmesh:intersects(&self.prims) then
 							self.score = [-math.huge]
 						end
 					end
@@ -84,11 +80,14 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		self.mesh:append(newmesh)
 		self.prims:insert():copy(newmesh)
 		if updateScore then
+			if self.score ~= [-math.huge] then
+				self.score = 0.0
+			end
 			escape
 				-- Volume avoidance score contribution
 				if doVolumeAvoid then
 					emit quote
-						if self.score > [-math.huge] then
+						if self.score ~= [-math.huge] then
 							-- Implemented as a hard constraint, for now
 							var floor = [globals.config.avoidFloor or -math.huge]
 							var meshbb = self.mesh:bbox()
@@ -109,7 +108,7 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 				-- Volume matching score contribution
 				if doVolumeMatch then
 					emit quote
-						if self.score > [-math.huge] then
+						if self.score ~= [-math.huge] then
 							self.matchGrid:resize(globals.matchTargetGrid.rows,
 											 	  globals.matchTargetGrid.cols,
 												  globals.matchTargetGrid.slices)

@@ -45,8 +45,9 @@ local currGenIndex = global(int, 0)
 local samples = global(&Samples, 0)
 local currSampleIndex = global(int, 0)
 local MAPIndex = global(int)
-local voxelMesh = global(Mesh(double))
 local displayMesh = global(&Mesh(double), 0)
+local voxelMesh = global(Mesh(double))
+local voxelAvoidMesh = global(Mesh(double))
 local checkingForSelfIntersections = global(bool, 0)
 local intersectionMesh = global(Mesh(double))
 local meshSelfIntersects = global(bool, 0)
@@ -87,8 +88,11 @@ local terra displayTargetMesh()
 end
 
 local terra displayNormalMesh()
-	displayMesh = &(samples(currSampleIndex).value)
-	updateBounds()
+	if samples ~= nil then
+		displayMesh = &(samples(currSampleIndex).value)
+		updateBounds()
+	end
+	voxelAvoidMesh:clear()
 	gl.glutPostRedisplay()
 end
 
@@ -106,9 +110,25 @@ local terra displayVoxelMesh()
 	--    that would lead to wonky double voxelization
 	if displayMesh ~= nil and displayMesh ~= &voxelMesh then
 		var grid = BinaryGrid.salloc():init()
-		displayMesh:voxelize(grid, &bounds, globals.config.voxelSize, globals.config.solidVoxelize)
-		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &bounds)
+		var vbounds = bounds
+		-- If we're displaying the avoid mesh, it's more informative to voxelize the display mesh
+		--    against those bounds than against its own.
+		if shouldDrawAvoidMesh and globals.avoidTargetMesh:numTris() > 0 then
+			vbounds = globals.avoidTargetMesh:bbox()
+			vbounds:expand(globals.config.boundsExpand)
+		end
+		displayMesh:voxelize(grid, &vbounds, globals.config.voxelSize, globals.config.solidVoxelize)
+		[BinaryGrid.toMesh(double)](grid, &voxelMesh, &vbounds)
 		displayMesh = &voxelMesh
+		gl.glutPostRedisplay()
+	end
+	-- Also voxelize the avoid mesh, if we're displaying it and it has contents.
+	if shouldDrawAvoidMesh and globals.avoidTargetMesh:numTris() > 0 then
+		var bounds = globals.avoidTargetMesh:bbox()
+		bounds:expand(globals.config.boundsExpand)
+		var grid = BinaryGrid.salloc():init()
+		globals.avoidTargetMesh:voxelize(grid, &bounds, globals.config.voxelSize, globals.config.solidVoxelize)
+		[BinaryGrid.toMesh(double)](grid, &voxelAvoidMesh, &bounds)
 		gl.glutPostRedisplay()
 	end
 end
@@ -200,6 +220,7 @@ local terra init()
 
 	generations:init()
 	voxelMesh:init()
+	voxelAvoidMesh:init()
 	intersectionMesh:init()
 	light:init()
 	material:init()
@@ -474,8 +495,12 @@ local terra display()
 		wireframeMeshDrawPass(displayMesh)
 	end
 	if shouldDrawAvoidMesh then
-		shadingMeshDrawPass(&globals.avoidTargetMesh)
-		wireframeMeshDrawPass(&globals.avoidTargetMesh)
+		var meshToDraw = &globals.avoidTargetMesh
+		if voxelAvoidMesh:numTris() > 0 then
+			meshToDraw = &voxelAvoidMesh
+		end
+		shadingMeshDrawPass(meshToDraw)
+		wireframeMeshDrawPass(meshToDraw)
 	end
 	if shouldDrawGrid then
 		drawGrid()

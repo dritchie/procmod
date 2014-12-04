@@ -274,6 +274,22 @@ terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D) : double
 	return self:percentCellsEqual(other, bounds)
 end
 
+terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D, bounds: &BBox3u) : uint
+	var num = 0
+	for k=bounds.mins(2),bounds.maxs(2) do
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				num = num + uint(self:isVoxelSet(i,j,k) and other:isVoxelSet(i,j,k))
+			end
+		end
+	end
+	return num
+end
+terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D) : uint
+	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+	return self:numFilledCellsEqual(other, bounds)
+end
+
 
 -- Fast population count, from https://github.com/BartMassey/popcount
 local terra popcount(x: uint)
