@@ -2,9 +2,11 @@ local S = terralib.require("qs.lib.std")
 local LS = terralib.require("std")
 local Mesh = terralib.require("geometry.mesh")(double)
 local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
+local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 local BBox3 = terralib.require("geometry.bbox")(Vec3)
 local Config = terralib.require("config")
+local gl = terralib.require("gl.gl")
 local glutils = terralib.require("gl.glutils")
 
 
@@ -55,13 +57,19 @@ end)
 --    we look for configs/scratch.txt
 G.config:load(arg[1] or "configs/scratch.config")
 
+--------------------------------------------------------------------------
 -- We declare all possible globals and do the minimum initialization here.
+--------------------------------------------------------------------------
+-- Volume matching
 G.matchTargetMesh = global(Mesh)
 G.matchTargetGrid = global(BinaryGrid3D)
 G.matchTargetBounds = global(BBox3)
+-- Volume avoidance
 G.avoidTargetMesh = global(Mesh)
 G.avoidTargetGrid = global(BinaryGrid3D)
 G.avoidTargetBounds = global(BBox3)
+-- Image matching
+G.matchTargetImage = global(BinaryGrid2D)
 local terra initglobals()
 	G.matchTargetMesh:init()
 	G.matchTargetGrid:init()
@@ -69,8 +77,10 @@ local terra initglobals()
 	G.avoidTargetMesh:init()
 	G.avoidTargetGrid:init()
 	G.avoidTargetBounds:init()
+	G.matchTargetImage:init()
 end
 initglobals()
+--------------------------------------------------------------------------
 
 -- Set up volume matching globals
 if G.config.doVolumeMatch then
@@ -92,6 +102,68 @@ if G.config.doVolumeAvoid then
 		G.avoidTargetMesh:voxelize(&G.avoidTargetGrid, &G.avoidTargetBounds, G.config.voxelSize, G.config.solidVoxelize)
 	end
 	initglobals()
+end
+
+-- Set up image matching globals
+if G.config.doImageMatch then
+	-- Delay import of image module until here, because other people have trouble getting FreeImage to work.
+	local image = terralib.require("image")
+	local terra initglobals()
+		-- We assume the target image is specified as an 8-bit RGB PNG file.
+		var img = [image.Image(uint8, 3)].salloc():init(image.Format.PNG, G.config.matchTargetImage)
+		-- Convert the image into a binary grid by quantizing pixels to 1 bit
+		G.matchTargetImage:resize(img.height, img.width)
+		for row=0,img.height do
+			for col=0,img.width do
+				if img(col, row)(0) > 0 then
+					G.matchTargetImage:setPixel(row, col)
+				end
+			end
+		end
+	end
+	initglobals()
+	-- Provide a special framebuffer that image matching can use
+	-- Have to defer initialization of this framebuffer until after the
+	--    OpenGL context has been set up.
+	local matchRenderFBO = global(uint)
+	local matchRenderFBOisInitialized = global(bool, 0)
+	G.getMatchRenderFBO = macro(function()
+		return quote
+			if not matchRenderFBOisInitialized then
+				matchRenderFBOisInitialized = true
+				-- Color buffer
+				var colorTex : uint
+				gl.glGenTextures(1, &colorTex)
+				gl.glBindTexture(gl.GL_TEXTURE_2D, colorTex)
+				gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA,
+								G.matchTargetImage.cols, G.matchTargetImage.rows,
+								0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, nil)
+				gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+				-- Depth buffer
+				var depthTex: uint
+				gl.glGenTextures(1, &depthTex)
+				gl.glBindTexture(gl.GL_TEXTURE_2D, depthTex)
+				gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_DEPTH_COMPONENT,
+								G.matchTargetImage.cols, G.matchTargetImage.rows,
+								0, gl.GL_DEPTH_COMPONENT, gl.GL_FLOAT, nil)
+				gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+				-- Framebuffer
+				gl.glGenFramebuffers(1, &matchRenderFBO)
+				gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, matchRenderFBO)
+				gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER,
+										  gl.GL_COLOR_ATTACHMENT0,
+										  gl.GL_TEXTURE_2D,
+										  colorTex, 0)
+				gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER,
+										  gl.GL_DEPTH_ATTACHMENT,
+										  gl.GL_TEXTURE_2D,
+										  depthTex, 0)
+				gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+			end
+		in
+			matchRenderFBO
+		end
+	end)
 end
 
 

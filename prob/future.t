@@ -251,7 +251,7 @@ function StochasticFuture:resume()
 		-- For any futures that are waiting on this one to finish:
 		for _,wf in ipairs(self.waiters) do
 			-- Pass return values to the waiting future...
-			wf.resumevals = retvals
+			wf.resumevals = self.retvals
 			-- ...and reactivate it (i.e. make it valid to run again)
 			squeue:insert(wf)
 		end

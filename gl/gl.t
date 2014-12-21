@@ -51,6 +51,17 @@ terralib.linklibrary("/System/Library/Frameworks/OpenGL.framework/Libraries/libG
 terralib.linklibrary("/System/Library/Frameworks/OpenGL.framework/Libraries/libGLU.dylib")
 terralib.linklibrary("/System/Library/Frameworks/GLUT.framework/GLUT")
 
+-- Add a method for initializing GLUT that can be safely called multiple times
+local glutIsInitialized = global(bool, 0)
+gl.safeGlutInit = macro(function(argc, argv)
+	return quote
+		if not glutIsInitialized then
+			gl.glutInit(argc, argv)
+			glutIsInitialized = true
+		end
+	end
+end)
+
 -- If you need access to additional macro constants, use this function.
 -- It will reload the GLUT/OpenGL headers and add accessor functions for
 --    the requested constants.

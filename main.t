@@ -215,7 +215,6 @@ end
 
 
 local terra init()
-	gl.glClearColor(0.2, 0.2, 0.2, 1.0)
 	gl.glEnable(gl.GL_DEPTH_TEST)
 	-- gl.glEnable(gl.GL_CULL_FACE)
 	gl.glEnable(gl.GL_NORMALIZE)
@@ -250,17 +249,20 @@ local terra shadingMeshDrawPass(mesh: &Mesh(double))
 	material:setupGLMaterial()
 
 	mesh:draw()
+
+	gl.glDisable(gl.GL_POLYGON_OFFSET_FILL)
+	gl.glDisable(gl.GL_LIGHTING)
 end
 
 
 local terra wireframeMeshDrawPass(mesh: &Mesh(double))
-	gl.glDisable(gl.GL_POLYGON_OFFSET_FILL)
-	gl.glDisable(gl.GL_LIGHTING)
 	gl.glColor4d(0.0, 0.0, 0.0, 1.0)
 	gl.glLineWidth(LINE_WIDTH)
 	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
 
 	mesh:draw()
+
+	gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_FILL)
 end
 
 local terra drawGrid()
@@ -490,6 +492,8 @@ local terra drawOverlay()
 end
 
 local terra display()
+	camera:setupGLPerspectiveView()
+	gl.glClearColor(0.2, 0.2, 0.2, 1.0)
 	gl.glClear(gl.GL_COLOR_BUFFER_BIT or gl.GL_DEPTH_BUFFER_BIT)
 
 	if displayMesh ~= nil then
@@ -518,7 +522,6 @@ end
 local terra reshape(w: int, h: int)
 	gl.glViewport(0, 0, w, h)
 	camera.aspect = double(w) / h
-	camera:setupGLPerspectiveView()
 	gl.glutPostRedisplay()
 end
 
@@ -551,7 +554,6 @@ local terra cameraMotion(x: int, y: int)
 	end
 	prevx = x
 	prevy = y
-	camera:setupGLPerspectiveView()
 	gl.glutPostRedisplay()
 end
 
@@ -629,7 +631,7 @@ end
 local terra main()
 
 	var argc = 0
-	gl.glutInit(&argc, nil)
+	gl.safeGlutInit(&argc, nil)
 	gl.glutInitWindowSize(INITIAL_RES, INITIAL_RES)
 	gl.glutInitDisplayMode(gl.GLUT_RGB or gl.GLUT_DOUBLE or gl.GLUT_DEPTH)
 	gl.glutCreateWindow("Procedural Modeling")

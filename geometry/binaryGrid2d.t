@@ -23,7 +23,7 @@ end
 
 terra BinaryGrid2D:__init(rows: uint, cols: uint) : {}
 	self:__init()
-	self:resize(rows, col)
+	self:resize(rows, cols)
 end
 
 terra BinaryGrid2D:__copy(other: &BinaryGrid2D)

@@ -4,12 +4,18 @@ local Mesh = terralib.require("geometry.mesh")(double)
 local Vec = terralib.require("linalg.vec")
 local BBox = terralib.require("geometry.bbox")
 local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
+local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
 local prob = terralib.require("prob.prob")
 local smc = terralib.require("prob.smc")
 local mcmc = terralib.require("prob.mcmc")
 local distrib = terralib.require("qs.distrib")
 local globals = terralib.require("globals")
 
+local gl = terralib.require("gl.gl")
+local glutils = terralib.require("gl.glutils")
+
+-- TODO: Get rid of this
+local image = terralib.require("image")
 
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
@@ -26,7 +32,8 @@ end)
 --    every particle/trace.
 -- Stores data needed to compute scores for whatever objectives the config file specifies
 --    (e.g. volume matching)
-local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolumeAvoid)
+local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolumeAvoid,
+								 doImageMatch)
 
 	local struct State(S.Object)
 	{
@@ -39,6 +46,10 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 	end
 	if doVolumeAvoid then
 		State.entries:insert({field="avoidGrid", type=BinaryGrid3D})
+	end
+	if doImageMatch then
+		State.entries:insert({field="matchImage", type=BinaryGrid2D})
+		State.entries:insert({field="matchImagePixelData", type=S.Vector(Vec(uint8, 4))})
 	end
 	-- Also give the State class all the lua.std metatype stuff
 	LS.Object(State)
@@ -124,6 +135,45 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 			 			end
 					end
 				end
+				-- Image matching score contribution
+				if doImageMatch then
+					emit quote
+						if self.score ~= [-math.huge] then
+							-- Render
+							gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, globals.getMatchRenderFBO())
+							var w = globals.matchTargetImage.cols
+							var h = globals.matchTargetImage.rows
+							var viewport : int[4]
+							gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
+							gl.glViewport(0, 0, w, h)
+							gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+							gl.glClear(gl.GL_COLOR_BUFFER_BIT or gl.GL_DEPTH_BUFFER_BIT)
+							gl.glColor4f(1.0, 1.0, 1.0, 1.0)
+							globals.config.matchCamera.aspect = double(w)/h
+							globals.config.matchCamera:setupGLPerspectiveView()
+							self.mesh:draw()
+							gl.glFlush()
+							-- Read pixels, convert to binary grid, and compare
+							self.matchImagePixelData:resize(w*h)
+							gl.glReadPixels(0, 0, w, h, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, &(self.matchImagePixelData(0)))
+							self.matchImage:clear()
+							self.matchImage:resize(h, w)
+							for y=0,h do
+								for x=0,w do
+									var c = self.matchImagePixelData(y*w + x)
+									if c(0) > 0 then
+										self.matchImage:setPixel(y, x)
+									end
+								end
+							end
+							var percentSame = globals.matchTargetImage:percentCellsEqualPadded(&self.matchImage)
+							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchPixelFactorWeight])
+							-- Clean up
+							gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
+							gl.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+						end
+					end
+				end
 			end
 		end
 	end
@@ -140,7 +190,8 @@ end)
 local function GetStateType()
 	return State(globals.config.checkSelfIntersections,
 				 globals.config.doVolumeMatch,
-				 globals.config.doVolumeAvoid)
+				 globals.config.doVolumeAvoid,
+				 globals.config.doImageMatch)
 end
 
 ---------------------------------------------------------------
