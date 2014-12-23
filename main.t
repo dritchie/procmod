@@ -7,6 +7,7 @@ local Mesh = terralib.require("geometry.mesh")
 local Vec = terralib.require("linalg.vec")
 local BinaryGrid = terralib.require("geometry.binaryGrid3d")
 local BBox = terralib.require("geometry.bbox")
+local shadowmap = terralib.require("shadowmap")
 
 
 local C = terralib.includecstring [[
@@ -611,6 +612,10 @@ local terra keyboard(key: uint8, x: int, y: int)
 		toggleOverlay()
 	elseif key == char('c') then
 		camera:print()
+	elseif key == char('h') then
+		if displayMesh ~= nil then
+			[shadowmap.renderShadowMask(true)](displayMesh)
+		end
 	end
 end
 
