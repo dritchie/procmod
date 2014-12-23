@@ -573,6 +573,19 @@ local terra sampleIndexScrub(x: int, y: int)
 end
 
 
+local terra renderShadowStuff()
+	escape
+		if globals.doShadowMatch then
+			emit quote
+				if displayMesh ~= nil then
+					[shadowmap.renderShadowMask(true)](displayMesh)
+				end
+			end
+		end
+	end
+end
+
+
 local terra motion(x: int, y: int)
 	-- If Alt is down, then we use horizontal position to select
 	--    currSampleIndex.
@@ -613,9 +626,7 @@ local terra keyboard(key: uint8, x: int, y: int)
 	elseif key == char('c') then
 		camera:print()
 	elseif key == char('h') then
-		if displayMesh ~= nil then
-			[shadowmap.renderShadowMask(true)](displayMesh)
-		end
+		renderShadowStuff()
 	elseif key == char('j') then
 		if displayMesh ~= nil then
 			displayMesh:saveOBJ("savedMesh.obj")
