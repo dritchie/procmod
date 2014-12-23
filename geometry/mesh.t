@@ -75,16 +75,21 @@ local Mesh = S.memoize(function(real)
 		end
 	end
 
-	terra Mesh:transform(xform: &Mat4)
-		for i=0,self.vertices:size() do
+	-- Transform only a subpart of the mesh
+	terra Mesh:transform(xform: &Mat4, vstarti: uint, vendi: uint, nstarti: uint, nendi: uint) : {}
+		for i=vstarti,vendi do
 			self.vertices(i) = xform:transformPoint(self.vertices(i))
 		end
 		-- TODO: Implement 4x4 matrix inversion and use the inverse transpose
 		--    for the normals (I expect to only use rotations and uniform scales
 		--    for the time being, so this should be fine for now).
-		for i=0,self.normals:size() do
+		for i=nstarti,nendi do
 			self.normals(i) = xform:transformVector(self.normals(i))
 		end
+	end
+
+	terra Mesh:transform(xform: &Mat4) : {}
+		self:transform(xform, 0, self:numVertices(), 0, self:numNormals())
 	end
 
 	terra Mesh:bbox()

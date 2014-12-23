@@ -39,6 +39,7 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		mesh: Mesh
 		prims: S.Vector(Mesh)	-- For collision checks
 		score: double
+		freedmemory: bool
 	}
 	if doVolumeMatch then
 		State.entries:insert({field="matchGrid", type=BinaryGrid3D})
@@ -60,6 +61,7 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 	terra State:__init()
 		self:initmembers()
 		self:clear()
+		self.freedmemory = false
 	end
 
 	terra State:clear()
@@ -73,8 +75,21 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		self.score = 0.0
 	end
 
+	terra State:__destructmembers()
+		if not self.freedmemory then
+			self.freedmemory = true
+			escape
+				for _,e in ipairs(State.entries) do
+					if e.type:isstruct() and e.type:getmethod("destruct") then
+						emit quote self.[e.field]:destruct() end
+					end
+				end
+			end
+		end
+	end
+
 	terra State:freeMemory()
-		self:clear()
+		self:__destructmembers()
 	end
 
 	terra State:prepareForRun() end

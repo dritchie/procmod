@@ -1,10 +1,12 @@
 local S = terralib.require("qs.lib.std")
 local Mesh = terralib.require("geometry.mesh")
 local Vec = terralib.require("linalg.vec")
+local Mat = terralib.require("linalg.mat")
 
 
 local shapes = S.memoize(function(real)
 	local Vec3 = Vec(real, 3)
+	local Mat4 = Mat(real, 4, 4)
 	local MeshT = Mesh(real)
 
 	local shapes = {}
@@ -59,6 +61,73 @@ local shapes = S.memoize(function(real)
 		quad(mesh, vi+6, vi+7, vi+5, vi+4) -- Right
 		quad(mesh, vi+4, vi+5, vi+1, vi+0) -- Bottom
 		quad(mesh, vi+2, vi+3, vi+7, vi+6) -- Top
+	end
+
+	local terra circleOfVerts(mesh: &MeshT, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
+		var v = c + r*up
+		mesh:addVertex(v)
+		var rotamt = [2*math.pi]/n
+		var m = Mat4.rotate(fwd, rotamt, c)
+		for i=1,n do
+			v = m:transformPoint(v)
+			mesh:addVertex(v)
+		end
+	end
+
+	-- Assumed that the first vertex is the center vertex, with the subsequent
+	--    n being the circle around it.
+	local terra disk(mesh: &MeshT, centeridx: uint, baseidx: uint, n: uint)
+		var numN = mesh:numNormals()
+		var v0 = mesh:getVertex(centeridx)
+		var v1 = mesh:getVertex(baseidx)
+		var v2 = mesh:getVertex(baseidx+1)
+		var normal = (v2-v1):cross(v0-v1):normalized()
+		mesh:addNormal(normal)
+		for i=0,n do
+			mesh:addIndex(centeridx, numN)
+			mesh:addIndex(baseidx+i, numN)
+			mesh:addIndex(baseidx+(i+1)%n, numN)
+		end
+	end
+
+	terra shapes.addCylinder(mesh: &MeshT, baseCenter: Vec3, height: real, radius: real, n: uint)
+		var fwd = Vec3.create(0.0, 1.0, 0.0)
+		var up = Vec3.create(0.0, 0.0, 1.0)
+		var topCenter = baseCenter + height*fwd
+		-- Make perimeter vertices on the top and bottom
+		var initialNumVerts = mesh:numVertices()
+		circleOfVerts(mesh, baseCenter, up, fwd, radius, n)
+		var afterOneCircleNumVerts = mesh:numVertices()
+		circleOfVerts(mesh, topCenter, up, fwd, radius, n)
+		-- Make the sides
+		var bvi = initialNumVerts
+		for i=0,n do
+			quad(mesh, bvi + i, bvi + (i+1)%n, bvi + n + (i+1)%n, bvi + n + i)
+		end
+		-- Place center vertices, make the end caps
+		mesh:addVertex(baseCenter)
+		disk(mesh, mesh:numVertices()-1, initialNumVerts, n)
+		mesh:getNormal(mesh:numNormals()-1) = -mesh:getNormal(mesh:numNormals()-1)	-- Make it face outside
+		mesh:addVertex(topCenter)
+		disk(mesh, mesh:numVertices()-1, afterOneCircleNumVerts, n)
+	end
+
+	-- Transformed versions of every shape function
+	local names = {}
+	for k,_ in pairs(shapes) do table.insert(names, k) end
+	for _,name in ipairs(names) do
+		local rawfn = shapes[name]
+		shapes[string.format("%sTransformed", name)] = macro(function(mesh, xform, ...)
+			local args = {...}
+			return quote
+				var vstarti = mesh:numVertices()
+				var nstarti = mesh:numNormals()
+				rawfn(mesh, [args])
+				var vendi = mesh:numVertices()
+				var nendi = mesh:numNormals()
+				mesh:transform(xform, vstarti, vendi, nstarti, nendi)
+			end
+		end)
 	end
 
 	return shapes
