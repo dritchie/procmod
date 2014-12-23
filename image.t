@@ -243,9 +243,9 @@ local Image = S.memoize(function(dataType, numChannels)
 		return terra(image: &ImageT, fibitmap: &FI.FIBITMAP)
 			var bpp = FI.FreeImage_GetBPP(fibitmap)
 			var fileNumChannels = b2B(bpp) / sizeof(fileDataType)
+			var numChannelsToCopy = fileNumChannels
 			-- FreeImage flips R and B for 24 and 32 bit images
 			var isBGR = [fileDataType == uint8] and (fileNumChannels == 3 or fileNumChannels == 4)
-			var numChannelsToCopy = fileNumChannels
 			if numChannels < numChannelsToCopy then numChannelsToCopy = numChannels end
 			var w = FI.FreeImage_GetWidth(fibitmap)
 			var h = FI.FreeImage_GetHeight(fibitmap)
@@ -261,8 +261,8 @@ local Image = S.memoize(function(dataType, numChannels)
 					-- If we have a 3 or 4 element uint8 image (read:
 					--    a 24 or 32 bit image), then FreeImage flips R and B
 					--    for little endian machines (all x86 machines)
-					-- We need to flip it back
-					if isBGR then
+					-- If we're writing into an RGB or RGBA image, we need to flip it back
+					if isBGR and (numChannels == 3 or numChannels == 4) then
 						var tmp = imagePixelPtr(0)
 						imagePixelPtr(0) = imagePixelPtr(2)
 						imagePixelPtr(2) = tmp
