@@ -450,6 +450,45 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 			return mat
 		end
 
+		MatT.methods.lookAt = terra(eyePos: Vec3, lookAtPoint: Vec3, upVec: Vec3)
+			var w = (eyePos - lookAtPoint):normalized()
+			var u = upVec:cross(w):normalized()
+			var v = w:cross(u)
+			var rot = MatT.identity()
+			rot(0,0) = u(0); rot(0,1) = u(1); rot(0,2) = u(2)
+			rot(1,0) = v(0); rot(1,1) = v(1); rot(1,2) = v(2)
+			rot(2,0) = w(0); rot(2,1) = w(1); rot(2,2) = w(2)
+			return rot * MatT.translate(-eyePos)
+		end
+
+		MatT.methods.ortho = terra(bottom: real, top: real, left: real, right: real, near: real, far: real)
+			var mat = MatT.identity()
+			mat(0,0) = 2.0 / (right - left); mat(0, 3) = -(right+left)/(right-left)
+			mat(1,1) = 2.0 / (top - bottom); mat(1, 3) = -(top+bottom)/(top-bottom)
+			mat(2,2) = -2.0 / (far - near);   mat(2, 3) = -(far+near)/(far-near)
+			return mat
+		end
+
+		-- fovy assumed to be in radians
+		MatT.methods.perspective = terra(fovy: real, aspect: real, near: real, far: real)
+			var f = 1.0 / mlib.tan(fovy/2.0)
+			var mat = MatT.zero()
+			mat(0,0) = f/aspect
+			mat(1,1) = f
+			mat(2,2) = (far+near)/(near-far); mat(2,3) = (2*far*near)/(near-far)
+			mat(3,2) = -1
+			return mat
+		end
+
+		local colmajidx = macro(function(i,j) return `j*4 + i end)
+		terra MatT:toColumnMajor(data: &real)
+			for i=0,4 do
+				for j=0,4 do
+					data[colmajidx(i,j)] = self(i,j)
+				end
+			end
+		end
+
 	end
 
 	return MatT

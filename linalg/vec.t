@@ -248,6 +248,11 @@ Vec = S.memoize(function(real, dim, GPU)
 		end
 	end
 	VecT.methods.normalize:setinlined(true)
+	terra VecT:normalized()
+		var n = @self
+		n:normalize()
+		return n
+	end
 
 	local collinearThresh = 1e-8
 	terra VecT:collinear(other: VecT)

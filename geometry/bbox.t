@@ -1,5 +1,6 @@
 local S = terralib.require("qs.lib.std")
 local Intersections = terralib.require("geometry.intersection")
+local Mat = terralib.require("linalg.mat")
 
 local BBox = S.memoize(function(Vec)
 
@@ -100,6 +101,22 @@ local BBox = S.memoize(function(Vec)
 
 	terra BBox:intersects(p0: Vec, p1: Vec, p2: Vec)
 		return Intersection.intersectTriangleBBox(self.mins, self.maxs, p0, p1, p2)
+	end
+
+	if Vec.Dimension == 3 then
+		local Mat4 = Mat(real, 4, 4)
+		terra BBox:transform(xform: &Mat4)
+			var bbox = BBox.salloc():init()
+			bbox:expand(xform:transformPoint(Vec.create(self.mins(0), self.mins(1), self.mins(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.mins(0), self.mins(1), self.maxs(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.mins(0), self.maxs(1), self.mins(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.mins(0), self.maxs(1), self.maxs(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.maxs(0), self.mins(1), self.mins(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.maxs(0), self.mins(1), self.maxs(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.maxs(0), self.maxs(1), self.mins(2))))
+			bbox:expand(xform:transformPoint(Vec.create(self.maxs(0), self.maxs(1), self.maxs(2))))
+			return @bbox
+		end
 	end
 
 	return BBox
