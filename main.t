@@ -616,6 +616,10 @@ local terra keyboard(key: uint8, x: int, y: int)
 		if displayMesh ~= nil then
 			[shadowmap.renderShadowMask(true)](displayMesh)
 		end
+	elseif key == char('j') then
+		if displayMesh ~= nil then
+			displayMesh:saveOBJ("savedMesh.obj")
+		end
 	end
 end
 

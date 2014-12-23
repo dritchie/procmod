@@ -349,6 +349,28 @@ local Mesh = S.memoize(function(real)
 		S.fclose(f)
 	end
 
+	terra Mesh:saveOBJ(filename: rawstring)
+		var f = S.fopen(filename, "w")
+		for i=0,self:numVertices() do
+			var v = self:getVertex(i)
+			S.fprintf(f, "v %g %g %g\n", v(0), v(1), v(2))
+		end
+		for i=0,self:numNormals() do
+			var vn = self:getNormal(i)
+			S.fprintf(f, "vn %g %g %g\n", vn(0), vn(1), vn(2))
+		end
+		for i=0,self:numIndices()/3 do
+			var i0 = self:getIndex(3*i)
+			var i1 = self:getIndex(3*i + 1)
+			var i2 = self:getIndex(3*i + 2)
+			S.fprintf(f, "f %u//%u %u//%u %u//%u\n",
+				i0.vertex+1, i0.normal+1,
+				i1.vertex+1, i1.normal+1,
+				i2.vertex+1, i2.normal+1)
+		end
+		S.fclose(f)
+	end
+
 	return Mesh
 
 end)
