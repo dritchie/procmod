@@ -15,47 +15,72 @@ return function(makeGeoPrim)
 		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
 	end)
 
-	local function drop(pt,r) 
-		box(pt[1]*r,pt[2]*r,pt[3]*r,r,r,r)
+	local function drop(pt,delta,r) 
+		box(pt[1]*r,pt[2]*r,pt[3]*r,delta[1]*r,delta[2]*r,delta[3]*r)
+	end
+
+	local thickness = .05
+	local function drop_pipe(pt,length,dir)
+		local newpt = {0,0,0}
+		for k=1,3 do newpt[k] = pt[k] + dir[k]*length end 
+
+		local center = {0,0,0}
+		for k=1,3 do center[k] = .5*(pt[k]+newpt[k]) end
+		local delta = {1,1,1}
+		for k=1,3 do 
+			if not (dir[k] == 0) then delta[k] = length+1 end
+		end
+
+		drop(center,delta,thickness)
+		return newpt
 	end
 
 	local roulette = 3./4.
 	local branch = 1./3.
 
-	local function genPath(from, to, r)
-		
-		local done = false
-		if (from[1] > to[1]) and (from[2] > to[2]) and (from[3] > to[3]) then 
-			for i=1,3 do
-				while from[i] > to[i] do
-					drop(from,r)
-					from[i] = from[i] - 1
-				end
-			end
-			return
+	local root_length = 10
+	local branch_mult = .5
+
+	local dirs = 6
+	local function dir(i)
+		local ret = {0,0,0}
+		if i <= 3 then 
+			ret[i] = 1
+		else
+			ret[i-3] = -1 
 		end
+		return ret
+	end
+	local function randdir() 
+		return dir(math.floor(uniform(1,7)))
+	end
 
-		local index  = math.floor(uniform(1,4))
-		local length = math.floor(uniform(1,20))
-		local dir = flip(roulette)
-		local delta 
-		if dir then delta = 1 else delta = -1 end
-		print(unpack(from),unpack(to),index,length)
-
-		for i=1,length do
-			drop(from,r)
-			from[index] = from[index] + delta
+	local function fake_pois(lambda)
+		local summand = math.exp(-lambda)
+		local sum = summand
+		local i = 0
+		local u = uniform(0,1)
+		while u > sum do
+			i = i + 1
+			summand = summand * lambda / i
+			sum = sum + summand
 		end
+		return i
+	end
 
-		genPath(from,to,r)
-
+	local function genBranches(origin, length_factor) 
+		while flip(.9) do
+			local length = fake_pois(length_factor)
+			if length <= 1 then return end
+			origin = drop_pipe(origin,length,randdir())
+			genBranches(origin, length_factor * branch_mult)
+		end
 	end
 
 	return function()
-		local r = .01
-		repeat
-			genPath({-1000,-1000,-1000},{1000,1000,1000},r)
-		until flip(branch)
+		
+		genBranches({0,0,0}, 20)
+
 	end
 
 end

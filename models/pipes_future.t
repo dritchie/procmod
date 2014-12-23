@@ -66,15 +66,17 @@ return function(makeGeoPrim)
 	end
 
 	local function genBranches(origin, length_factor) 
-		future.create(function(origin,length_factor)
-
-			local length = fake_pois(length_factor)
-			if length <= 1 then return end
-			origin = drop_pipe(origin,length,randdir())
-			if flip(.5) then future.create(genBranches, origin, length_factor * branch_mult) end
-			if flip(.9) then future.create(genBranches, origin, length_factor) end
-
-		end, origin,length_factor)
+		local length = fake_pois(length_factor)
+		if length <= 1 then return end
+		origin = drop_pipe(origin,length,randdir())
+		future.create(
+		function(origin, length_factor, branch_mult)
+			if flip(.5) then genBranches(origin,length_factor*branch_mult) end 
+		end, origin, length_factor, branch_mult)
+		future.create(
+		function(origin, length_factor)
+			if flip(.9) then genBranches(origin, length_factor) end 
+		end, origin, length_factor)
 	end
 
 	return function()

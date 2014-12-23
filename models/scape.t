@@ -42,7 +42,7 @@ return function(makeGeoPrim)
 
 	local function scape(ll, ul, lr, ur, scale)
 		if scale == 1 then
-			putquad(ll,ul,lr,ur)
+			putquad(ll,ul,ur,lr)
 			return
 		end
 
