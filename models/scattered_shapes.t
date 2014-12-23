@@ -36,14 +36,14 @@ return function(makeGeoPrim)
 	}
 
 	local n = 8
-	local coord_min = -10
-	local coord_max = 10
-	local box_dim_min = 0.5
-	local box_dim_max = 3.0
-	local cyl_height_min = 0.5
+	local coord_min = -9
+	local coord_max = 9
+	local box_dim_min = 0.25
+	local box_dim_max = 2.0
+	local cyl_height_min = 0.25
 	local cyl_height_max = 4.0
 	local cyl_rad_min = 0.25
-	local cyl_rad_max = 2.0
+	local cyl_rad_max = 1.0
 
 	local function wi(i, w)
 		return math.exp(-w*i)
@@ -76,7 +76,7 @@ return function(makeGeoPrim)
 					hcyl(rotamt, bcx, bcy, bcz, height, radius, n)
 				end
 			end
-			local keepgoing = flip(wi(iters, 0.01)) 
+			local keepgoing = flip(wi(iters, 0.0075)) 
 			iters = iters + 1
 		until not keepgoing
 	end

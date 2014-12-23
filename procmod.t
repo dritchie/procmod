@@ -198,7 +198,21 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 					emit quote
 						if self.score ~= [-math.huge] then
 							[shadowmap.renderShadowMask(false)](&self.mesh, &self.shadowMatchImage, &self.shadowMatchImagePixelData)
-							var percentSame = globals.shadowTargetImage:percentCellsEqualPadded(&self.shadowMatchImage)
+
+							-- var percentSame = globals.shadowTargetImage:percentCellsEqualPadded(&self.shadowMatchImage)
+
+							var weightedSum = 0.0
+							var totalWeight = 0.0
+							for row=0,self.shadowMatchImage.rows do
+								for col=0,self.shadowMatchImage.cols do
+									var w = globals.shadowWeightImage(col, row)(0)
+									weightedSum = weightedSum +
+										w*float(self.shadowMatchImage:isPixelSet(row,col) == globals.shadowTargetImage:isPixelSet(row,col))
+									totalWeight = totalWeight + w
+								end
+							end
+							var percentSame = weightedSum / totalWeight
+
 							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchPixelFactorWeight])
 						end
 					end

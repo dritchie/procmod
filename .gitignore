@@ -2,3 +2,5 @@
 scratch.config
 *.csv
 *.twb
+shadowMap.tiff
+shadowMask.png

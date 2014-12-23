@@ -3,7 +3,8 @@ local LS = terralib.require("std")
 local Mesh = terralib.require("geometry.mesh")(double)
 local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
 local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
-local Vec3 = terralib.require("linalg.vec")(double, 3)
+local Vec = terralib.require("linalg.vec")
+local Vec3 = Vec(double, 3)
 local BBox3 = terralib.require("geometry.bbox")(Vec3)
 local Config = terralib.require("config")
 local gl = terralib.require("gl.gl")
@@ -272,6 +273,7 @@ end
 if G.config.doShadowMatch then
 	-- Delay import of image module until here, because other people have trouble getting FreeImage to work.
 	local image = terralib.require("image")
+	G.shadowWeightImage = global(image.Image(float, 1))
 	local terra initglobals()
 		-- We assume the target image is specified as an 8-bit RGB PNG file.
 		var img = [image.Image(uint8, 3)].salloc():init(image.Format.PNG, G.config.shadowTargetImage)
@@ -281,6 +283,24 @@ if G.config.doShadowMatch then
 			for col=0,img.width do
 				if img(col, row)(0) > 0 then
 					G.shadowTargetImage:setPixel(row, col)
+				end
+			end
+		end
+		-- If specified, load up an image containing weights for the target image.
+		escape
+			if G.config.shadowWeightImage then
+				emit quote
+					G.shadowWeightImage:init(image.Format.PNG, G.config.shadowWeightImage)
+					for y=0,G.shadowWeightImage.height do
+						for x=0,G.shadowWeightImage.width do
+							var val = G.shadowWeightImage(x,y)(0)
+							G.shadowWeightImage(x,y)(0) = 1.0 + G.config.shadowWeightMult*val
+						end
+					end
+				end
+			else
+				emit quote
+					G.shadowWeightImage:init(img.width, img.height, [Vec(float, 1)].create(1.0))
 				end
 			end
 		end
