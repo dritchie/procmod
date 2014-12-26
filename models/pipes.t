@@ -19,26 +19,27 @@ return function(makeGeoPrim)
 		box(pt[1]*r,pt[2]*r,pt[3]*r,delta[1]*r,delta[2]*r,delta[3]*r)
 	end
 
-	local thickness = .05
+	local thickness = .01
 	local function drop_pipe(pt,length,dir)
 		local newpt = {0,0,0}
-		for k=1,3 do newpt[k] = pt[k] + dir[k]*length end 
+		local shiftpt = {0,0,0}
+		for k=1,3 do 
+			newpt[k] = pt[k] + dir[k]*length 
+			shiftpt[k] = pt[k] + dir[k]
+		end 
 
 		local center = {0,0,0}
-		for k=1,3 do center[k] = .5*(pt[k]+newpt[k]) end
+		for k=1,3 do center[k] = .5*(shiftpt[k]+newpt[k]) end
 		local delta = {1,1,1}
 		for k=1,3 do 
-			if not (dir[k] == 0) then delta[k] = length+1 end
+			if not (dir[k] == 0) then delta[k] = length end
 		end
 
 		drop(center,delta,thickness)
 		return newpt
 	end
 
-	local roulette = 3./4.
-	local branch = 1./3.
-
-	local root_length = 10
+	local root_length = 20
 	local branch_mult = .5
 
 	local dirs = 6
@@ -51,8 +52,8 @@ return function(makeGeoPrim)
 		end
 		return ret
 	end
-	local function randdir() 
-		return dir(math.floor(uniform(1,7)))
+	local function randdiri() 
+		return math.floor(uniform(1,7))
 	end
 
 	local function fake_pois(lambda)
@@ -68,18 +69,21 @@ return function(makeGeoPrim)
 		return i
 	end
 
-	local function genBranches(origin, length_factor) 
+	local function genBranches(origin, length_factor, notdir) 
 		while flip(.9) do
 			local length = fake_pois(length_factor)
-			if length <= 1 then return end
-			origin = drop_pipe(origin,length,randdir())
-			genBranches(origin, length_factor * branch_mult)
+			if length <= 3 then return end
+			local diri
+			repeat diri = randdiri() until diri ~= notdir
+			origin = drop_pipe(origin,length,dir(diri))
+			notdir = (diri+3)%6
+			genBranches(origin, length_factor * branch_mult, notdir)
 		end
 	end
 
 	return function()
 		
-		genBranches({0,0,0}, 20)
+		genBranches({0,0,0}, root_length, -1)
 
 	end
 

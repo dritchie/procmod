@@ -22,20 +22,24 @@ return function(makeGeoPrim)
 	local thickness = .2
 	local function drop_pipe(pt,length,dir)
 		local newpt = {0,0,0}
-		for k=1,3 do newpt[k] = pt[k] + dir[k]*length end 
+		local shiftpt = {0,0,0}
+		for k=1,3 do 
+			newpt[k] = pt[k] + dir[k]*length 
+			shiftpt[k] = pt[k] + dir[k]
+		end 
 
 		local center = {0,0,0}
-		for k=1,3 do center[k] = .5*(pt[k]+newpt[k]) end
+		for k=1,3 do center[k] = .5*(shiftpt[k]+newpt[k]) end
 		local delta = {1,1,1}
 		for k=1,3 do 
-			if not (dir[k] == 0) then delta[k] = length+1 end
+			if not (dir[k] == 0) then delta[k] = length end
 		end
 
 		drop(center,delta,thickness)
 		return newpt
 	end
 
-	local root_length = 10
+	local root_length = 20
 	local branch_mult = .5
 
 	local dirs = 6
@@ -48,8 +52,8 @@ return function(makeGeoPrim)
 		end
 		return ret
 	end
-	local function randdir() 
-		return dir(math.floor(uniform(1,7)))
+	local function randdiri() 
+		return math.floor(uniform(1,7))
 	end
 
 	local function fake_pois(lambda)
@@ -65,23 +69,32 @@ return function(makeGeoPrim)
 		return i
 	end
 
-	local function genBranches(origin, length_factor) 
+	local branch_chance = .5
+	local continue_chance = .95
+	local die_length = 2
+
+	local function genBranches(origin, length_factor, notdir) 
 		local length = fake_pois(length_factor)
-		if length <= 1 then return end
-		origin = drop_pipe(origin,length,randdir())
+		if length <= die_length then return end
+		local diri
+		repeat diri = randdiri() until diri ~= notdir
+		origin = drop_pipe(origin,length,dir(diri))
+		notdir = ((diri-1+3)%6)+1
+
 		future.create(
-		function(origin, length_factor, branch_mult)
-			if flip(.5) then genBranches(origin,length_factor*branch_mult) end 
-		end, origin, length_factor, branch_mult)
+		function(origin, length_factor, branch_mult, notdir)
+			if flip(branch_chance) then genBranches(origin,length_factor*branch_mult, notdir) end 
+		end, origin, length_factor, branch_mult, notdir)
+
 		future.create(
-		function(origin, length_factor)
-			if flip(.9) then genBranches(origin, length_factor) end 
-		end, origin, length_factor)
+		function(origin, length_factor, notdir)
+			if flip(continue_chance) then genBranches(origin, length_factor, notdir) end 
+		end, origin, length_factor, notdir)
 	end
 
 	return function()
 		
-		future.create(genBranches, {0,0,0}, root_length)
+		future.create(genBranches, {0,0,0}, root_length, -1)
 		future.finishall()
 
 	end
