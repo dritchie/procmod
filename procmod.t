@@ -33,7 +33,7 @@ end)
 -- Stores data needed to compute scores for whatever objectives the config file specifies
 --    (e.g. volume matching)
 local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolumeAvoid,
-								 doImageMatch, doShadowMatch)
+								 doImageMatch, doShadowMatch, saveHighResMesh)
 
 	local struct State(S.Object)
 	{
@@ -42,6 +42,9 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		score: double
 		freedmemory: bool
 	}
+	if saveHighResMesh then
+		State.entries:insert({field="highResMesh", type=Mesh})
+	end
 	if doVolumeMatch then
 		State.entries:insert({field="matchGrid", type=BinaryGrid3D})
 	end
@@ -95,7 +98,20 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 
 	terra State:prepareForRun() end
 
-	terra State:update(newmesh: &Mesh, updateScore: bool)
+	if saveHighResMesh then
+		terra State:getMesh() return &self.highResMesh end
+	else
+		terra State:getMesh() return &self.mesh end
+	end
+
+	terra State:update(newmesh: &Mesh, newhighresmesh: &Mesh, updateScore: bool)
+		escape
+			if saveHighResMesh then
+				emit quote
+					self.highResMesh:append(newhighresmesh)
+				end
+			end
+		end
 		if updateScore then
 			escape
 				if checkSelfIntersections then
@@ -235,7 +251,8 @@ local function GetStateType()
 				 globals.config.doVolumeMatch,
 				 globals.config.doVolumeAvoid,
 				 globals.config.doImageMatch,
-				 globals.config.doShadowMatch)
+				 globals.config.doShadowMatch,
+				 globals.config.saveHighResMesh)
 end
 
 ---------------------------------------------------------------
@@ -260,7 +277,7 @@ local MHState = S.memoize(function(State)
 		self.currIndex = 0
 	end
 
-	terra MHState:update(newmesh: &Mesh)
+	terra MHState:update(newmesh: &Mesh, newhighresmesh: &Mesh)
 		var state : &State
 		-- We're either adding a new state, or we're overwriting something
 		--    we've already done.
@@ -278,7 +295,7 @@ local MHState = S.memoize(function(State)
 			state:copy(self.states:get(self.currIndex-1))
 		end
 		-- Finally, we add the new geometry and update
-		state:update(newmesh, true)
+		state:update(newmesh, newhighresmesh, true)
 	end
 
 	terra MHState:currentScore()
@@ -286,7 +303,7 @@ local MHState = S.memoize(function(State)
 	end
 
 	terra MHState:getMesh()
-		return &self.states(self.currIndex-1).mesh
+		return self.states(self.currIndex-1):getMesh()
 	end
 
 	terra MHState:advance()
@@ -328,6 +345,40 @@ local function geofnargs(geofn)
 	return asyms
 end
 
+-- For a given geo fn (and optional high-res geo fn), create a macro
+--    for generating geometry (to be then passed into a State's update method)
+local function genGeoMacro(geofn, highresGeoFn)
+	return macro(function(...)
+		local args = {...}
+		if globals.config.saveHighResMesh then
+			if highresGeoFn then
+				return quote
+					var lomesh = Mesh.salloc():init()
+					var himesh = Mesh.salloc():init()
+					geofn(lomesh, [args])
+					highresGeoFn(himesh, [args])
+				in
+					lomesh, himesh
+				end
+			else
+				return quote
+					var lomesh = Mesh.salloc():init()
+					geofn(lomesh, [args])
+				in
+					lomesh, lomesh
+				end
+			end
+		else
+			return quote
+				var lomesh = Mesh.salloc():init()
+				geofn(lomesh, [args])
+			in
+				lomesh, [&Mesh](nil)
+			end
+		end
+	end)
+end
+
 ---------------------------------------------------------------
 
 -- Run sequential importance sampling on a procedural modeling program,
@@ -338,14 +389,14 @@ local function SIR(module, outgenerations, opts)
 	local StateType = GetStateType()
 	local globState = globalState(StateType)
 
-	local function makeGeoPrim(geofn)
+	local function makeGeoPrim(geofn, highresGeoFn)
 		-- First, we make a Terra function that does all the perf-critical stuff:
 		--    creates new geometry, tests for intersections, voxelizes, etc.
 		local args = geofnargs(geofn)
+		local geoMacro = genGeoMacro(geofn, highresGeoFn)
 		local terra update([args])
-			var tmpmesh = Mesh.salloc():init()
-			geofn(tmpmesh, [args])
-			globState:update(tmpmesh, true)
+			var lomesh, himesh = geoMacro([args])
+			globState:update(lomesh, himesh, true)
 		end
 		-- Now we wrap this in a Lua function that checks whether this work
 		--    needs to be done at all
@@ -368,7 +419,7 @@ local function SIR(module, outgenerations, opts)
 			-- The first arg of the particle's trace is the procmod State object.
 			-- This is a bit funky, but I think it's the best way to get a this data.
 			if opts.saveSampleValues then
-				samp.value:copy(p.trace.args[1].mesh)
+				samp.value:copy(p.trace.args[1]:getMesh())
 			else
 				LS.luainit(samp.value)
 			end
@@ -406,12 +457,12 @@ local function MH(module, outgenerations, opts)
 	local StateType = MHState(GetStateType())
 	local globState = globalState(StateType)
 
-	local function makeGeoPrim(geofn)
+	local function makeGeoPrim(geofn, highresGeoFn)
 		local args = geofnargs(geofn)
+		local geoMacro = genGeoMacro(geofn, highresGeoFn)
 		local terra update([args])
-			var tmpmesh = Mesh.salloc():init()
-			geofn(tmpmesh, [args])
-			globState:update(tmpmesh)
+			var lomesh, himesh = geoMacro([args])
+			globState:update(lomesh, himesh)
 		end
 		return function(...)
 			if not mcmc.isReplaying() then
@@ -460,12 +511,12 @@ local function ForwardSample(module, outgenerations, numsamples)
 	local StateType = GetStateType()
 	local globState = globalState(StateType)
 
-	local function makeGeoPrim(geofn)
+	local function makeGeoPrim(geofn, highresGeoFn)
 		local args = geofnargs(geofn)
+		local geoMacro = genGeoMacro(geofn, highresGeoFn)
 		return terra([args])
-			var tmpmesh = Mesh.salloc():init()
-			geofn(tmpmesh, [args])
-			globState:update(tmpmesh, false)
+			var lomesh, himesh = geoMacro([args])
+			globState:update(lomesh, himesh, false)
 		end
 	end
 
@@ -476,7 +527,7 @@ local function ForwardSample(module, outgenerations, numsamples)
 	for i=1,numsamples do
 		program(state)
 		local samp = samples:insert()
-		samp.value:copy(state.mesh)
+		samp.value:copy(state:getMesh())
 		samp.logprob = 0.0
 		state:clear()
 	end
@@ -491,12 +542,12 @@ local function RejectionSample(module, outgenerations, numsamples)
 	local StateType = GetStateType()
 	local globState = globalState(StateType)
 	
-	local function makeGeoPrim(geofn)
+	local function makeGeoPrim(geofn, highresGeoFn)
 		local args = geofnargs(geofn)
+		local geoMacro = genGeoMacro(geofn, highresGeoFn)
 		return terra([args])
-			var tmpmesh = Mesh.salloc():init()
-			geofn(tmpmesh, [args])
-			globState:update(tmpmesh, true)
+			var lomesh, himesh = geoMacro([args])
+			globState:update(lomesh, himesh, true)
 		end
 	end
 
@@ -508,7 +559,7 @@ local function RejectionSample(module, outgenerations, numsamples)
 		program(state)
 		if state.score > -math.huge then
 			local samp = samples:insert()
-			samp.value:copy(state.mesh)
+			samp.value:copy(state:getMesh())
 			samp.logprob = state.score
 		end
 		state:clear()
