@@ -377,7 +377,7 @@ local function SIR(module, outgenerations, opts)
 	end
 
 	-- Install the SMC geo prim generator
-	local program = module(makeGeoPrim)
+	local program = module(makeGeoPrim, globals.config.loRes)
 	-- Wrap program so that it takes procmod State as argument
 	program = statewrap(program, StateType)
 	-- Create the beforeResample, afterResample, and exit callbacks
@@ -443,7 +443,7 @@ local function MH(module, outgenerations, opts)
 		samp.logprob = trace.loglikelihood
 	end
 
-	local program = statewrap(module(makeGeoPrim), StateType)
+	local program = statewrap(module(makeGeoPrim, globals.config.loRes), StateType)
 	local newopts = LS.copytable(opts)
 	newopts.onSample = recordSample
 	local initstate = StateType.luaalloc():luainit()
@@ -469,7 +469,7 @@ local function ForwardSample(module, outgenerations, numsamples)
 		end
 	end
 
-	local program = statewrap(module(makeGeoPrim), StateType)
+	local program = statewrap(module(makeGeoPrim, globals.config.loRes), StateType)
 	local state = StateType.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
@@ -500,7 +500,7 @@ local function RejectionSample(module, outgenerations, numsamples)
 		end
 	end
 
-	local program = statewrap(module(makeGeoPrim), StateType)
+	local program = statewrap(module(makeGeoPrim, globals.config.loRes), StateType)
 	local state = StateType.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)

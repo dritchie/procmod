@@ -1,3 +1,4 @@
+local S = terralib.require("qs.lib.std")
 local prob = terralib.require("prob.prob")
 local Shapes = terralib.require("geometry.shapes")(double)
 local Mesh = terralib.require("geometry.mesh")(double)
@@ -9,7 +10,7 @@ local future = prob.future
 
 ---------------------------------------------------------------
 
-return function(makeGeoPrim)
+return S.memoize(function(makeGeoPrim, geoRes)
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
 		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
@@ -95,7 +96,7 @@ return function(makeGeoPrim)
 		future.finishall()
 	end
 
-end
+end)
 
 
 

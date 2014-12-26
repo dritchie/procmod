@@ -15,7 +15,7 @@ local gaussian = prob.gaussian
 
 ---------------------------------------------------------------
 
-return function(makeGeoPrim)
+return S.memoize(function(makeGeoPrim, geoRes )
 
 	local function lerp(lo, hi, t) return (1-t)*lo + t*hi end
 
@@ -332,7 +332,7 @@ return function(makeGeoPrim)
 		branch(startFrame, nil, 0)
 		prob.popAddress()
 	end
-end
+end)
 
 
 

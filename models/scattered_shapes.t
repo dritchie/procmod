@@ -1,3 +1,4 @@
+local S = terralib.require("qs.lib.std")
 local prob = terralib.require("prob.prob")
 local Shapes = terralib.require("geometry.shapes")(double)
 local Mesh = terralib.require("geometry.mesh")(double)
@@ -9,7 +10,7 @@ local uniform = prob.uniform
 
 ---------------------------------------------------------------
 
-return function(makeGeoPrim)
+return S.memoize(function(makeGeoPrim, geoRes)
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, rotamt: double, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
 		var xform = Mat4.rotateY(rotamt)
@@ -81,7 +82,7 @@ return function(makeGeoPrim)
 		until not keepgoing
 	end
 
-end
+end)
 
 
 
