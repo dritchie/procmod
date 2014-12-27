@@ -9,7 +9,7 @@ local uniform = prob.uniform
 
 ---------------------------------------------------------------
 
-return S.memoize(function(makeGeoPrim, geoPrim)
+return S.memoize(function(makeGeoPrim, geoRes)
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
 		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
