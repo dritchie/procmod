@@ -15,7 +15,7 @@ local gaussian = prob.gaussian
 
 ---------------------------------------------------------------
 
-return S.memoize(function(makeGeoPrim, geoRes )
+return S.memoize(function(makeGeoPrim, geoRes)
 
 	local function lerp(lo, hi, t) return (1-t)*lo + t*hi end
 
@@ -267,7 +267,7 @@ return S.memoize(function(makeGeoPrim, geoRes )
 	end
 
 
-	local N_SEGS = 10
+	local N_SEGS = geoRes
 	assert(N_SEGS >= 6 and (N_SEGS-2)%4 == 0,
 		"N_SEGS must be one of 6, 10, 14, 18, ...")
 

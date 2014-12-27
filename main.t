@@ -40,7 +40,7 @@ local MAX_SCORE_COLOR = {0.0, 1.0, 0.0}
 
 -- Globals
 local generate = global({&Generations}->{}, 0)
-local generateRef = nil		-- To ensure code isn't garbage collected
+local highResRegen = global({&Generations, uint}->{}, 0)
 local generations = global(Generations)
 local currGenIndex = global(int, 0)
 local samples = global(&Samples, 0)
@@ -178,16 +178,20 @@ local terra setGenerationIndex(i: int, setSampIndexToMAP: bool)
 	end
 end
 
-
 -- Lua callback to reload and 'hot swap' the procedural generation code.
+local genref = nil
+local hiresref = nil
 local function reloadCode()
 	local function doReload()
 		local modulefn, err = terralib.loadfile(GENERATE_FILE)
 		if not modulefn then
 			error(string.format("Error loading procedural modeling code: %s", err))
 		end
-		generateRef = modulefn()
-		generate:set(generateRef:getpointer())
+		local mod = modulefn()
+		genref = mod.generate
+		generate:set(genref:getpointer())
+		hiresref = mod.highResRerun
+		highResRegen:set(hiresref:getpointer())
 	end
 	local ok, maybeerr = pcall(doReload)
 	if not ok then
@@ -212,6 +216,14 @@ end
 
 local terra reloadCodeAndRegen()
 	if reload() then regen() end
+end
+
+
+local terra regenCurrMeshAtHighRes()
+	if displayMesh ~= nil and generations:size() > 0 then
+		highResRegen(&generations, currSampleIndex)
+		displayNormalMesh()
+	end
 end
 
 
@@ -631,6 +643,8 @@ local terra keyboard(key: uint8, x: int, y: int)
 		if displayMesh ~= nil then
 			displayMesh:saveOBJ("savedMesh.obj")
 		end
+	elseif key == char('z') then
+		regenCurrMeshAtHighRes()
 	end
 end
 

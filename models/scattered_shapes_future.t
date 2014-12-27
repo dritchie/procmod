@@ -36,7 +36,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		Horizontal = true
 	}
 
-	local n = 8
+	local n = geoRes
 	local coord_min = -9
 	local coord_max = 9
 	local box_dim_min = 0.25

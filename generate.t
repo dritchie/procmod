@@ -44,7 +44,22 @@ local function run(generations)
 	end
 end
 local runterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample))}->{}, run)
-return terra(generations: &S.Vector(S.Vector(procmod.Sample)))
-	generations:clear()
-	runterra(generations)
+
+local function rerun(generations, index)
+	procmod.HighResRerunRecordedTrace(generations, index)
 end
+local rerunterra = terralib.cast({&S.Vector(S.Vector(procmod.Sample)), uint}->{}, rerun)
+
+return
+{
+	generate = terra(generations: &S.Vector(S.Vector(procmod.Sample)))
+		generations:clear()
+		runterra(generations)
+	end,
+	highResRerun = terra(generations: &S.Vector(S.Vector(procmod.Sample)), index: uint)
+		rerunterra(generations, index)
+	end
+}
+
+
+
