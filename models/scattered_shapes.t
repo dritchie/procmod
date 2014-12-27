@@ -13,7 +13,7 @@ local uniform = prob.uniform
 return S.memoize(function(makeGeoPrim, geoRes)
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, rotamt: double, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-		var xform = Mat4.rotateY(rotamt)
+		var xform = Mat4.translate(cx, cy, cz) * Mat4.rotateY(rotamt) * Mat4.translate(-cx, -cy, -cz)
 		Shapes.addBoxTransformed(mesh, &xform, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
 	end)
 
