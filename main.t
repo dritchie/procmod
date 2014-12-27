@@ -587,7 +587,7 @@ end
 
 local terra renderShadowStuff()
 	escape
-		if globals.doShadowMatch then
+		if globals.config.doShadowMatch then
 			emit quote
 				if displayMesh ~= nil then
 					[shadowmap.renderShadowMask(true)](displayMesh)
