@@ -113,9 +113,9 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	end
 	MatT.methods.addInPlace:setinlined(true)
 	MatT.metamethods.__add = terra(m1: MatT, m2: MatT)
-		var mat : MatT
+		var mat = MatT.salloc():copy(&m1)
 		mat:addInPlace(&m2)
-		return mat
+		return @mat
 	end
 	MatT.metamethods.__add:setinlined(true)
 
@@ -125,9 +125,9 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	end
 	MatT.methods.subInPlace:setinlined(true)
 	MatT.metamethods.__sub = terra(m1: MatT, m2: MatT)
-		var mat : MatT
+		var mat = MatT.salloc():copy(&m1)
 		mat:subInPlace(m2)
-		return mat
+		return @mat
 	end
 	MatT.metamethods.__sub:setinlined(true)
 
@@ -137,14 +137,14 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	end
 	MatT.methods.scaleInPlace:setinlined(true)
 	MatT.metamethods.__mul = terra(m1: MatT, s: real)
-		var mat: MatT
+		var mat = MatT.salloc():copy(&m1)
 		mat:scaleInPlace(s)
-		return mat
+		return @mat
 	end
 	MatT.metamethods.__mul:adddefinition((terra(s: real, m1: MatT)
-		var mat: MatT
+		var mat = MatT.salloc():copy(&m1)
 		mat:scaleInPlace(s)
-		return mat
+		return @mat
 	end):getdefinitions()[1])
 
 	terra MatT:divInPlace(s: real)
@@ -153,11 +153,27 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	end
 	MatT.methods.divInPlace:setinlined(true)
 	MatT.metamethods.__div = terra(m1: MatT, s: real)
-		var mat: MatT
+		var mat = MatT.salloc():copy(&m1)
 		mat:divInPlace(s)
-		return mat
+		return @mat
 	end
 	MatT.metamethods.__div:setinlined(true)
+
+	terra MatT:transposeInPlace()
+		var tmp : real
+		for i=0,rowdim do
+			for j=i+1,coldim do
+				tmp = self(i,j)
+				self(i,j) = self(j,i)
+				self(j,i) = tmp				
+			end
+		end
+	end
+	terra MatT:transpose()
+		var mat = MatT.salloc():copy(self)
+		mat:transposeInPlace()
+		return @mat
+	end
 
 	-- At the moment, I'll only support matrix/matrix multiply between
 	--    square matrices
@@ -487,6 +503,36 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 					data[colmajidx(i,j)] = self(i,j)
 				end
 			end
+		end
+
+		-- Code for 4x4 inverse from http://rodolphe-vaillant.fr/?e=7
+
+		local MINOR = macro(function(m, r0, r1, r2, c0, c1, c2)
+			return `m[4*r0+c0] * (m[4*r1+c1] * m[4*r2+c2] - m[4*r2+c1] * m[4*r1+c2]) -
+		            m[4*r0+c1] * (m[4*r1+c0] * m[4*r2+c2] - m[4*r2+c0] * m[4*r1+c2]) +
+		            m[4*r0+c2] * (m[4*r1+c0] * m[4*r2+c1] - m[4*r2+c0] * m[4*r1+c1])
+		end)
+
+		terra MatT:determinant()
+			var m = self.entries
+			return m[0] * MINOR(m, 1, 2, 3, 1, 2, 3) -
+		           m[1] * MINOR(m, 1, 2, 3, 0, 2, 3) +
+		           m[2] * MINOR(m, 1, 2, 3, 0, 1, 3) -
+		           m[3] * MINOR(m, 1, 2, 3, 0, 1, 2)
+		end
+
+		local terra adjoint(m: &real, adjOut: &real)
+		    adjOut[ 0] =  MINOR(m,1,2,3,1,2,3); adjOut[ 1] = -MINOR(m,0,2,3,1,2,3); adjOut[ 2] =  MINOR(m,0,1,3,1,2,3); adjOut[ 3] = -MINOR(m,0,1,2,1,2,3)
+		    adjOut[ 4] = -MINOR(m,1,2,3,0,2,3); adjOut[ 5] =  MINOR(m,0,2,3,0,2,3); adjOut[ 6] = -MINOR(m,0,1,3,0,2,3); adjOut[ 7] =  MINOR(m,0,1,2,0,2,3)
+		    adjOut[ 8] =  MINOR(m,1,2,3,0,1,3); adjOut[ 9] = -MINOR(m,0,2,3,0,1,3); adjOut[10] =  MINOR(m,0,1,3,0,1,3); adjOut[11] = -MINOR(m,0,1,2,0,1,3)
+		    adjOut[12] = -MINOR(m,1,2,3,0,1,2); adjOut[13] =  MINOR(m,0,2,3,0,1,2); adjOut[14] = -MINOR(m,0,1,3,0,1,2); adjOut[15] =  MINOR(m,0,1,2,0,1,2)
+		end
+		 
+		terra MatT:inverse()
+			var inv = MatT.salloc():init()
+			adjoint(self.entries, inv.entries)
+			inv:scaleInPlace(1.0 / self:determinant())
+			return @inv
 		end
 
 	end

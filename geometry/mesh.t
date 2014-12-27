@@ -80,11 +80,11 @@ local Mesh = S.memoize(function(real)
 		for i=vstarti,vendi do
 			self.vertices(i) = xform:transformPoint(self.vertices(i))
 		end
-		-- TODO: Implement 4x4 matrix inversion and use the inverse transpose
-		--    for the normals (I expect to only use rotations and uniform scales
-		--    for the time being, so this should be fine for now).
+		var normalxform = xform:inverse()
+		normalxform:transposeInPlace()
 		for i=nstarti,nendi do
-			self.normals(i) = xform:transformVector(self.normals(i))
+			self.normals(i) = normalxform:transformVector(self.normals(i))
+			self.normals(i):normalize()
 		end
 	end
 
