@@ -35,14 +35,16 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		}
 	end
 
-	local terra circleOfVerts(mesh: &Mesh, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
+	local terra circleOfVertsAndNormals(mesh: &Mesh, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
 		var v = c + r*up
 		mesh:addVertex(v)
+		mesh:addNormal((v - c):normalized())
 		var rotamt = [2*math.pi]/n
 		var m = Mat4.rotate(fwd, rotamt, c)
 		for i=1,n do
 			v = m:transformPoint(v)
 			mesh:addVertex(v)
+			mesh:addNormal((v - c):normalized())
 		end
 	end
 
@@ -66,10 +68,21 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		end
 	end
 
-	local terra cylinderSides(mesh: &Mesh, baseIndex: uint, n: uint)
-		var bvi = baseIndex
+	local terra cylinderSides(mesh: &Mesh, baseVertIndex: uint, baseNormIndex: uint, n: uint)
+		var bvi = baseVertIndex
+		var bni = baseNormIndex
 		for i=0,n do
-			Shapes.addQuad(mesh, bvi + i, bvi + (i+1)%n, bvi + n + (i+1)%n, bvi + n + i)
+			var i0 = i
+			var i1 = (i+1)%n
+			var i2 = n + (i+1)%n
+			var i3 = n + i
+			mesh:addIndex(bvi+i0, bni+i0)
+			mesh:addIndex(bvi+i1, bni+i1)
+			mesh:addIndex(bvi+i2, bni+i2)
+			mesh:addIndex(bvi+i2, bni+i2)
+			mesh:addIndex(bvi+i3, bni+i3)
+			mesh:addIndex(bvi+i0, bni+i0)
+			-- Shapes.addQuad(mesh, bvi + i, bvi + (i+1)%n, bvi + n + (i+1)%n, bvi + n + i)
 		end
 	end
 
@@ -117,17 +130,18 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		var r2 = f2_r
 
 		var bvi = mesh:numVertices()
+		var bni = mesh:numNormals()
 
 		-- Vertices 0,nSegs are the bottom outline of the base
-		circleOfVerts(mesh, c0, up0, fwd0, r0, nSegs)
+		circleOfVertsAndNormals(mesh, c0, up0, fwd0, r0, nSegs)
 		-- Vertices nSegs+1,2*nSegs are the outline of the split frame
-		circleOfVerts(mesh, c1, up1, fwd1, r1, nSegs)
+		circleOfVertsAndNormals(mesh, c1, up1, fwd1, r1, nSegs)
 		-- Finally, we have the vertices of the end frame
-		circleOfVerts(mesh, c2, up2, fwd2, r2, nSegs)
+		circleOfVertsAndNormals(mesh, c2, up2, fwd2, r2, nSegs)
 		-- Add quads for the outside between the base and split
-		cylinderSides(mesh, bvi, nSegs)
+		cylinderSides(mesh, bvi, bni, nSegs)
 		-- Add quads for the outside between the split and end
-		cylinderSides(mesh, bvi+nSegs, nSegs)
+		cylinderSides(mesh, bvi+nSegs, bni+nSegs, nSegs)
 		-- Finally, add quads across the bottom of the cylinder
 		cylinderCap(mesh, bvi, nSegs)
 		-- ...and add quads across the top of the cylinder
