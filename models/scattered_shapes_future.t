@@ -13,8 +13,8 @@ local uniform = prob.uniform
 return S.memoize(function(makeGeoPrim, geoRes)
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, rotamt: double, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-		var xform = Mat4.translate(cx, cy, cz) * Mat4.rotateY(rotamt) * Mat4.translate(-cx, -cy, -cz)
-		Shapes.addBoxTransformed(mesh, &xform, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
+		var xform = Mat4.translate(cx, cy, cz) * Mat4.rotateY(rotamt)
+		Shapes.addBoxTransformed(mesh, &xform, Vec3.create(0.0), xlen, ylen, zlen)
 	end)
 
 	local vcyl = makeGeoPrim(terra(mesh: &Mesh, bcx: double, bcy: double, bcz: double, height: double, radius: double, n: uint)
@@ -22,8 +22,8 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	end)
 
 	local hcyl = makeGeoPrim(terra(mesh: &Mesh, rotamt: double, bcx: double, bcy: double, bcz: double, height: double, radius: double, n: uint)
-		var xform = Mat4.translate(bcx, bcy, bcz) * Mat4.rotateY(rotamt) * Mat4.translate(0.0, radius, 0.0) * Mat4.rotateX([math.pi/2]) * Mat4.translate(-bcx, -bcy-0.5*height, -bcz)
-		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(bcx, bcy, bcz), height, radius, n)
+		var xform = Mat4.translate(bcx, bcy, bcz) * Mat4.rotateY(rotamt) * Mat4.translate(0.0, radius, 0.0) * Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -0.5*height, 0.0)
+		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(0.0), height, radius, n)
 	end)
 
 	local ShapeType = {
