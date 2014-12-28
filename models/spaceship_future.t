@@ -12,12 +12,25 @@ local future = prob.future
 
 return S.memoize(function(makeGeoPrim, geoRes)
 
+	local n = geoRes
+	local bevAmt = 0.15
+	if n < 8 then
+		bevAmt = 0	-- Too low res to perform beveling
+	end
+
+	-- local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
+	-- 	Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
+	-- end)
+	-- local wingseg = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
+	-- 	Shapes.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
+	-- 	Shapes.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
+	-- end)
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
+		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, n)
 	end)
 	local wingseg = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
-		Shapes.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
-		Shapes.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
+		Shapes.addBeveledBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen, bevAmt, n)
+		Shapes.addBeveledBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen, bevAmt, n)
 	end)
 
 	local function wi(i, w)
