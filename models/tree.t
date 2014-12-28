@@ -12,7 +12,6 @@ local LTransform = terralib.require("linalg.luaxform")
 local flip = prob.flip
 local uniform = prob.uniform
 local gaussian = prob.gaussian
-local future = prob.future
 
 ---------------------------------------------------------------
 

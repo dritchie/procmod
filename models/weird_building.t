@@ -6,7 +6,6 @@ local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 local flip = prob.flip
 local uniform = prob.uniform
-local future = prob.future
 
 ---------------------------------------------------------------
 
