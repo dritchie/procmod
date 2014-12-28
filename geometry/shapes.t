@@ -202,14 +202,16 @@ local shapes = S.memoize(function(real)
 		mesh:append(boxmesh)
 	end
 
-	local terra circleOfVerts(mesh: &MeshT, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
+	local terra circleOfVertsAndNormals(mesh: &MeshT, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
 		var v = c + r*up
 		mesh:addVertex(v)
+		mesh:addNormal((v - c):normalized())
 		var rotamt = [2*math.pi]/n
 		var m = Mat4.rotate(fwd, rotamt, c)
 		for i=1,n do
 			v = m:transformPoint(v)
 			mesh:addVertex(v)
+			mesh:addNormal((v - c):normalized())
 		end
 	end
 
@@ -235,13 +237,25 @@ local shapes = S.memoize(function(real)
 		var topCenter = baseCenter + height*fwd
 		-- Make perimeter vertices on the top and bottom
 		var initialNumVerts = mesh:numVertices()
-		circleOfVerts(mesh, baseCenter, up, fwd, radius, n)
+		var initialNumNorms = mesh:numNormals()
+		circleOfVertsAndNormals(mesh, baseCenter, up, fwd, radius, n)
 		var afterOneCircleNumVerts = mesh:numVertices()
-		circleOfVerts(mesh, topCenter, up, fwd, radius, n)
+		circleOfVertsAndNormals(mesh, topCenter, up, fwd, radius, n)
 		-- Make the sides
 		var bvi = initialNumVerts
+		var bni = initialNumNorms
 		for i=0,n do
-			quad(mesh, bvi + i, bvi + (i+1)%n, bvi + n + (i+1)%n, bvi + n + i)
+			var i0 = i
+			var i1 = (i+1)%n
+			var i2 = n + (i+1)%n
+			var i3 = n + i
+			mesh:addIndex(bvi+i0, bni+i0)
+			mesh:addIndex(bvi+i1, bni+i1)
+			mesh:addIndex(bvi+i2, bni+i2)
+			mesh:addIndex(bvi+i2, bni+i2)
+			mesh:addIndex(bvi+i3, bni+i3)
+			mesh:addIndex(bvi+i0, bni+i0)
+			-- quad(mesh, bvi + i, bvi + (i+1)%n, bvi + n + (i+1)%n, bvi + n + i)
 		end
 		-- Place center vertices, make the end caps
 		mesh:addVertex(baseCenter)
