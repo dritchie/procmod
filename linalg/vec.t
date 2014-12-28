@@ -395,6 +395,18 @@ Vec = S.memoize(function(real, dim, GPU)
 		return v
 	end
 	VecT.methods.min:setinlined(true)
+	terra VecT:clampInPlace(min: VecT, max: VecT)
+		self:maxInPlace(min)
+		self:minInPlace(max)
+	end
+	VecT.methods.clampInPlace:setinlined(true)
+	terra VecT:clamp(min: VecT, max:VecT)
+		var v : VecT
+		S.copy(v, @self)
+		v:clampInPlace(min, max)
+		return v
+	end
+	VecT.methods.clamp:setinlined(true)
 	terra VecT:absInPlace()
 		[entryList(self)] = [wrap(entryList(self), function(a) return `mlib.fabs(a) end)]
 	end

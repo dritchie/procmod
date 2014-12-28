@@ -63,6 +63,118 @@ local shapes = S.memoize(function(real)
 		quad(mesh, vi+2, vi+3, vi+7, vi+6) -- Top
 	end
 
+	local tesselatedUnitSquare = S.memoize(function(naxis, negnormal, flipwind)
+		local VN = macro(function(mesh, off, c0, c1)
+			local n = `1.0
+			if negnormal then n = `-1.0 end
+			if naxis == 0 then
+				return quote
+					mesh:addVertex(Vec3.create(off, c0, c1))
+					mesh:addNormal(Vec3.create(n, 0.0, 0.0))
+				end
+			elseif naxis == 1 then
+				return quote
+					mesh:addVertex(Vec3.create(c0, off, c1))
+					mesh:addNormal(Vec3.create(0.0, n, 0.0))
+				end
+			elseif naxis == 2 then
+				return quote
+					mesh:addVertex(Vec3.create(c0, c1, off))
+					mesh:addNormal(Vec3.create(0.0, 0.0, n))
+				end
+			else
+				error("Bad naxis")
+			end
+		end)
+		local Q = macro(function(mesh, n, nv, nn, i, j)
+			if flipwind then
+				return quote
+					var lli = (n+1)*i + j
+					var lri = (n+1)*(i+1) + j
+					var uri = (n+1)*(i+1) + (j+1)
+					var uli = (n+1)*i + (j+1)
+					mesh:addIndex(nn + lli, nv + lli)
+					mesh:addIndex(nn + uli, nv + uli)
+					mesh:addIndex(nn + uri, nv + uri)
+					mesh:addIndex(nn + uri, nv + uri)
+					mesh:addIndex(nn + lri, nv + lri)
+					mesh:addIndex(nn + lli, nv + lli)
+				end
+			else
+				return quote
+					var lli = (n+1)*i + j
+					var lri = (n+1)*(i+1) + j
+					var uri = (n+1)*(i+1) + (j+1)
+					var uli = (n+1)*i + (j+1)
+					mesh:addIndex(nn + lli, nv + lli)
+					mesh:addIndex(nn + lri, nv + lri)
+					mesh:addIndex(nn + uri, nv + uri)
+					mesh:addIndex(nn + uri, nv + uri)
+					mesh:addIndex(nn + uli, nv + uli)
+					mesh:addIndex(nn + lli, nv + lli)
+				end
+			end
+		end)
+		return terra (mesh: &MeshT, off: real, n: uint)
+			var nv = mesh:numVertices()
+			var nn = mesh:numNormals()
+			-- Grid of vertices / normals
+			var width = float(2.0)/n
+			for i=0,n+1 do
+				var c0 = -1.0 + width*i
+				for j=0,n+1 do
+					var c1 = -1.0 + width*j
+					VN(mesh, off, c0, c1)
+				end
+			end
+			-- Quads
+			for i=0,n do
+				for j=0,n do
+					Q(mesh, n, nv, nn, i, j)
+				end
+			end
+		end
+	end)
+
+	local terra bbface(mesh: &MeshT, tmpmesh: &MeshT, xform: &Mat4, n: uint)
+		tesselatedUnitSquare(tmpmesh, n)
+		tmpmesh:transform(xform)
+		mesh:append(tmpmesh)
+		tmpmesh:clear()
+	end
+	local lerp = macro(function(lo, hi, t) return `(1.0-t)*lo + t*hi end)
+	terra shapes.addBeveledBox(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real,
+							   bevelAmt: real, n: uint)
+
+		var boxmesh = MeshT.salloc():init()
+		-- Bottom face
+		[tesselatedUnitSquare(1, true, false)](boxmesh, -1.0, n)
+		-- Top face
+		[tesselatedUnitSquare(1, false, true)](boxmesh, 1.0, n)
+		-- Back face
+		[tesselatedUnitSquare(2, true, true)](boxmesh, -1.0, n)
+		-- Front face
+		[tesselatedUnitSquare(2, false, false)](boxmesh, 1.0, n)
+		-- Left face
+		[tesselatedUnitSquare(0, true, true)](boxmesh, -1.0, n)
+		-- Right face
+		[tesselatedUnitSquare(0, false, false)](boxmesh, 1.0, n)
+
+		-- Apply bevel
+		-- http://joshparnell.com/blog/2014/02/22/rounded-box-projection/
+		for i=0,boxmesh:numVertices() do
+			var p = boxmesh:getVertex(i)
+			var p_box = p:clamp(-Vec3.create(1.0-bevelAmt), Vec3.create(1.0-bevelAmt))
+			boxmesh:getVertex(i) = p_box + bevelAmt * (p - p_box):normalized()
+		end
+		boxmesh:recomputeVertexNormals()
+
+		-- Apply final scaling + placement transform
+		var xform = Mat4.translate(center) * Mat4.scale(0.5*xlen, 0.5*ylen, 0.5*zlen)
+		boxmesh:transform(&xform)
+		mesh:append(boxmesh)
+	end
+
 	local terra circleOfVerts(mesh: &MeshT, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
 		var v = c + r*up
 		mesh:addVertex(v)

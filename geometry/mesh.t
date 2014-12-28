@@ -101,6 +101,30 @@ local Mesh = S.memoize(function(real)
 		return bbox
 	end
 
+	-- Assumes that the mesh already has one normal per vertex
+	terra Mesh:recomputeVertexNormals()
+		S.assert(self:numVertices() == self:numNormals())
+		for i=0,self:numNormals() do
+			self.normals(i):init(0.0)
+		end
+		var numTris = self:numIndices()/3
+		for i=0,numTris do
+			var i0 = self.indices(3*i).vertex
+			var i1 = self.indices(3*i + 1).vertex
+			var i2 = self.indices(3*i + 2).vertex
+			var p0 = self.vertices(i0)
+			var p1 = self.vertices(i1)
+			var p2 = self.vertices(i2)
+			var n = (p2-p1):cross(p0-p1)
+			self.normals(i0) = self.normals(i0) + n
+			self.normals(i1) = self.normals(i1) + n
+			self.normals(i2) = self.normals(i2) + n
+		end
+		for i=0,self:numNormals() do
+			self.normals(i):normalize()
+		end
+	end
+
 	-- Check if there is an intersection between self and other
 	-- Contracts both of the triangles by a tiny epsilon so that touching (but not interpentratring)
 	--    faces are not considered intersecting.
