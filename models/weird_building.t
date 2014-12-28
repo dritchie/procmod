@@ -51,9 +51,9 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			prob.setAddressLoopIndex(iter)
 			local maxwidth = xmax-xmin
 			local maxdepth = zmax-zmin
-			local width = uniform(0.5*maxwidth, maxwidth)
-			local depth = uniform(0.5*maxdepth, maxdepth)
-			local height = uniform(1, 3)
+			local width = uniform(0.5*maxwidth, maxwidth, "width")
+			local depth = uniform(0.5*maxdepth, maxdepth, "depth")
+			local height = uniform(1, 3, "height")
 			local cx, cz
 			if iter == 0 and not leftok then
 				cx = xmin + 0.5*width
@@ -62,7 +62,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			else
 				local xmid = 0.5*(xmin+xmax)
 				local halfxremaining = 0.5*(maxwidth-width)
-				cx = uniform(xmid-halfxremaining, xmid+halfxremaining)
+				cx = uniform(xmid-halfxremaining, xmid+halfxremaining, "cx")
 			end
 			if iter == 0 and not downok then
 				cz = zmin + 0.5*depth
@@ -71,33 +71,33 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			else
 				local zmid = 0.5*(zmin+zmax)
 				local halfzremaining = 0.5*(maxdepth-depth)
-				cz = uniform(zmid-halfzremaining, zmid+halfzremaining)
+				cz = uniform(zmid-halfzremaining, zmid+halfzremaining, "cz")
 			end
 			box(cx, ybot + 0.5*height, cz, width, height, depth)
 			if iter == 0 then
 				if leftok then
-					if flip(spreadProb(depth)) then
+					if flip(spreadProb(depth), "leftgen") then
 						prob.pushAddress("left")
 						leftTower(depth+1, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
 						prob.popAddress()
 					end
 				end
 				if rightok then
-					if flip(spreadProb(depth)) then
+					if flip(spreadProb(depth), "rightgen") then
 						prob.pushAddress("right")
 						rightTower(depth+1, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
 						prob.popAddress()
 					end
 				end
 				if downok then
-					if flip(spreadProb(depth)) then
+					if flip(spreadProb(depth), "downgen") then
 						prob.pushAddress("down")
 						downTower(depth+1, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
 						prob.popAddress()
 					end
 				end
 				if upok then
-					if flip(spreadProb(depth)) then
+					if flip(spreadProb(depth), "upgen") then
 						prob.pushAddress("up")
 						upTower(depth+1, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
 						prob.popAddress()
@@ -109,7 +109,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			xmax = cx + 0.5*width
 			zmin = cz - 0.5*depth
 			zmax = cz + 0.5*depth
-			finished = flip(1-stackProb(iter))
+			finished = flip(1-stackProb(iter), "continue")
 			iter = iter + 1
 		until finished
 	end

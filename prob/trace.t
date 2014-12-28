@@ -345,6 +345,15 @@ function StructuredERPTrace:records()
 end
 
 function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
+	-- We expect the last arg to be an address name for this ERP callsite
+	local args = {...}
+	local name = args[#args]
+	args[#args] = nil
+	if not (type(name) == "string") then
+		print(debug.traceback())
+		assert(false, "No name provided for ERP")
+	end
+	self:pushAddress(name)
 	-- Look for the ERP by address, and generate a new one if we don't find it
 	local addr = self.address:getstr()
 	local rec = self.choicemap[addr]
@@ -360,6 +369,7 @@ function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
 	end
 	rec.index = self.nextVarIndex 
 	self.address:incrementVarIndex()
+	self:popAddress()
 	return rec.value, rec.logprob
 end
 
@@ -401,11 +411,11 @@ local gaussian = makeSampler(distrib.gaussian)
 -- Decided to do uniform this way so that we don't have range-invalidation
 --    problems if and when we ever do MH.
 local uniformerp = makeSampler({
-	sample = math.random,
+	sample = function() return math.random() end,
 	logprob = function() return 0.0 end
 })
-local uniform = function(lo, hi)
-	local u = uniformerp()
+local uniform = function(lo, hi, ...)
+	local u = uniformerp(...)
 	return (1.0-u)*lo + u*hi
 end
 -- local uniform = makeSampler(distrib.uniform)
