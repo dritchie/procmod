@@ -18,15 +18,11 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		bevAmt = 0	-- Too low res to perform beveling
 	end
 
-	-- local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-	-- 	Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
-	-- end)
-	-- local wingseg = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
-	-- 	Shapes.addBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen)
-	-- 	Shapes.addBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen)
-	-- end)
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
 		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, n)
+	end)
+	local taperedbox = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double, taper: double)
+		Shapes.addTaperedBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, taper)
 	end)
 	local wingseg = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
 		Shapes.addBeveledBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen, bevAmt, n)
@@ -102,6 +98,14 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			local keepGenerating = flip(wi(i, 0.4))
 			i = i + 1
 		until not keepGenerating
+		if flip(0.75) then
+			-- Generate tapered nose
+			local xlen = uniform(1.0, 3.0)
+			local ylen = uniform(0.5, 1.0) * xlen
+			local zlen = uniform(1.0, 3.0)
+			local taper = uniform(0.3, 1.0)
+			taperedbox(0.0, 0.0, rearz + 0.5*zlen, xlen, ylen, zlen, taper)
+		end
 	end
 
 	return function()

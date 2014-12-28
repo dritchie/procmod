@@ -63,6 +63,33 @@ local shapes = S.memoize(function(real)
 		quad(mesh, vi+2, vi+3, vi+7, vi+6) -- Top
 	end
 
+	-- The front face is tapered. Use transforms if you want to taper other faces.
+	terra shapes.addTaperedBox(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real,
+							   taperScale: real)
+		var xh = xlen*0.5
+		var yh = ylen*0.5
+		var zh = zlen*0.5
+		var vi = mesh:numVertices()
+
+		-- To taper the front face, we scale vertices 1, 3, 5, and 7
+		mesh:addVertex(center + Vec3.create(-xh, -yh, -zh))
+		mesh:addVertex(center + Vec3.create(-taperScale*xh, -taperScale*yh, zh))
+		mesh:addVertex(center + Vec3.create(-xh, yh, -zh))
+		mesh:addVertex(center + Vec3.create(-taperScale*xh, taperScale*yh, zh))
+		mesh:addVertex(center + Vec3.create(xh, -yh, -zh))
+		mesh:addVertex(center + Vec3.create(taperScale*xh, -taperScale*yh, zh))
+		mesh:addVertex(center + Vec3.create(xh, yh, -zh))
+		mesh:addVertex(center + Vec3.create(taperScale*xh, taperScale*yh, zh))
+
+		-- CCW order
+		quad(mesh, vi+2, vi+6, vi+4, vi+0) -- Back
+		quad(mesh, vi+1, vi+5, vi+7, vi+3) -- Front
+		quad(mesh, vi+0, vi+1, vi+3, vi+2) -- Left
+		quad(mesh, vi+6, vi+7, vi+5, vi+4) -- Right
+		quad(mesh, vi+4, vi+5, vi+1, vi+0) -- Bottom
+		quad(mesh, vi+2, vi+3, vi+7, vi+6) -- Top
+	end
+
 	local tesselatedUnitSquare = S.memoize(function(naxis, negnormal, flipwind)
 		local VN = macro(function(mesh, off, c0, c1)
 			local n = `1.0
