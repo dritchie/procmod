@@ -7,10 +7,12 @@ local future = terralib.require("prob.future")
 local function run(generations)
 
 	local progname = globals.config.program
-	assert(not string.find(progname, "_future"),
+	assert((not string.find(progname, "_future") and (not string.find(progname, "_mh"))),
 		string.format("Config file should specify the *base* name of the model program; given name was %s", progname))
 	if globals.config.method == "smc" then
 		progname = progname .. "_future"
+	elseif globals.config.method == "mh" then
+		progname = progname .. "_mh"
 	end
 	local program = terralib.require(progname)
 
