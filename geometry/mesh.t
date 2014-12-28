@@ -101,9 +101,9 @@ local Mesh = S.memoize(function(real)
 		return bbox
 	end
 
-	-- Assumes that the mesh already has one normal per vertex
+	-- Will overwrite any existing normals
 	terra Mesh:recomputeVertexNormals()
-		S.assert(self:numVertices() == self:numNormals())
+		self.normals:resize(self:numVertices())
 		for i=0,self:numNormals() do
 			self.normals(i):init(0.0)
 		end
@@ -122,6 +122,10 @@ local Mesh = S.memoize(function(real)
 		end
 		for i=0,self:numNormals() do
 			self.normals(i):normalize()
+		end
+		-- Adjust all indices to refer to vertex normals
+		for i=0,self:numIndices() do
+			self.indices(i).normal = self.indices(i).vertex
 		end
 	end
 
