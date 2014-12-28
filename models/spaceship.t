@@ -6,27 +6,37 @@ local Vec3 = terralib.require("linalg.vec")(double, 3)
 
 local flip = prob.flip
 local uniform = prob.uniform
-local future = prob.future
 
 ---------------------------------------------------------------
 
 return S.memoize(function(makeGeoPrim, geoRes)
 
-	local n = geoRes
-	local bevAmt = 0.15
-	if n < 8 then
-		bevAmt = 0	-- Too low res to perform beveling
+	-- This program interprets geoRes as a flag toggling whether we're doing
+	-- lo res or hi res
+	local nBevelBox
+	local bevAmt
+	local nCylinder
+	if geoRes == 1 then
+		nBevelBox = 1
+		bevAmt = 0
+		nCylinder = 8
+	elseif geoRes == 2 then
+		nBevelBox = 10
+		bevAmt = 0.15
+		nCylinder = 32
+	else
+		error(string.format("spaceship - unrecognized geoRes flag %d", geoRes))
 	end
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, n)
+		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, nBevelBox)
 	end)
 	local taperedbox = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double, taper: double)
 		Shapes.addTaperedBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, taper)
 	end)
 	local wingseg = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
-		Shapes.addBeveledBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen, bevAmt, n)
-		Shapes.addBeveledBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen, bevAmt, n)
+		Shapes.addBeveledBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen, bevAmt, nBevelBox)
+		Shapes.addBeveledBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen, bevAmt, nBevelBox)
 	end)
 
 	local function wi(i, w)
