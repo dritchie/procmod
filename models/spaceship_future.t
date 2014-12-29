@@ -3,9 +3,11 @@ local prob = terralib.require("prob.prob")
 local Shapes = terralib.require("geometry.shapes")(double)
 local Mesh = terralib.require("geometry.mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
+local Mat4 = terralib.require("linalg.mat")(double, 4, 4)
 
 local flip = prob.flip
 local uniform = prob.uniform
+local multinomial = prob.multinomial
 local future = prob.future
 
 ---------------------------------------------------------------
@@ -38,6 +40,17 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	local wingseg = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, xlen: double, ylen: double, zlen: double)
 		Shapes.addBeveledBox(mesh, Vec3.create(xbase + 0.5*xlen, 0.0, zbase), xlen, ylen, zlen, bevAmt, nBevelBox)
 		Shapes.addBeveledBox(mesh, Vec3.create(-(xbase + 0.5*xlen), 0.0, zbase), xlen, ylen, zlen, bevAmt, nBevelBox)
+	end)
+	local bodycyl = makeGeoPrim(terra(mesh: &Mesh, zbase: double, radius: double, length: double)
+		var xform = Mat4.translate(0.0, 0.0, 0.5*length + zbase) * Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -0.5*length, 0.0)
+		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(0.0), length, radius, nCylinder)
+	end)
+	local bodycylcluster = makeGeoPrim(terra(mesh: &Mesh, zbase: double, radius: double, length: double)
+		var xform = Mat4.translate(0.0, 0.0, 0.5*length + zbase) * Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -0.5*length, 0.0)
+		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(-radius, 0.0, -radius), length, radius, nCylinder)
+		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(-radius, 0.0, radius), length, radius, nCylinder)
+		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(radius, 0.0, -radius), length, radius, nCylinder)
+		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(radius, 0.0, radius), length, radius, nCylinder)
 	end)
 
 	local function wi(i, w)
@@ -77,13 +90,98 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		until not keepGenerating
 	end
 
+	-- What type of body segment to generate
+	local BodySegType = 
+	{
+		Box = 1,
+		Cylinder = 2,
+		CylCluster = 3
+	}
+	local segTypeWeights = {}
+	for _,_ in pairs(BodySegType) do table.insert(segTypeWeights, 1) end
+
+	local function genBoxBodySeg(rearz, prev, taper)
+		local xlen = uniform(1.0, 3.0)
+		local ylen = uniform(0.5, 1.0) * xlen
+		local zlen
+		-- Must be bigger than the previous segment, if the previous
+		--   segment was not a box (i.e. was a cylinder-type thing)
+		if prev.segType ~= BodySegType.Box then
+			xlen = math.max(xlen, prev.xlen)
+			ylen = math.max(ylen, prev.ylen)
+		end
+		if taper then
+			zlen = uniform(1.0, 3.0)
+			local taper = uniform(0.3, 1.0)
+			taperedbox(0.0, 0.0, rearz + 0.5*zlen, xlen, ylen, zlen, taper)
+		else
+			zlen = uniform(2.0, 5.0)
+			box(0.0, 0.0, rearz + 0.5*zlen, xlen, ylen, zlen)
+		end
+		return xlen, ylen, zlen
+	end
+
+	local function genCylinderBodySeg(rearz, prev)
+		local minrad = 0.3
+		local maxrad = 1.25
+		-- Must be smaller than the previous segment, if the previous
+		--    segment was a box
+		if prev.segType == BodySegType.Box then
+			local limitrad = 0.5*math.min(prev.xlen, prev.ylen)
+			minrad = 0.4*limitrad
+			maxrad = limitrad
+		end
+		local radius = uniform(minrad, maxrad)
+		local xlen = radius*2
+		local ylen = radius*2
+		local zlen = uniform(2.0, 5.0)
+		bodycyl(rearz, radius, zlen)
+		return xlen, ylen, zlen
+	end
+
+	local function genCylClusterBodySeg(rearz, prev)
+		local minrad = 0.5*0.3
+		local maxrad = 0.5*1.25
+		-- Must be smaller than the previous segment, if the previous
+		--    segment was a box
+		if prev.segType == BodySegType.Box then
+			local limitrad = 0.25*math.min(prev.xlen, prev.ylen)
+			minrad = 0.4*limitrad
+			maxrad = limitrad
+		end
+		local radius = uniform(minrad, maxrad)
+		local xlen = radius*4
+		local ylen = radius*4
+		local zlen = uniform(2.0, 5.0)
+		bodycylcluster(rearz, radius, zlen)
+		return xlen, ylen, zlen
+	end
+
+	local function genBodySeg(rearz, prev)
+		local xlen
+		local ylen
+		local zlen
+		local segType = multinomial(segTypeWeights)
+		if segType == BodySegType.Box then
+			xlen, ylen, zlen = genBoxBodySeg(rearz, prev)
+		elseif segType == BodySegType.Cylinder then
+			xlen, ylen, zlen = genCylinderBodySeg(rearz, prev)
+		elseif segType == BodySegType.CylCluster then
+			xlen, ylen, zlen = genCylClusterBodySeg(rearz, prev)
+		end
+		return segType, xlen, ylen, zlen
+	end
+
 	local function genShip(rearz)
 		local i = 0
+		local prev = 
+		{
+			segType = 0,
+			xlen = -1,
+			ylen = -1
+		}
 		repeat
-			local xlen = uniform(1.0, 3.0)
-			local ylen = uniform(0.5, 1.0) * xlen
-			local zlen = uniform(2.0, 5.0)
-			box(0.0, 0.0, rearz + 0.5*zlen, xlen, ylen, zlen)
+			local segType, xlen, ylen, zlen = genBodySeg(rearz, prev)
 			rearz = rearz + zlen
 			-- Gen wing?
 			local wingprob = wi(i+1, 0.5)
@@ -107,15 +205,14 @@ return S.memoize(function(makeGeoPrim, geoRes)
 				end
 			end, rearz)
 			local keepGenerating = flip(wi(i, 0.4))
+			prev.segType = segType
+			prev.xlen = xlen
+			prev.ylen = ylen
 			i = i + 1
 		until not keepGenerating
 		if flip(0.75) then
 			-- Generate tapered nose
-			local xlen = uniform(1.0, 3.0)
-			local ylen = uniform(0.5, 1.0) * xlen
-			local zlen = uniform(1.0, 3.0)
-			local taper = uniform(0.3, 1.0)
-			taperedbox(0.0, 0.0, rearz + 0.5*zlen, xlen, ylen, zlen, taper)
+			genBoxBodySeg(rearz, prev, true)
 		end
 	end
 
