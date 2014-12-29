@@ -190,7 +190,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		end
 		if taper then
 			zlen = uniform(1.0, 3.0, "taperboxzlen")
-			local taper = uniform(0.3, 1.0, "taperamt")
+			local taper = uniform(0.25, 0.75, "taperamt")
 			taperedbox(0.0, 0.0, rearz + 0.5*zlen, xlen, ylen, zlen, taper)
 		else
 			zlen = uniform(2.0, 5.0, "boxzlen")
