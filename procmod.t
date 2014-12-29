@@ -571,17 +571,19 @@ local function RejectionSample(module, outgenerations, numsamples)
 	if globals.config.recordTraces then
 		recordedTraces = {}
 	end
-	for i=1,numsamples do
+	while samples:size() < numsamples do
 		local tr = trace.FlatValueTrace.alloc():init(program, state)
-		tr:rejectionSample()
-		local samp = samples:insert()
-		samp.value:copy(state.mesh)
-		samp.logprob = state.score
+		tr:run()
+		if state.score > -math.huge then
+			local samp = samples:insert()
+			samp.value:copy(state.mesh)
+			samp.logprob = state.score
+			if globals.config.recordTraces then
+				table.insert(recordedTraces, tr)
+			end
+		end
 		state:clear()
 		tr.args[1] = nil
-		if globals.config.recordTraces then
-			table.insert(recordedTraces, tr)
-		end
 	end
 end
 
