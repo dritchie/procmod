@@ -7,6 +7,7 @@ local BBox = terralib.require("geometry.bbox")
 local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
 local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
 local prob = terralib.require("prob.prob")
+local trace = terralib.require("prob.trace")
 local smc = terralib.require("prob.smc")
 local mcmc = terralib.require("prob.mcmc")
 local distrib = terralib.require("qs.distrib")
@@ -514,12 +515,20 @@ local function ForwardSample(module, outgenerations, numsamples)
 	local state = StateType.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
+	if globals.config.recordTraces then
+		recordedTraces = {}
+	end
 	for i=1,numsamples do
-		program(state)
+		local tr = trace.FlatValueTrace.alloc():init(program, state)
+		tr:run()
 		local samp = samples:insert()
 		samp.value:copy(state.mesh)
 		samp.logprob = 0.0
 		state:clear()
+		tr.args[1] = nil
+		if globals.config.recordTraces then
+			table.insert(recordedTraces, tr)
+		end
 	end
 end
 
@@ -545,14 +554,20 @@ local function RejectionSample(module, outgenerations, numsamples)
 	local state = StateType.luaalloc():luainit()
 	local samples = outgenerations:insert()
 	LS.luainit(samples)
-	while samples:size() < numsamples do
-		program(state)
-		if state.score > -math.huge then
-			local samp = samples:insert()
-			samp.value:copy(state.mesh)
-			samp.logprob = state.score
-		end
+	if globals.config.recordTraces then
+		recordedTraces = {}
+	end
+	for i=1,numsamples do
+		local tr = trace.FlatValueTrace.alloc():init(program, state)
+		tr:rejectionSample()
+		local samp = samples:insert()
+		samp.value:copy(state.mesh)
+		samp.logprob = state.score
 		state:clear()
+		tr.args[1] = nil
+		if globals.config.recordTraces then
+			table.insert(recordedTraces, tr)
+		end
 	end
 end
 
