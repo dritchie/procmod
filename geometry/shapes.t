@@ -265,6 +265,40 @@ local shapes = S.memoize(function(real)
 		disk(mesh, mesh:numVertices()-1, afterOneCircleNumVerts, n)
 	end
 
+	terra shapes.addTaperedCylinder(mesh: &MeshT, baseCenter: Vec3, height: real, botRad: real, topRad: real, n: uint)
+		var fwd = Vec3.create(0.0, 1.0, 0.0)
+		var up = Vec3.create(0.0, 0.0, 1.0)
+		var topCenter = baseCenter + height*fwd
+		-- Make perimeter vertices on the top and bottom
+		var initialNumVerts = mesh:numVertices()
+		var initialNumNorms = mesh:numNormals()
+		circleOfVertsAndNormals(mesh, baseCenter, up, fwd, botRad, n)
+		var afterOneCircleNumVerts = mesh:numVertices()
+		circleOfVertsAndNormals(mesh, topCenter, up, fwd, topRad, n)
+		-- Make the sides
+		var bvi = initialNumVerts
+		var bni = initialNumNorms
+		for i=0,n do
+			var i0 = i
+			var i1 = (i+1)%n
+			var i2 = n + (i+1)%n
+			var i3 = n + i
+			mesh:addIndex(bvi+i0, bni+i0)
+			mesh:addIndex(bvi+i1, bni+i1)
+			mesh:addIndex(bvi+i2, bni+i2)
+			mesh:addIndex(bvi+i2, bni+i2)
+			mesh:addIndex(bvi+i3, bni+i3)
+			mesh:addIndex(bvi+i0, bni+i0)
+			-- quad(mesh, bvi + i, bvi + (i+1)%n, bvi + n + (i+1)%n, bvi + n + i)
+		end
+		-- Place center vertices, make the end caps
+		mesh:addVertex(baseCenter)
+		disk(mesh, mesh:numVertices()-1, initialNumVerts, n)
+		mesh:getNormal(mesh:numNormals()-1) = -mesh:getNormal(mesh:numNormals()-1)	-- Make it face outside
+		mesh:addVertex(topCenter)
+		disk(mesh, mesh:numVertices()-1, afterOneCircleNumVerts, n)
+	end
+
 	-- Transformed versions of every shape function
 	local names = {}
 	for k,_ in pairs(shapes) do table.insert(names, k) end

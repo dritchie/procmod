@@ -92,6 +92,22 @@ local Mesh = S.memoize(function(real)
 		self:transform(xform, 0, self:numVertices(), 0, self:numNormals())
 	end
 
+	terra Mesh:appendTransformed(other: &Mesh, xform: &Mat4)
+		var normalxform = xform:inverse()
+		normalxform:transposeInPlace()
+		var nverts = self.vertices:size()
+		var nnorms = self.normals:size()
+		for ov in other.vertices do
+			self:addVertex(xform:transformPoint(ov))
+		end
+		for on in other.normals do
+			self:addNormal(normalxform:transformVector(on))
+		end
+		for oi in other.indices do
+			self:addIndex(oi.vertex + nverts, oi.normal + nnorms)
+		end
+	end
+
 	terra Mesh:bbox()
 		var bbox : BBox3
 		bbox:init()

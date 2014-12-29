@@ -45,25 +45,100 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(0.0), length, radius, nCylinder)
 	end)
 	local bodycylcluster = makeGeoPrim(terra(mesh: &Mesh, zbase: double, radius: double, length: double)
-		var xform = Mat4.translate(0.0, 0.0, 0.5*length + zbase) * Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -0.5*length, 0.0)
-		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(-radius, 0.0, -radius), length, radius, nCylinder)
-		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(-radius, 0.0, radius), length, radius, nCylinder)
-		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(radius, 0.0, -radius), length, radius, nCylinder)
-		Shapes.addCylinderTransformed(mesh, &xform, Vec3.create(radius, 0.0, radius), length, radius, nCylinder)
+		var tmpmesh = Mesh.salloc():init()
+		Shapes.addCylinder(tmpmesh, Vec3.create(0.0), length, radius, nCylinder)
+		var finishxform = Mat4.translate(0.0, 0.0, 0.5*length + zbase) * Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -0.5*length, 0.0)
+		var xform : Mat4
+		xform = finishxform * Mat4.translate(-radius, 0.0, -radius)
+		mesh:appendTransformed(tmpmesh, &xform)
+		xform = finishxform * Mat4.translate(-radius, 0.0, radius)
+		mesh:appendTransformed(tmpmesh, &xform)
+		xform = finishxform * Mat4.translate(radius, 0.0, -radius)
+		mesh:appendTransformed(tmpmesh, &xform)
+		xform = finishxform * Mat4.translate(radius, 0.0, radius)
+		mesh:appendTransformed(tmpmesh, &xform)
+	end)
+	local wingcyls = makeGeoPrim(terra(mesh: &Mesh, xbase: double, zbase: double, radius: double, length: double)
+		var tmpmesh = Mesh.salloc():init()
+		Shapes.addCylinder(tmpmesh, Vec3.create(0.0), length, radius, nCylinder)
+		var firstxform = Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -0.5*length, 0.0)
+		var xform = Mat4.translate(-xbase - radius, 0.0, zbase) * firstxform
+		mesh:appendTransformed(tmpmesh, &xform)
+		xform = Mat4.translate(xbase + radius, 0.0, zbase) * firstxform
+		mesh:appendTransformed(tmpmesh, &xform)
+	end)
+	local wingguns = makeGeoPrim(terra(mesh: &Mesh, xbase: double, ybase: double, zbase: double, length: double)
+		var gunRadius = 0.15
+		var tipRadius = 0.03
+		var tipLength = 0.4
+		var tmpMesh = Mesh.salloc():init()
+		Shapes.addCylinder(tmpMesh, Vec3.create(0.0), length, gunRadius, nCylinder)
+		Shapes.addTaperedCylinder(tmpMesh, Vec3.create(0.0, length, 0.0), tipLength, gunRadius, tipRadius, nCylinder)
+		var firstTransform = Mat4.rotateX([math.pi/2]) * Mat4.translate(0.0, -length*0.5, 0.0)
+		var xform : Mat4
+		xform = Mat4.translate(-xbase, -ybase-gunRadius, zbase) * firstTransform
+		mesh:appendTransformed(tmpMesh, &xform)
+		xform = Mat4.translate(-xbase, ybase+gunRadius, zbase) * firstTransform
+		mesh:appendTransformed(tmpMesh, &xform)
+		xform = Mat4.translate(xbase, -ybase-gunRadius, zbase) * firstTransform
+		mesh:appendTransformed(tmpMesh, &xform)
+		xform = Mat4.translate(xbase, ybase+gunRadius, zbase) * firstTransform
+		mesh:appendTransformed(tmpMesh, &xform)
 	end)
 
 	local function wi(i, w)
 		return math.exp(-w*i)
 	end
 
+	-- What type of wing segment to generate
+	local WingSegType =
+	{
+		Box = 1,
+		Cylinder = 2
+	}
+	local wingSegTypeWeights = {}
+	for _,_ in pairs(WingSegType) do table.insert(wingSegTypeWeights, 1) end
+
+	local function genBoxWingSeg(xbase, zlo, zhi)
+		local zbase = uniform(zlo, zhi)
+		local xlen = uniform(0.25, 2.0)
+		local ylen = uniform(0.25, 1.25)
+		local zlen = uniform(0.5, 4.0)
+		wingseg(xbase, zbase, xlen, ylen, zlen)
+		if flip(0.5) then
+			local gunlen = uniform(1.0, 1.2)*zlen
+			local gunxbase = xbase + 0.5*xlen
+			local gunybase = 0.5*ylen
+			wingguns(gunxbase, gunybase, zbase, gunlen)
+		end
+		return xlen, ylen, zlen, zbase
+	end
+
+	local function genCylWingSeg(xbase, zlo, zhi)
+		local zbase = uniform(zlo, zhi)
+		local radius = uniform(0.15, 0.7)
+		local xlen = 2*radius
+		local ylen = 2*radius
+		local zlen = uniform(1.0, 5.0)
+		wingcyls(xbase, zbase, radius, zlen)
+		return xlen, ylen, zlen, zbase
+	end
+
+	local function genWingSeg(xbase, zlo, zhi)
+		local segType = multinomial(wingSegTypeWeights)
+		local xlen, ylen, zlen, zbase
+		if segType == WingSegType.Box then
+			xlen, ylen, zlen, zbase = genBoxWingSeg(xbase, zlo, zhi)
+		elseif segType == WingSegType.Cylinder then
+			xlen, ylen, zlen, zbase = genCylWingSeg(xbase, zlo, zhi)
+		end
+		return xlen, ylen, zlen, zbase
+	end
+
 	local function genWing(xbase, zlo, zhi)
 		local i = 0
 		repeat
-			local zbase = uniform(zlo, zhi)
-			local xlen = uniform(0.25, 2.0)
-			local ylen = uniform(0.25, 1.25)
-			local zlen = uniform(0.5, 4.0)
-			wingseg(xbase, zbase, xlen, ylen, zlen)
+			local xlen, ylen, zlen, zbase = genWingSeg(xbase, zlo, zhi)
 			xbase = xbase + xlen
 			zlo = zbase - 0.5*zlen
 			zhi = zbase + 0.5*zlen
@@ -96,8 +171,8 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		Cylinder = 2,
 		CylCluster = 3
 	}
-	local segTypeWeights = {}
-	for _,_ in pairs(BodySegType) do table.insert(segTypeWeights, 1) end
+	local bodySegTypeWeights = {}
+	for _,_ in pairs(BodySegType) do table.insert(bodySegTypeWeights, 1) end
 
 	local function genBoxBodySeg(rearz, prev, taper)
 		local xlen = uniform(1.0, 3.0)
@@ -160,7 +235,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		local xlen
 		local ylen
 		local zlen
-		local segType = multinomial(segTypeWeights)
+		local segType = multinomial(bodySegTypeWeights)
 		if segType == BodySegType.Box then
 			xlen, ylen, zlen = genBoxBodySeg(rearz, prev)
 		elseif segType == BodySegType.Cylinder then
