@@ -11,8 +11,22 @@ local uniform = prob.uniform
 
 return S.memoize(function(makeGeoPrim, geoRes)
 
+	-- This program interprets geoRes as a flag toggling whether we're doing
+	-- lo res or hi res
+	local nBevelBox
+	local bevAmt
+	if geoRes == 1 then
+		nBevelBox = 1
+		bevAmt = 0
+	elseif geoRes == 2 then
+		nBevelBox = 16
+		bevAmt = 0.05
+	else
+		error(string.format("weird_building - unrecognized geoRes flag %d", geoRes))
+	end
+
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
+		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, nBevelBox)
 	end)
 
 	-- Forward declare
@@ -40,8 +54,11 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		return math.exp(-0.4*depth)
 	end
 
+	local function lerp(lo, hi, t) return (1-t)*lo + t*hi end
 	local function spreadProb(depth)
-		return math.exp(-0.4*depth)
+		-- return 0.25
+		local t = depth/5
+		return lerp(0.5, 0.25, t)
 	end
 
 	tower = function(depth, ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)

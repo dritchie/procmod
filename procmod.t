@@ -186,7 +186,21 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 									end
 								end
 							end
-							var percentSame = globals.matchTargetImage:percentCellsEqualPadded(&self.matchImage)
+
+							-- var percentSame = globals.matchTargetImage:percentCellsEqualPadded(&self.matchImage)
+
+							var weightedSum = 0.0
+							var totalWeight = 0.0
+							for row=0,self.matchImage.rows do
+								for col=0,self.matchImage.cols do
+									var w = globals.matchWeightImage(col, row)(0)
+									weightedSum = weightedSum +
+										w*float(self.matchImage:isPixelSet(row,col) == globals.matchTargetImage:isPixelSet(row,col))
+									totalWeight = totalWeight + w
+								end
+							end
+							var percentSame = weightedSum / totalWeight
+
 							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchPixelFactorWeight])
 							-- Clean up
 							gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)

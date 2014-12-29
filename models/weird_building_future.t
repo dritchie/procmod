@@ -12,8 +12,22 @@ local future = prob.future
 
 return S.memoize(function(makeGeoPrim, geoRes)
 
+	-- This program interprets geoRes as a flag toggling whether we're doing
+	-- lo res or hi res
+	local nBevelBox
+	local bevAmt
+	if geoRes == 1 then
+		nBevelBox = 1
+		bevAmt = 0
+	elseif geoRes == 2 then
+		nBevelBox = 16
+		bevAmt = 0.05
+	else
+		error(string.format("weird_building - unrecognized geoRes flag %d", geoRes))
+	end
+
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
-		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
+		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, nBevelBox)
 	end)
 
 	-- Forward declare
@@ -41,11 +55,14 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		return math.exp(-0.4*depth)
 	end
 
+	local function lerp(lo, hi, t) return (1-t)*lo + t*hi end
 	local function spreadProb(depth)
-		return math.exp(-0.4*depth)
+		-- return 0.25
+		local t = depth/5
+		return lerp(0.5, 0.25, t)
 	end
 
-	tower = function(depth, ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
+	tower = function(recDepth, ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
 		local finished = false
 		local iter = 0
 		repeat
@@ -77,29 +94,29 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			if iter == 0 then
 				if leftok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(spreadProb(depth)) then
-							leftTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(recDepth)) then
+							leftTower(recDepth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, cx-0.5*width-maxwidth, cx-0.5*width, zmin, zmax)
 				end
 				if rightok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(spreadProb(depth)) then
-							rightTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(recDepth)) then
+							rightTower(recDepth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, cx+0.5*width, cx+0.5*width+maxwidth, zmin, zmax)
 				end
 				if downok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(spreadProb(depth)) then
-							downTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(recDepth)) then
+							downTower(recDepth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, xmin, xmax, cz-0.5*depth-maxdepth, cz-0.5*depth)
 				end
 				if upok then
 					future.create(function(ybot, xmin, xmax, zmin, zmax)
-						if flip(spreadProb(depth)) then
-							upTower(depth+1, ybot, xmin, xmax, zmin, zmax)
+						if flip(spreadProb(recDepth)) then
+							upTower(recDepth+1, ybot, xmin, xmax, zmin, zmax)
 						end
 					end, ybot, xmin, xmax, cz+0.5*depth, cz+0.5*depth+maxdepth)
 				end
