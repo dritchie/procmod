@@ -102,6 +102,10 @@ local Camera = S.memoize(function(real)
 		gl.gluPerspective(self.fovy, self.aspect, self.znear, self.zfar)
 	end
 
+	terra Camera:viewMatrix()
+		return Mat4.lookAt(self.eye, self.target, self.up)
+	end
+
 	terra Camera:dollyLeft(dist: real)
 		var offset = dist*self.left
 		self.eye = self.eye + offset

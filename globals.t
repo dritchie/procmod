@@ -195,6 +195,14 @@ if G.config.doImageMatch then
 				end
 			end
 		end
+		-- -- For matching camera angles in Maya
+		-- var viewmatrix = G.config.matchCamera:viewMatrix():inverse()
+		-- for i=0,4 do
+		-- 	for j=0,4 do
+		-- 		S.printf("%g ", viewmatrix(j,i))
+		-- 	end
+		-- end
+		-- S.printf("\n")
 	end
 	initglobals()
 	-- Provide a special framebuffer that image matching can use
