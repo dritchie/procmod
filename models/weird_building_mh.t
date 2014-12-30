@@ -3,6 +3,7 @@ local prob = terralib.require("prob.prob")
 local Shapes = terralib.require("geometry.shapes")(double)
 local Mesh = terralib.require("geometry.mesh")(double)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
+local Mat4 = terralib.require("linalg.mat")(double, 4, 4)
 
 local flip = prob.flip
 local uniform = prob.uniform
@@ -15,18 +16,31 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	-- lo res or hi res
 	local nBevelBox
 	local bevAmt
+	local nCylinder
 	if geoRes == 1 then
 		nBevelBox = 1
 		bevAmt = 0
+		nCylinder = 8
 	elseif geoRes == 2 then
 		nBevelBox = 16
 		bevAmt = 0.05
+		nCylinder = 32
 	else
 		error(string.format("weird_building - unrecognized geoRes flag %d", geoRes))
 	end
 
 	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
 		Shapes.addBeveledBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen, bevAmt, nBevelBox)
+	end)
+	local boxcap = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double, taper: double)
+		var xform = Mat4.translate(cx, cy, cz) * Mat4.scale(xlen, ylen, zlen) * Mat4.rotateX([-math.pi/2])
+		Shapes.addTaperedBoxTransformed(mesh, &xform, Vec3.create(0.0), 1.0, 1.0, 1.0, taper)
+	end)
+	local cylinder = makeGeoPrim(terra(mesh: &Mesh, bcx: double, bcy: double, bcz: double, radius: double, height: double)
+		Shapes.addCylinder(mesh, Vec3.create(bcx, bcy, bcz), height, radius, nCylinder)
+	end)
+	local cylcap = makeGeoPrim(terra(mesh: &Mesh, bcx: double, bcy: double, bcz: double, baseRad: double, tipRad: double, height: double)
+		Shapes.addTaperedCylinder(mesh, Vec3.create(bcx, bcy, bcz), height, baseRad, tipRad, nCylinder)
 	end)
 
 	-- Forward declare
@@ -61,36 +75,80 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		return lerp(0.5, 0.25, t)
 	end
 
+	local TowerType = { Box = false, Cylinder = true }
+
+	local function towerSegment(towerType, iter, xmin, xmax, zmin, zmax, ybot, leftok, rightok, downok, upok, taper)
+		local maxwidth = xmax-xmin
+		local maxdepth = zmax-zmin
+		local width, height, depth, radius
+		if towerType == TowerType.Box then
+			if taper then
+				width = maxwidth
+				depth = maxdepth
+			else
+				width = uniform(0.5*maxwidth, maxwidth, "boxwidth")
+				depth = uniform(0.5*maxdepth, maxdepth, "boxdepth")
+			end
+		else
+			local maxrad = 0.5*math.min(maxwidth, maxdepth)
+			if taper then
+				radius = maxrad
+			else
+				radius = uniform(0.5*maxrad, maxrad, "clrad")
+			end
+			width = 2*radius
+			depth = 2*radius
+		end
+		if taper then
+			height = uniform(0.5, 1.5, "capheight")
+		else
+			height = uniform(1, 3, "height")
+		end
+		local cx, cz
+		if iter == 0 and not leftok then
+			cx = xmin + 0.5*width
+		elseif iter == 0 and not rightok then
+			cx = xmax - 0.5*width
+		else
+			cx = 0.5*(xmin+xmax)
+		end
+		if iter == 0 and not downok then
+			cz = zmin + 0.5*depth
+		elseif iter == 0 and not upok then
+			cz = zmax - 0.5*depth
+		else
+			cz = 0.5*(zmin+zmax)
+		end
+		if towerType == TowerType.Box then
+			if taper then
+				local taperamt = uniform(0.1, 0.5, "taperamt")
+				boxcap(cx, ybot + 0.5*height, cz, width, height, depth, taperamt)
+			else
+				box(cx, ybot + 0.5*height, cz, width, height, depth)
+			end
+		else
+			if taper then
+				local toprad = uniform(0.1, 0.5, "taperrad") * radius
+				cylcap(cx, ybot, cz, radius, toprad, height)
+			else
+				cylinder(cx, ybot, cz, radius, height)
+			end
+		end
+		return cx, cz, width, height, depth
+	end
+
 	tower = function(depth, ybot, xmin, xmax, zmin, zmax, leftok, rightok, downok, upok)
+		local towerType = flip(0.5, "towerType")
 		local finished = false
 		local iter = 0
 		repeat
 			prob.setAddressLoopIndex(iter)
 			local maxwidth = xmax-xmin
 			local maxdepth = zmax-zmin
-			local width = uniform(0.5*maxwidth, maxwidth, "width")
-			local depth = uniform(0.5*maxdepth, maxdepth, "depth")
-			local height = uniform(1, 3, "height")
-			local cx, cz
-			if iter == 0 and not leftok then
-				cx = xmin + 0.5*width
-			elseif iter == 0 and not rightok then
-				cx = xmax - 0.5*width
-			else
-				local xmid = 0.5*(xmin+xmax)
-				local halfxremaining = 0.5*(maxwidth-width)
-				cx = uniform(xmid-halfxremaining, xmid+halfxremaining, "cx")
-			end
-			if iter == 0 and not downok then
-				cz = zmin + 0.5*depth
-			elseif iter == 0 and not upok then
-				cz = zmax - 0.5*depth
-			else
-				local zmid = 0.5*(zmin+zmax)
-				local halfzremaining = 0.5*(maxdepth-depth)
-				cz = uniform(zmid-halfzremaining, zmid+halfzremaining, "cz")
-			end
-			box(cx, ybot + 0.5*height, cz, width, height, depth)
+			prob.pushAddress("seg")
+			local cx, cz, width, height, depth =
+				towerSegment(towerType, iter, xmin, xmax, zmin, zmax, ybot, leftok, rightok, downok, upok)
+			prob.popAddress()
 			if iter == 0 then
 				if leftok then
 					if flip(spreadProb(depth), "leftgen") then
@@ -129,6 +187,9 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			finished = flip(1-stackProb(iter), "continue")
 			iter = iter + 1
 		until finished
+		if flip(0.5, "gencap") then
+			towerSegment(towerType, iter, xmin, xmax, zmin, zmax, ybot, leftok, rightok, downok, upok, true)
+		end
 	end
 
 	return function()
