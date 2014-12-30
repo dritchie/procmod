@@ -1,6 +1,6 @@
 local S = terralib.require("qs.lib.std")
 local LS = terralib.require("std")
-local generate = terralib.require("generate")
+local generate = terralib.require("generate").generate
 local globals = terralib.require("globals")
 local procmod = terralib.require("procmod")
 
@@ -8,7 +8,8 @@ local time = terralib.currenttimeinseconds
 
 -- Constants
 local outfilename = arg[2] or "experiments/smc_vs_mh.csv"
-local sampNums = {10, 20, 40, 80, 160, 320, 640, 1280, 2560}
+-- local sampNums = {10, 20, 40, 80, 160, 320, 640, 1280, 2560}
+local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
 local numRuns = 10
 
 -- Set up persistent variables we'll need
@@ -61,6 +62,19 @@ local function doMethod(method, numSamps, record, timeBudget)
 	end
 	return t1 - t0
 end
+
+-- Need to boot up an OpenGL window, in case our score function needs
+--    an OpenGL context.
+local gl = terralib.require("gl.gl")
+local terra ogl_main()
+	var argc = 0
+	gl.safeGlutInit(&argc, nil)
+	gl.glutInitWindowSize(1, 1)
+	gl.glutInitDisplayMode(gl.GLUT_RGB or gl.GLUT_DOUBLE or gl.GLUT_DEPTH)
+	gl.glutCreateWindow("SMC vs. MH")
+	-- gl.glutMainLoop()
+end
+ogl_main()
 
 -- Run one iteration of all methods to make sure everything is compiled
 -- (This is so our timings don't include JIT time)
