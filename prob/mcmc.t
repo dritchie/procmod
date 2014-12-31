@@ -27,6 +27,7 @@ end
 --    * lag: How many iterations between collected samples?
 --    * verbose: print verbose output
 --    * onSample: Callback that says what to do with the trace every time a sample is reached
+--    * temp: Temperature to divide the log posterior by when calculating accept/reject
 local function MH(program, args, opts)
 	-- Extract options
 	local nSamples = opts.nSamples or 1000
@@ -34,6 +35,7 @@ local function MH(program, args, opts)
 	local lag = opts.lag or 1
 	local verbose = opts.verbose
 	local onSample = opts.onSample or function() end
+	local temp = opts.temp or 1
 	local iters = lag*nSamples
 	-- Initialize with a complete trace of nonzero probability
 	local trace = trace.StructuredERPTrace.alloc():init(program, unpack(args))
@@ -59,7 +61,7 @@ local function MH(program, args, opts)
 		recs = newtrace:records()
 		rvslp = rvslp - math.log(#recs) + newtrace.oldlogprob
 		-- Accept/reject
-		local accept = math.log(math.random()) < newtrace.logposterior - trace.logposterior + rvslp - fwdlp
+		local accept = math.log(math.random()) < (newtrace.logposterior - trace.logposterior)/temp + rvslp - fwdlp
 		if accept then
 			trace:freeMemory()
 			trace = newtrace

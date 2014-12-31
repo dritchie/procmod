@@ -29,7 +29,8 @@ local function run(generations)
 		nSamples = globals.config.nSamples,
 		timeBudget = globals.config.mh_timeBudget,
 		saveSampleValues = globals.config.saveSampleValues,
-		verbose = globals.config.verbose
+		verbose = globals.config.verbose,
+		temp = globals.config.mh_temp
 	}
 
 	local method = globals.config.method
