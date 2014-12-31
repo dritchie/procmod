@@ -240,18 +240,13 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 		return self.score
 	end
 
+	terra State:getMesh()
+		return &self.mesh
+	end
+
 	return State
 
 end)
-
--- Retrieve the State type specified by the global config settings
-local function GetStateType()
-	return State(globals.config.checkSelfIntersections,
-				 globals.config.doVolumeMatch,
-				 globals.config.doVolumeAvoid,
-				 globals.config.doImageMatch,
-				 globals.config.doShadowMatch)
-end
 
 ---------------------------------------------------------------
 
@@ -312,6 +307,19 @@ local MHState = S.memoize(function(State)
 end)
 
 ---------------------------------------------------------------
+
+-- Retrieve the State type specified by the global config settings
+local function GetStateType()
+	local StateType = State(globals.config.checkSelfIntersections,
+							globals.config.doVolumeMatch,
+							globals.config.doVolumeAvoid,
+							globals.config.doImageMatch,
+							globals.config.doShadowMatch)
+	if globals.config.method == "mh" then
+		StateType = MHState(StateType)
+	end
+	return StateType
+end
 
 -- A global variable for a given type of State
 local globalState = S.memoize(function(StateType)
@@ -446,7 +454,7 @@ end
 --    reason to bother with it right now)
 local function MH(module, outgenerations, opts)
 
-	local StateType = MHState(GetStateType())
+	local StateType = GetStateType()
 	local globState = globalState(StateType)
 
 	local function makeGeoPrim(geofn)
@@ -613,7 +621,7 @@ local function HighResRerunRecordedTrace(outgenerations, index)
 		trace:run()
 		-- Overwrite old sample value in the generations vector
 		local sample = outgenerations:get(tonumber(outgenerations:size())-1):get(index)
-		sample.value:copy(state.mesh)
+		sample.value:copy(state:getMesh())
 		-- Allow the state to be GC'ed
 		trace.args[1] = nil
 	end
