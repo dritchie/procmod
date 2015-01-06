@@ -31,6 +31,12 @@ function MHChain:init(program, args, temp)
 	return self
 end
 
+function MHChain:copy(other)
+	self.temp = other.temp
+	self.trace = other.trace:newcopy()
+	return self
+end
+
 -- Returns true if step was an accepted proposal, false otherwise.
 function MHChain:step()
 	-- Copy the trace
@@ -113,9 +119,103 @@ local function MH(program, args, opts)
 end
 
 
+-- Do lightweight MH with parallel tempering (sequential implementation)
+-- Options are:
+--    * nSamples: how many samples to collect?
+--    * timeBudget: how long to run for before terminating? (overrules nSamples)
+--    * lag: How many iterations between collected samples?
+--    * verbose: print verbose output
+--    * onSample: Callback that says what to do with the trace every time a sample is reached
+--    * temps: List of temperatures, one per MCMC chain (these should be in order).
+--    * tempSwapInterval: Number of iterations between chain temperature swap proposals.
+local function MHPT(program, args, opts)
+	-- Extract options
+	local nSamples = opts.nSamples or 1000
+	local timeBudget = opts.timeBudget
+	local lag = opts.lag or 1
+	local verbose = opts.verbose
+	local onSample = opts.onSample or function() end
+	local temps = opts.temps or {0.25, 0.5, 1, 2, 4, 8, 16}
+	local tempSwapInterval = opts.tempSwapInterval or 1
+	local iters = lag*nSamples
+	-- Initialize chains (have to initialize them all as copies,
+	--    in case any of the args need copying)
+	local chains = {}
+	for i,temp in ipairs(temps) do
+		local chain
+		if i == 1 then
+			chain = MHChain.alloc():init(program, args, temp)
+		else
+			chain = MHChain.alloc():copy(chains[1])
+			chain.temp = temp
+		end
+		table.insert(chains, chain)
+	end
+	-- Do MH loop
+	local numAccept = 0
+	local numTempSwapAccept = 0
+	local t0 = terralib.currenttimeinseconds()
+	local itersdone = 0
+	local tempSwapsDone = 0
+	local function mainloop()
+		while itersdone ~= iters do
+			-- Advance all chains up to the temp swap point
+			for _,chain in ipairs(chains) do
+				for i=1,tempSwapInterval do
+					local accept = chain:step()
+					if accept then numAccept = numAccept + 1 end
+					-- Do something with the sample
+					if itersdone % lag == 0 then
+						onSample(chain.trace)
+						if verbose then
+							io.write(string.format("Done with sample %u/%u\r", itersdone/lag, nSamples))
+							io.flush()
+						end
+					end
+					itersdone = itersdone + 1
+					-- Terminate if we've reached the last iter
+					if itersdone == iters then
+						return
+					end
+					-- Terminate if we've used up our time budget
+					if timeBudget then
+						local t = terralib.currenttimeinseconds()
+						if t - t0 >= timeBudget then
+							return
+						end
+					end
+				end
+			end
+			-- Pick a random chain index for temperature swap
+			local randidx = math.floor(1 + (#chains-1)*math.random())
+			local chain1 = chains[randidx]
+			local chain2 = chains[randidx+1]
+			local thresh = (chain1.trace.logposterior/chain2.temp + chain2.trace.logposterior/chain1.temp) -
+						   (chain1.trace.logposterior/chain1.temp + chain2.trace.logposterior/chain2.temp)
+			local accept = math.log(math.random()) < thresh
+			if accept then
+				local tmp = chain1.temp
+				chain1.temp = chain2.temp
+				chain2.temp = tmp
+				numTempSwapAccept = numTempSwapAccept + 1
+			end
+			tempSwapsDone = tempSwapsDone + 1
+		end
+	end
+	mainloop()
+	if verbose then
+		local t1 = terralib.currenttimeinseconds()
+		io.write("\n")
+		print("Acceptance ratio:", numAccept/itersdone)
+		print("Temp swap acceptance ratio:", numTempSwapAccept/tempSwapsDone)
+		print("Time:", t1 - t0)
+	end
+end
+
 return
 {
 	MH = MH,
+	MHPT = MHPT,
 	isReplaying = isReplaying
 }
 

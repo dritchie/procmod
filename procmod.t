@@ -505,7 +505,11 @@ local function MH(module, outgenerations, opts)
 	local newopts = LS.copytable(opts)
 	newopts.onSample = recordSample
 	local initstate = StateType.luaalloc():luainit()
-	mcmc.MH(program, {initstate}, newopts)
+	if opts.parallelTempering then
+		mcmc.MHPT(program, {initstate}, newopts)
+	else
+		mcmc.MH(program, {initstate}, newopts)
+	end
 	if globals.config.recordTraces then
 		-- Allow the states for all recorded traces to be GC'ed
 		for _,trace in ipairs(recordedTraces) do

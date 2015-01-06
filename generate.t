@@ -30,7 +30,9 @@ local function run(generations)
 		timeBudget = globals.config.mh_timeBudget,
 		saveSampleValues = globals.config.saveSampleValues,
 		verbose = globals.config.verbose,
-		temp = globals.config.mh_temp
+		temp = globals.config.mh_temp,
+		parallelTempering = globals.config.parallelTempering
+		-- TODO: other parallel tempering options?
 	}
 
 	local method = globals.config.method
