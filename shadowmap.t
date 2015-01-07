@@ -34,8 +34,14 @@ local renderShadowMask = S.memoize(function(saveImages)
 		var receiverBounds = globals.shadowReceiverGeo:bbox()
 		bounds:unionWith(&receiverBounds)
 		var center = bounds:center()
+		if globals.config.orthoShadow then 
+			center = receiverBounds:center() 
+		end
 		var eye = center - @globals.config.shadowLightDir
 		var shadowview = Mat4.lookAt(eye, center, Vec3.create(0.0, 1.0, 0.0))
+		if globals.config.orthoShadow then 
+			shadowview = Mat4.lookAt(eye, center, Vec3.create(0.0, 0.0, -1.0))
+		end
 		var gl_matrix : double[16]
 		shadowview:toColumnMajor(gl_matrix)
 		gl.glLoadMatrixd(gl_matrix)
@@ -43,6 +49,10 @@ local renderShadowMask = S.memoize(function(saveImages)
 		gl.glLoadIdentity()
 		var sidelen = bounds:extents():norm()*0.5
 		var shadowproj = Mat4.ortho(-sidelen, sidelen, -sidelen, sidelen, -sidelen, sidelen)
+		if globals.config.orthoShadow then
+			sidelen = receiverBounds:extents()(0)*0.5
+			shadowproj = Mat4.ortho(-sidelen, sidelen, -sidelen, sidelen, -100, 100)
+		end
 		shadowproj:toColumnMajor(gl_matrix)
 		gl.glLoadMatrixd(gl_matrix)
 		-- Render
@@ -118,8 +128,24 @@ local renderShadowMask = S.memoize(function(saveImages)
 		gl.glClear(gl.GL_COLOR_BUFFER_BIT or gl.GL_DEPTH_BUFFER_BIT)
 		globals.config.shadowMatchCamera.aspect = float(w)/h
 		globals.config.shadowMatchCamera:setupGLPerspectiveView()
+
+
+		if globals.config.orthoShadow then
+			gl.glMatrixMode(gl.GL_MODELVIEW)
+			gl.glLoadIdentity()
+			shadowview:toColumnMajor(gl_matrix)
+			gl.glLoadMatrixd(gl_matrix)
+			gl.glMatrixMode(gl.GL_PROJECTION)
+			gl.glLoadIdentity()
+			shadowproj:toColumnMajor(gl_matrix)
+			gl.glLoadMatrixd(gl_matrix)
+		end
+
+
 		globals.shadowReceiverGeo:draw()
-		mesh:draw()
+		if not globals.config.orthoShadow then 
+			mesh:draw() 
+		end
 		gl.glFlush()
 		-- Read out into binary grid
 		shadowMatchImagePixelData:resize(w*h)
@@ -143,6 +169,9 @@ local renderShadowMask = S.memoize(function(saveImages)
 						for x=0,w do
 							var c = shadowMatchImagePixelData(y*w + x)
 							img(x,y) = c
+							if globals.config.orthoShadow and ((c.entries[0] == 0) and globals.shadowTargetImage:isPixelSet(y,x)) then
+								img(x,y).entries[1] = 255
+							end
 						end
 					end
 					img:save(image.Format.PNG, "shadowMask.png")

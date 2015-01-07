@@ -30,6 +30,7 @@ local Mesh = S.memoize(function(real)
 		vertices: S.Vector(Vec3),
 		normals: S.Vector(Vec3),
 		indices: S.Vector(Index)
+		volume: real
 	}
 
 	terra Mesh:numVertices() return self.vertices:size() end

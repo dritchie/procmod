@@ -218,17 +218,48 @@ local State = S.memoize(function(checkSelfIntersections, doVolumeMatch, doVolume
 
 							var weightedSum = 0.0
 							var totalWeight = 0.0
+
+							var outside = 0.0
+							var outsideSum = 0.0
+
+							var unfilled = 0.0
+							var fillSum = 0.0
+
 							for row=0,self.shadowMatchImage.rows do
 								for col=0,self.shadowMatchImage.cols do
 									var w = globals.shadowWeightImage(col, row)(0)
 									weightedSum = weightedSum +
 										w*float(self.shadowMatchImage:isPixelSet(row,col) == globals.shadowTargetImage:isPixelSet(row,col))
 									totalWeight = totalWeight + w
+
+									if self.shadowMatchImage:isPixelSet(row,col) and not globals.shadowTargetImage:isPixelSet(row,col) then
+										outside = outside + 1
+									end
+									outsideSum = outsideSum + 1
+
+									if globals.shadowTargetImage:isPixelSet(row,col) then
+										if not self.shadowMatchImage:isPixelSet(row,col) then
+											unfilled = unfilled + 1
+										end
+										fillSum = fillSum + 1
+									end
+
 								end
 							end
 							var percentSame = weightedSum / totalWeight
+							var percentOutside = outside / outsideSum
+							var percentUnfilled = unfilled / fillSum
+
+							var diag = self.mesh:bbox():extents():norm()
 
 							self.score = self.score + softeq(percentSame, 1.0, [globals.config.matchPixelFactorWeight])
+
+							if globals.config.orthoShadow then
+								var outsidePenalty = softeq(percentOutside, 0.0, [globals.config.outsideShadowPenalty])
+								var fillPenalty = softeq(percentUnfilled, 0.0, [globals.config.notFilledPenalty])
+								self.score = self.score + outsidePenalty + fillPenalty 
+								--S.printf("%f %f %f\n\n", outsidePenalty, fillPenalty, diag(1))
+							end
 						end
 					end
 				end

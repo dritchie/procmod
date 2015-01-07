@@ -262,6 +262,7 @@ local terra shadingMeshDrawPass(mesh: &Mesh(double))
 	material:setupGLMaterial()
 
 	mesh:draw()
+	globals.shadowReceiverGeo:draw()
 
 	gl.glDisable(gl.GL_POLYGON_OFFSET_FILL)
 	gl.glDisable(gl.GL_LIGHTING)
