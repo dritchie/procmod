@@ -34,19 +34,31 @@ function Config:load(filename)
 						break
 					end
 				end
-				-- If all rules failed to recognize the line, then do default behavior
 				if not rulerecognized then
-					assert(#toks == 2, string.format("Found malformed config line:\n%s", line))
-					local val = toks[2]
-					-- Check for an include directive
+					-- Next, see if it's an include directive
 					if key == "#include" then
-						self:load(val)	-- val is the filename
-					-- Check if the parameter is a boolean
-					elseif val == "true" then val = true elseif val == "false" then val = false
-					-- Check if it's a number
-					elseif tonumber(val) then val = tonumber(val) end
-					-- Just leave it as a raw string
-					self[key] = val
+						assert(#toks == 2, string.format("config: malformed #include directive: '%s'", line))
+						self:load(toks[2])	-- toks[2] is the filename
+					else
+					-- Else, do the default behavior of parsing a single value / list of values
+						local lst = {}
+						for i=2,#toks do
+							local val = toks[i]
+							-- Check if the parameter is a boolean
+							if val == "true" then val = true elseif val == "false" then val = false
+							-- Check if it's a number
+							elseif tonumber(val) then val = tonumber(val) end
+							-- (If these all fail, it'll be left as a raw string)
+							table.insert(lst, val)
+						end
+						-- If the lst is a single element long, then store it as a value. Otherwise, store
+						--    the whole list
+						if #lst == 1 then
+							self[key] = lst[1]
+						else
+							self[key] = lst
+						end
+					end
 				end
 			end
 		end

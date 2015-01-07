@@ -135,7 +135,7 @@ local function MHPT(program, args, opts)
 	local lag = opts.lag or 1
 	local verbose = opts.verbose
 	local onSample = opts.onSample or function() end
-	local temps = opts.temps or {0.25, 0.5, 1, 2, 4, 8, 16}
+	local temps = opts.temps or {1, 1}	-- This'll do no tempering
 	local tempSwapInterval = opts.tempSwapInterval or 1
 	local iters = lag*nSamples
 	-- Initialize chains (have to initialize them all as copies,

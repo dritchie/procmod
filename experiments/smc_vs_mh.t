@@ -13,11 +13,15 @@ local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
 local numRuns = 10
 
 -- Set up persistent variables we'll need
-local methods = {"smc", "smc_fixedOrder", "mh"}
+local methods = {"smc", "smc_fixedOrder", "mh", "mh"}
+-- local methods = {"smc", "smc_fixedOrder", "mh", "mhpt"}
 local generations = global(S.Vector(S.Vector(procmod.Sample)))
 LS.luainit(generations:getpointer())
 local f = io.open(outfilename, "w")
 f:write("method,numSamps,time,avgScore,maxScore\n")
+
+-- We don't save sample values when we're recording this data
+globals.config.saveSampleValues = false
 
 -- Handling one method
 -- Returns the time taken
@@ -39,6 +43,9 @@ local function doMethod(method, numSamps, record, timeBudget)
 			globals.config.mh_timeBudget = timeBudget
 		else
 			globals.config.nSamples = numSamps
+		end
+		if method == "mhpt" then
+			globals.config.parallelTempering = true
 		end
 	end
 	-- Run it and collect timing and score info

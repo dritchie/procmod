@@ -31,7 +31,8 @@ local function run(generations)
 		saveSampleValues = globals.config.saveSampleValues,
 		verbose = globals.config.verbose,
 		temp = globals.config.mh_temp,
-		parallelTempering = globals.config.parallelTempering
+		parallelTempering = globals.config.parallelTempering,
+		temps = globals.config.mhpt_temperatures
 		-- TODO: other parallel tempering options?
 	}
 
