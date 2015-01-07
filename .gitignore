@@ -5,3 +5,4 @@ scratch.config
 shadowMap.tiff
 shadowMask.png
 ben.config
+*.DS_Store
