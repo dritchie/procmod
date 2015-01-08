@@ -62,7 +62,9 @@ function MHChain:step()
 	local rvsVarChoiceProb = -math.log(#recs)
 	rvslp = rvslp + rvsVarChoiceProb + newtrace.oldlogprob
 	-- Accept/reject
-	local accept = math.log(math.random()) < (newtrace.logposterior - self.trace.logposterior)/self.temp + rvslp - fwdlp
+	local oldlp = self.trace.logprior + (self.trace.loglikelihood)/self.temp
+	local newlp = newtrace.logprior + (newtrace.loglikelihood)/self.temp
+	local accept = math.log(math.random()) < newlp - oldlp + rvslp - fwdlp
 	if accept then
 		-- print("!! ACCEPT !!")
 		self.trace:freeMemory()

@@ -13,7 +13,7 @@ local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
 local numRuns = 10
 
 -- Set up persistent variables we'll need
-local methods = {"smc", "smc_fixedOrder", "mh", "mh"}
+local methods = {"smc", "smc_fixedOrder", "mh"}
 -- local methods = {"smc", "smc_fixedOrder", "mh", "mhpt"}
 local generations = global(S.Vector(S.Vector(procmod.Sample)))
 LS.luainit(generations:getpointer())
@@ -39,7 +39,7 @@ local function doMethod(method, numSamps, record, timeBudget)
 	else
 		globals.config.method = "mh"
 		if timeBudget then
-			globals.config.nSamples = 10000000
+			globals.config.nSamples = 1000000000000000
 			globals.config.mh_timeBudget = timeBudget
 		else
 			globals.config.nSamples = numSamps
