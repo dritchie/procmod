@@ -1,5 +1,6 @@
-local trace = terralib.require("prob.trace")
 local LS = terralib.require("std")
+local trace = terralib.require("prob.trace")
+local distrib = terralib.require("prob.distrib")
 
 
 -- Bookkeeping to help us tell whether an MH-run is replaying still-valid trace or is
@@ -18,7 +19,9 @@ local function isReplaying()
 	else
 		return false
 	end
+	-- return false
 end
+
 
 
 -- An MH chain
@@ -44,22 +47,28 @@ function MHChain:step()
 	-- Select a variable at random, propose change
 	local recs = newtrace:records()
 	local randidx = math.ceil(math.random()*#recs)
+	local fwdVarChoiceProb = -math.log(#recs)
 	local rec = recs[randidx]
+	local oldval = rec.value
 	local fwdlp, rvslp = rec:propose()
-	fwdlp = fwdlp - math.log(#recs)
+	-- print("\n!! Proposing to change var #"..tostring(rec.index).." from "..tostring(oldval).." to "..tostring(rec.value))
+	fwdlp = fwdlp + fwdVarChoiceProb
 	-- Re-run trace to propagate changes
 	setPropVarIndex(rec.index)
 	newtrace:run()
 	unsetPropVarIndex()
 	fwdlp = fwdlp + newtrace.newlogprob
 	recs = newtrace:records()
-	rvslp = rvslp - math.log(#recs) + newtrace.oldlogprob
+	local rvsVarChoiceProb = -math.log(#recs)
+	rvslp = rvslp + rvsVarChoiceProb + newtrace.oldlogprob
 	-- Accept/reject
 	local accept = math.log(math.random()) < (newtrace.logposterior - self.trace.logposterior)/self.temp + rvslp - fwdlp
 	if accept then
+		-- print("!! ACCEPT !!")
 		self.trace:freeMemory()
 		self.trace = newtrace
 	else
+		-- print("!! REJECT !!")
 		newtrace:freeMemory()
 	end
 	return accept

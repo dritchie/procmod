@@ -180,8 +180,9 @@ end
 -- ERP record type needed by StructuredERPTrace
 local ERPRec = LS.LObject()
 
-function ERPRec:init(erp, ...)
+function ERPRec:init(erp, depth, ...)
 	self.erp = erp
+	self.depth = depth
 	self.value = erp.sample(...)
 	self.logprob = erp.logprob(self.value, ...)
 	self.params = {...}
@@ -192,6 +193,7 @@ end
 
 function ERPRec:copy(other)
 	self.erp = other.erp
+	self.depth = other.depth
 	self.value = other.value
 	self.logprob = other.logprob
 	self.params = {}
@@ -237,13 +239,17 @@ local name2id = S.memoize(function(name)
 end)
 
 function Address:init()
+	self:clear()
+	return self
+end
+
+function Address:clear()
 	self.str = "|0:0:0"
 	self.data = {{
 		blockid = 0,
 		loopid = 0,
 		varid = 0
 	}}
-	return self
 end
 
 -- Addresses only hold data *during* the run of a program, so when we copy them, 
@@ -253,6 +259,10 @@ function Address:copy(other)
 end
 
 function Address:getstr() return self.str end
+
+function Address:depth()
+	return #self.data - 1
+end
 
 function Address:push(name)
 	local id = name2id(name)
@@ -320,10 +330,12 @@ end
 
 function StructuredERPTrace:clear()
 	self.choicemap = {}
+	self.address:clear()
 end
 
 function StructuredERPTrace:run()
 	self.newlogprob = 0
+	self.address:clear()
 	Trace.run(self)
 	-- Clear out any random choices that are no longer reachable
 	self.oldlogprob = 0
@@ -356,20 +368,28 @@ function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
 	self:pushAddress(name)
 	-- Look for the ERP by address, and generate a new one if we don't find it
 	local addr = self.address:getstr()
+	-- print("CURRENT ADDRESS: "..addr)
+	-- print("ADDRESSES IN TRACE:")
+	-- for addr,_ in pairs(self.choicemap) do
+	-- 	print("   "..addr)
+	-- end
 	local rec = self.choicemap[addr]
 	if rec and rec.erp == erp then
+		-- io.write("found ")
 		-- Do anything that needs to be done if the parameters have changed.
 		rec:checkForChanges(erp, ...)
 		rec.reachable = true
 	else
+		-- io.write("creating ")
 		-- Make a new record
-		rec = ERPRec.alloc():init(erp, ...)
+		rec = ERPRec.alloc():init(erp, self.address:depth(), ...)
 		self.choicemap[addr] = rec
 		self.newlogprob = self.newlogprob + rec.logprob
 	end
 	rec.index = self.nextVarIndex 
 	self.address:incrementVarIndex()
 	self:popAddress()
+	-- print(rec.value)
 	return rec.value, rec.logprob
 end
 
@@ -383,6 +403,16 @@ end
 
 function StructuredERPTrace:setAddressLoopIndex(i)
 	self.address:setLoopIndex(i)
+end
+
+function StructuredERPTrace:depth()
+	-- Max depth of all variables
+	local recs = self:records()
+	local d = 0
+	for _,r in ipairs(recs) do
+		d = math.max(d, r.depth)
+	end
+	return d
 end
 
 ---------------------------------------------------------------

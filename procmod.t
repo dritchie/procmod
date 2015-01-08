@@ -298,6 +298,7 @@ local MHState = S.memoize(function(State)
 	end
 
 	terra MHState:prepareForRun()
+		-- S.printf("\nPREPARING FOR RUN               \n------------------------\n")
 		self.currIndex = 0
 	end
 
@@ -323,6 +324,7 @@ local MHState = S.memoize(function(State)
 	end
 
 	terra MHState:currentScore()
+		-- S.printf("   score: %g\n", self.states(self.currIndex):currentScore())
 		return self.states(self.currIndex):currentScore()
 	end
 
@@ -333,6 +335,38 @@ local MHState = S.memoize(function(State)
 	terra MHState:advance()
 		self.currIndex = self.currIndex + 1
 	end
+
+
+	-- -- Non-incremental version (to use this, mcmc.isReplaying must always return false)
+	-- local struct MHState(S.Object)
+	-- {
+	-- 	state: State
+	-- }
+	-- LS.Object(MHState)
+
+	-- terra MHState:freeMemory()
+	-- 	self.state:destruct()
+	-- end
+
+	-- terra MHState:prepareForRun()
+	-- 	self.state:clear()
+	-- end
+
+	-- terra MHState:update(newmesh: &Mesh)
+	-- 	self.state:update(newmesh, true)
+	-- end
+
+	-- terra MHState:currentScore()
+	-- 	return self.state:currentScore()
+	-- end
+
+	-- terra MHState:getMesh()
+	-- 	return &self.state.mesh
+	-- end
+
+	-- terra MHState:advance()
+	-- end
+
 
 	return MHState
 end)
