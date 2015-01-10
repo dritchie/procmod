@@ -41,13 +41,26 @@ function MHChain:copy(other)
 end
 
 -- Returns true if step was an accepted proposal, false otherwise.
-function MHChain:step()
+function MHChain:step(depthBiasedVarSelect)
 	-- Copy the trace
 	local newtrace = self.trace:newcopy()
 	-- Select a variable at random, propose change
 	local recs = newtrace:records()
-	local randidx = math.ceil(math.random()*#recs)
-	local fwdVarChoiceProb = -math.log(#recs)
+
+	local randidx
+	local fwdVarChoiceProb
+	if not depthBiasedVarSelect then
+		randidx = math.ceil(math.random()*#recs)
+		fwdVarChoiceProb = -math.log(#recs)
+	else
+		local weights = {}
+		for _,rec in ipairs(recs) do
+			table.insert(weights, math.exp(-rec.depth))
+		end
+		randidx = distrib.multinomial.sample(weights)
+		fwdVarChoiceProb = distrib.multinomial.logprob(randidx, weights)
+	end
+
 	local rec = recs[randidx]
 	local oldval = rec.value
 	local fwdlp, rvslp = rec:propose()
@@ -59,7 +72,18 @@ function MHChain:step()
 	unsetPropVarIndex()
 	fwdlp = fwdlp + newtrace.newlogprob
 	recs = newtrace:records()
-	local rvsVarChoiceProb = -math.log(#recs)
+
+	local rvsVarChoiceProb
+	if not depthBiasedVarSelect then
+		rvsVarChoiceProb = -math.log(#recs)
+	else
+		local weights = {}
+		for _,rec in ipairs(recs) do
+			table.insert(weights, math.exp(-rec.depth))
+		end
+		rvsVarChoiceProb = distrib.multinomial.logprob(randidx, weights)
+	end
+
 	rvslp = rvslp + rvsVarChoiceProb + newtrace.oldlogprob
 	-- Accept/reject
 	local oldlp = self.trace.logprior + (self.trace.loglikelihood)/self.temp
@@ -85,6 +109,8 @@ end
 --    * verbose: print verbose output
 --    * onSample: Callback that says what to do with the trace every time a sample is reached
 --    * temp: Temperature to divide the log posterior by when calculating accept/reject
+--    * depthBiasedVarSelect: If false, select proposal site uniformly at random. If true, select
+--         proportional to depth in program trace.
 local function MH(program, args, opts)
 	-- Extract options
 	local nSamples = opts.nSamples or 1000
@@ -93,6 +119,7 @@ local function MH(program, args, opts)
 	local verbose = opts.verbose
 	local onSample = opts.onSample or function() end
 	local temp = opts.temp or 1
+	local depthBiasedVarSelect = opts.depthBiasedVarSelect
 	local iters = lag*nSamples
 	-- Initialize with a complete trace of nonzero probability
 	local chain = MHChain.alloc():init(program, args, temp)
@@ -102,7 +129,7 @@ local function MH(program, args, opts)
 	local itersdone = 0
 	for i=1,iters do
 		-- Do a proposal step
-		local accept = chain:step()
+		local accept = chain:step(depthBiasedVarSelect)
 		if accept then numAccept = numAccept + 1 end
 		-- Do something with the sample
 		if i % lag == 0 then
@@ -139,6 +166,8 @@ end
 --    * onSample: Callback that says what to do with the trace every time a sample is reached
 --    * temps: List of temperatures, one per MCMC chain (these should be in order).
 --    * tempSwapInterval: Number of iterations between chain temperature swap proposals.
+--    * depthBiasedVarSelect: If false, select proposal site uniformly at random. If true, select
+--         proportional to depth in program trace.
 local function MHPT(program, args, opts)
 	-- Extract options
 	local nSamples = opts.nSamples or 1000
@@ -148,6 +177,7 @@ local function MHPT(program, args, opts)
 	local onSample = opts.onSample or function() end
 	local temps = opts.temps or {1, 1}	-- This'll do no tempering
 	local tempSwapInterval = opts.tempSwapInterval or 1
+	local depthBiasedVarSelect = opts.depthBiasedVarSelect
 	local iters = lag*nSamples
 	-- Initialize chains (have to initialize them all as copies,
 	--    in case any of the args need copying)
@@ -173,7 +203,7 @@ local function MHPT(program, args, opts)
 			-- Advance all chains up to the temp swap point
 			for _,chain in ipairs(chains) do
 				for i=1,tempSwapInterval do
-					local accept = chain:step()
+					local accept = chain:step(depthBiasedVarSelect)
 					if accept then numAccept = numAccept + 1 end
 					-- Do something with the sample
 					if itersdone % lag == 0 then

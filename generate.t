@@ -32,8 +32,8 @@ local function run(generations)
 		verbose = globals.config.verbose,
 		temp = globals.config.mh_temp,
 		parallelTempering = globals.config.parallelTempering,
-		temps = globals.config.mhpt_temperatures
-		-- TODO: other parallel tempering options?
+		temps = globals.config.mhpt_temperatures,
+		depthBiasedVarSelect = globals.config.mh_depthBiasedVarSelect
 	}
 
 	local method = globals.config.method
