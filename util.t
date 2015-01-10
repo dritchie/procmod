@@ -29,17 +29,28 @@ end
 -- The log of the minimum-representable double precision float
 -- TODO: Replace with log of the minimum-representable *non-denormalized* double?
 local LOG_DBL_MIN = -708.39641853226
+local LOG_DBL_MAX = 709.78271289338
 
--- Exponentiate a vector of log weights without causing underflow
+-- Exponentiate a vector of log weights without causing underflow (but see comments...)
 function U.expNoUnderflow(logweights)
 	local minweight = math.huge
+	local maxweight = -math.huge
 	for _,w in ipairs(logweights) do
 		if w ~= -math.huge then
 			minweight = math.min(minweight, w)
+			maxweight = math.max(maxweight, w)
 		end
 	end
-	local underflowFix = (minweight < LOG_DBL_MIN) and (LOG_DBL_MIN - minweight) or 0
-	for i=1,#logweights do logweights[i] = math.exp(logweights[i] + underflowFix) end
+	-- First, compute the offset that would correct for all underflow
+	local correction = (minweight < LOG_DBL_MIN) and (LOG_DBL_MIN - minweight) or 0
+	-- However, don't let this offset cause any log weight to become larger than log(DBL_MAX/N),
+	--    where N is the number of weights. This is because we ultimately need to sum the
+	--    exponentiated weights, so this sum must be representable.
+	local ldmn = LOG_DBL_MAX - math.log(#logweights)
+	if maxweight + correction > ldmn then
+		correction = ldmn - maxweight
+	end
+	for i=1,#logweights do logweights[i] = math.exp(logweights[i] + correction) end
 end
 
 
