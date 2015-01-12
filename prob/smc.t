@@ -114,7 +114,7 @@ local function resampleStratified(particles, weights, n, systematic)
 	local cumOffspring = 0
 	local scale = n/N 	-- If we're requesting more/fewer particles than we started with
 	for i=1,N do
-		local ri = N * weightCDF[i] / weightCDF[N]
+		local ri = N * (weightCDF[i] / weightCDF[N])
 		local ki = math.min(math.floor(ri) + 1, N)
 		if not systematic then
 			u = U[ki]
@@ -219,7 +219,7 @@ local function SIR(program, args, opts)
 				generation, numfinished, nParticles))
 			io.flush()
 		end
-		-- Exponentiate weights, preventing underflow
+		-- Exponentiate weights
 		util.expNoUnderflow(weights)
 		-- Resampling
 		beforeResample(particles)
