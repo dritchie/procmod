@@ -292,10 +292,10 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	local function branchProb(depth, i)
 		-- local ifactor = 10 - i
 		-- return math.exp(-0.8*depth - 0.05*ifactor)
-		return math.exp(-0.75*depth)
+		-- return math.exp(-0.75*depth)
+		return 0.5
 	end
 
-	local numprims = 0
 	local origradius
 	local function branch(frame, depth, prev)
 		-- if depth > 2 then return end
@@ -317,7 +317,6 @@ return S.memoize(function(makeGeoPrim, geoRes)
 
 			-- Place geometry
 			treeSegment(N_SEGS, prev, frame, splitFrame, nextframe)
-			numprims = numprims + 1
 
 			future.create(function(i, frame, prev)
 				if flip(branchProb(depth, i)) then
@@ -350,7 +349,6 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		origradius = startFrame.radius
 		future.create(branch, startFrame, 0, nil)
 		future.finishall()
-		-- print("numprims:", numprims)
 	end
 end)
 

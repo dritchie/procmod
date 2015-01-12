@@ -291,10 +291,10 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	local function branchProb(depth, i)
 		-- local ifactor = 10 - i
 		-- return math.exp(-0.8*depth - 0.05*ifactor)
-		return math.exp(-0.75*depth)
+		-- return math.exp(-0.75*depth)
+		return 0.5
 	end
 
-	local numprims = 0
 	local origradius
 	local function branch(frame, depth, prev)
 		-- if depth > 2 then return end
@@ -316,7 +316,6 @@ return S.memoize(function(makeGeoPrim, geoRes)
 
 			-- Place geometry
 			treeSegment(N_SEGS, prev, frame, splitFrame, nextframe)
-			numprims = numprims + 1
 
 			if flip(branchProb(depth, i)) then
 				-- Theta mean/variance based on avg weighted by 'up-facing-ness'
@@ -346,7 +345,6 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		}
 		origradius = startFrame.radius
 		branch(startFrame, 0, nil)
-		-- print("numprims:", numprims)
 	end
 end)
 

@@ -291,14 +291,19 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	local function branchProb(depth, i)
 		-- local ifactor = 10 - i
 		-- return math.exp(-0.8*depth - 0.05*ifactor)
-		return math.exp(-0.75*depth)
+		-- return math.exp(-0.75*depth)
+		return 0.5
 	end
 
+	local origradius
 	local function branch(frame, prev, depth)
 		-- if depth > 2 then return end
 		local finished = false
 		local i = 0
 		repeat
+			-- Kill things that get too small to matter
+			if frame.radius/origradius < 0.1 then break end
+
 			prob.setAddressLoopIndex(i)
 			local uprot = gaussian(0, math.pi/12, "uprot")
 			local leftrot = gaussian(0, math.pi/12, "leftroy")
@@ -342,6 +347,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			up = LVec3.new(0, 0, -1),
 			radius = uniform(1.5, 2, "initradius")
 		}
+		origradius = startFrame.radius
 		prob.pushAddress("start")
 		branch(startFrame, nil, 0)
 		prob.popAddress()
