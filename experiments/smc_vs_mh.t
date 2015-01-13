@@ -8,17 +8,20 @@ local time = terralib.currenttimeinseconds
 
 -- Constants
 local outfilename = arg[2] or "experiments/smc_vs_mh.csv"
--- local sampNums = {10, 20, 40, 80, 160, 320, 640, 1280, 2560}
 local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
+-- local sampNums = {700, 800, 900, 1000}
 local numRuns = 10
 
 -- Set up persistent variables we'll need
 local methods = {"smc", "smc_fixedOrder", "mh"}
--- local methods = {"smc", "smc_fixedOrder", "mh", "mhpt"}
 local generations = global(S.Vector(S.Vector(procmod.Sample)))
 LS.luainit(generations:getpointer())
-local f = io.open(outfilename, "w")
-f:write("method,numSamps,time,avgScore,maxScore\n")
+local filemode = "w"
+-- local filemode = "a"
+local f = io.open(outfilename, filemode)
+if filemode == "w" then
+	f:write("method,numSamps,time,avgScore,maxScore\n")
+end
 
 -- We don't save sample values when we're recording this data
 globals.config.saveSampleValues = false
