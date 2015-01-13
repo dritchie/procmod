@@ -11,6 +11,23 @@ local util = terralib.require("util")
 --    a sync point.
 local SMC_SYNC_ERROR = {}
 
+-- Profiling how much time is spent in trace replay
+local traceReplayTime = 0
+local traceReplayStart = 0
+local function clearTraceReplayTime()
+	traceReplayTime = 0
+end
+local function getTraceReplayTime()
+	return traceReplayTime
+end
+local function startTraceReplayTimer()
+	traceReplayStart = terralib.currenttimeinseconds()
+end
+local function stopTraceReplayTimer()
+	local t = terralib.currenttimeinseconds()
+	traceReplayTime = traceReplayTime + (t - traceReplayStart)
+end
+
 ---------------------------------------------------------------
 
 -- A particle stores information about how far a partial run of a program
@@ -50,7 +67,11 @@ local Particle = S.memoize(function(Trace)
 		if self.currSyncIndex == self.stopSyncIndex then
 			error(SMC_SYNC_ERROR)
 		else
+			local wasReplaying = self:isReplaying()
 			self.currSyncIndex = self.currSyncIndex + 1
+			if wasReplaying and not self:isReplaying() then
+				stopTraceReplayTimer()
+			end
 		end
 	end
 
@@ -61,6 +82,7 @@ local Particle = S.memoize(function(Trace)
 			globalParticle = self
 			self.stopSyncIndex = self.stopSyncIndex + nSteps
 			self.currSyncIndex = 1
+			if self:isReplaying() then startTraceReplayTimer() end
 			local succ, err = pcall(function() self.trace:run() end)
 			if succ then
 				self.finished = true
@@ -177,6 +199,8 @@ local function SIR(program, args, opts)
 	local afterResample = opts.afterResample or nop
 	local exit = opts.exit or nop
 
+	clearTraceReplayTime()
+
 	-- Only need the simplest trace to do SIR
 	local Trace = trace.FlatValueTrace
 
@@ -239,6 +263,9 @@ local function SIR(program, args, opts)
 		local t1 = terralib.currenttimeinseconds()
 		io.write("\n")
 		print("Time:", t1 - t0)
+		local trp = getTraceReplayTime()
+		print(string.format("Time spent on trace replay: %g (%g%%)",
+			trp, 100*(trp/(t1-t0))))
 	end
 	exit(particles)
 end
