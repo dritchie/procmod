@@ -66,6 +66,7 @@ local function doMethod(method, numSamps, record, timeBudget)
 		avgscore = avgscore / n
 		f:write(string.format("%s,%u,%g,%g,%g\n",
 			method, numSamps, t1-t0, avgscore, maxscore))
+		f:flush()
 	end
 	return t1 - t0
 end
@@ -79,7 +80,6 @@ local terra ogl_main()
 	gl.glutInitWindowSize(1, 1)
 	gl.glutInitDisplayMode(gl.GLUT_RGB or gl.GLUT_DOUBLE or gl.GLUT_DEPTH)
 	gl.glutCreateWindow("SMC vs. MH")
-	-- gl.glutMainLoop()
 end
 ogl_main()
 
