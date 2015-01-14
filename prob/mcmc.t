@@ -68,6 +68,7 @@ function MHChain:step(depthBiasedVarSelect)
 	fwdlp = fwdlp + fwdVarChoiceProb
 	-- Re-run trace to propagate changes
 	setPropVarIndex(rec.index)
+	newtrace.propVarIndex = rec.index
 	newtrace:run()
 	unsetPropVarIndex()
 	fwdlp = fwdlp + newtrace.newlogprob
@@ -121,6 +122,9 @@ local function MH(program, args, opts)
 	local temp = opts.temp or 1
 	local depthBiasedVarSelect = opts.depthBiasedVarSelect
 	local iters = lag*nSamples
+
+	trace.StructuredERPTrace.clearTraceReplayTime()
+
 	-- Initialize with a complete trace of nonzero probability
 	local chain = MHChain.alloc():init(program, args, temp)
 	-- Do MH loop
@@ -153,6 +157,9 @@ local function MH(program, args, opts)
 		io.write("\n")
 		print("Acceptance ratio:", numAccept/itersdone)
 		print("Time:", t1 - t0)
+		local trp = trace.StructuredERPTrace.getTraceReplayTime()
+		print(string.format("Time spent on trace replay: %g (%g%%)",
+			trp, 100*(trp/(t1-t0))))
 	end
 end
 
@@ -179,6 +186,9 @@ local function MHPT(program, args, opts)
 	local tempSwapInterval = opts.tempSwapInterval or 1
 	local depthBiasedVarSelect = opts.depthBiasedVarSelect
 	local iters = lag*nSamples
+
+	trace.StructuredERPTrace.clearTraceReplayTime()
+
 	-- Initialize chains (have to initialize them all as copies,
 	--    in case any of the args need copying)
 	local chains = {}
@@ -250,6 +260,9 @@ local function MHPT(program, args, opts)
 		print("Acceptance ratio:", numAccept/itersdone)
 		print("Temp swap acceptance ratio:", numTempSwapAccept/tempSwapsDone)
 		print("Time:", t1 - t0)
+		local trp = trace.StructuredERPTrace.getTraceReplayTime()
+		print(string.format("Time spent on trace replay: %g (%g%%)",
+			trp, 100*(trp/(t1-t0))))
 	end
 end
 

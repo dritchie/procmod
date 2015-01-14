@@ -302,6 +302,24 @@ function Address:incrementVarIndex()
 end
 
 
+-- Profiling how much time is spent in trace replay
+local traceReplayTime = 0
+local traceReplayStart = 0
+local function clearTraceReplayTime()
+	traceReplayTime = 0
+end
+local function getTraceReplayTime()
+	return traceReplayTime
+end
+local function startTraceReplayTimer()
+	traceReplayStart = terralib.currenttimeinseconds()
+end
+local function stopTraceReplayTimer()
+	local t = terralib.currenttimeinseconds()
+	traceReplayTime = traceReplayTime + (t - traceReplayStart)
+end
+
+
 -- Trace that indexes ERPs by their structural address in the program.
 -- Needed to do efficient MH.
 local StructuredERPTrace = LS.LObject()
@@ -313,6 +331,7 @@ function StructuredERPTrace:init(program, ...)
 	self.address = Address.alloc():init()
 	self.oldlogprob = 0
 	self.newlogprob = 0
+	self.propVarIndex = nil 	-- Set by MH during proposal runs
 	return self
 end
 
@@ -336,6 +355,9 @@ end
 function StructuredERPTrace:run()
 	self.newlogprob = 0
 	self.address:clear()
+	if self.propVarIndex and (self.propVarIndex > 1) then
+		startTraceReplayTimer()
+	end
 	Trace.run(self)
 	-- Clear out any random choices that are no longer reachable
 	self.oldlogprob = 0
@@ -345,6 +367,7 @@ function StructuredERPTrace:run()
 			self.choicemap[addr] = nil
 		end
 	end
+	self.propVarIndex = nil
 end
 
 -- Return vars as a list
@@ -386,6 +409,9 @@ function StructuredERPTrace:makeRandomChoiceImpl(erp, ...)
 		self.choicemap[addr] = rec
 		self.newlogprob = self.newlogprob + rec.logprob
 	end
+	if self.propVarIndex and (self.propVarIndex == self.nextVarIndex) then
+		stopTraceReplayTimer()
+	end
 	rec.index = self.nextVarIndex 
 	self.address:incrementVarIndex()
 	self:popAddress()
@@ -414,6 +440,9 @@ function StructuredERPTrace:depth()
 	end
 	return d
 end
+
+StructuredERPTrace.clearTraceReplayTime = clearTraceReplayTime
+StructuredERPTrace.getTraceReplayTime = getTraceReplayTime
 
 ---------------------------------------------------------------
 
