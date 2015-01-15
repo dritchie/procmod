@@ -14,6 +14,7 @@ local Mesh = S.memoize(function(real)
 	assert(real == float or real == double,
 		"Mesh: real must be float or double")
 
+	local Vec2 = Vec(real, 2)
 	local Vec3 = Vec(real, 3)
 	local Mat4 = Mat(real, 4, 4)
 	local BBox3 = BBox(Vec3)
@@ -23,28 +24,34 @@ local Mesh = S.memoize(function(real)
 	local glVertex = real == float and gl.glVertex3fv or gl.glVertex3dv
 	local glNormal = real == float and gl.glNormal3fv or gl.glNormal3dv
 
-	local struct Index { vertex: uint, normal: uint }
+	local struct Index { vertex: uint, normal: uint, uv: int }
 
 	local struct Mesh(S.Object)
 	{
-		vertices: S.Vector(Vec3),
-		normals: S.Vector(Vec3),
+		vertices: S.Vector(Vec3)
+		normals: S.Vector(Vec3)
+		uvs: S.Vector(Vec2)
 		indices: S.Vector(Index)
-		volume: real
 	}
 
 	terra Mesh:numVertices() return self.vertices:size() end
 	terra Mesh:numNormals() return self.normals:size() end
+	terra Mesh:numUVs() return self.uvs:size() end
 	terra Mesh:numIndices() return self.indices:size() end
 	terra Mesh:numTris() return self:numIndices()/3 end
 
 	Mesh.methods.getVertex = macro(function(self, i) return `self.vertices(i) end)
 	Mesh.methods.getNormal = macro(function(self, i) return `self.normals(i) end)
+	Mesh.methods.getUV = macro(function(self, i) return `self.uvs(i) end)
 	Mesh.methods.getIndex = macro(function(self, i) return `self.indices(i) end)
 
 	terra Mesh:addVertex(vert: Vec3) self.vertices:insert(vert) end
 	terra Mesh:addNormal(norm: Vec3) self.normals:insert(norm) end
-	terra Mesh:addIndex(vind: uint, nind: uint) self.indices:insert(Index{vind,nind}) end
+	terra Mesh:addUV(uv: Vec2) self.uvs:insert(uv) end
+	terra Mesh:addIndex(vind: uint, nind: uint) self.indices:insert(Index{vind,nind,-1}) end
+	Mesh.methods.addIndex:adddefinition((terra(self: &Mesh, vind: uint, nind: uint, uvind: uint)
+		self.indices:insert(Index{vind,nind,uvind})
+	end):getdefinitions()[1])
 
 	terra Mesh:draw()
 		-- Just simple immediate mode drawing for now
@@ -59,6 +66,7 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:clear()
 		self.vertices:clear()
 		self.normals:clear()
+		self.uvs:clear()
 		self.indices:clear()
 	end
 
@@ -70,6 +78,9 @@ local Mesh = S.memoize(function(real)
 		end
 		for on in other.normals do
 			self:addNormal(on)
+		end
+		for ouv in other.uvs do
+			self:addUV(ouv)
 		end
 		for oi in other.indices do
 			self:addIndex(oi.vertex + nverts, oi.normal + nnorms)
@@ -103,6 +114,9 @@ local Mesh = S.memoize(function(real)
 		end
 		for on in other.normals do
 			self:addNormal(normalxform:transformVector(on))
+		end
+		for ouv in other.uvs do
+			self:addUV(ouv)
 		end
 		for oi in other.indices do
 			self:addIndex(oi.vertex + nverts, oi.normal + nnorms)
@@ -394,6 +408,7 @@ local Mesh = S.memoize(function(real)
 		S.fclose(f)
 	end
 
+	-- Will save UVs if the mesh has any
 	terra Mesh:saveOBJ(filename: rawstring)
 		var f = S.fopen(filename, "w")
 		for i=0,self:numVertices() do
@@ -404,14 +419,28 @@ local Mesh = S.memoize(function(real)
 			var vn = self:getNormal(i)
 			S.fprintf(f, "vn %g %g %g\n", vn(0), vn(1), vn(2))
 		end
+		var hasUVs = self:numUVs() > 0
+		if hasUVs then
+			for i=0,self:numUVs() do
+				var vt = self:getUV(i)
+				S.fprintf(f, "vt %g %g\n", vt(0), vt(1))
+			end
+		end
 		for i=0,self:numIndices()/3 do
 			var i0 = self:getIndex(3*i)
 			var i1 = self:getIndex(3*i + 1)
 			var i2 = self:getIndex(3*i + 2)
-			S.fprintf(f, "f %u//%u %u//%u %u//%u\n",
-				i0.vertex+1, i0.normal+1,
-				i1.vertex+1, i1.normal+1,
-				i2.vertex+1, i2.normal+1)
+			if hasUVs then
+				S.fprintf(f, "f %u/%d/%u %u/%d/%u %u/%d/%u\n",
+					i0.vertex+1, i0.uv+1, i0.normal+1,
+					i1.vertex+1, i1.uv+1, i1.normal+1,
+					i2.vertex+1, i2.uv+1, i2.normal+1)
+			else
+				S.fprintf(f, "f %u//%u %u//%u %u//%u\n",
+					i0.vertex+1, i0.normal+1,
+					i1.vertex+1, i1.normal+1,
+					i2.vertex+1, i2.normal+1)
+			end
 		end
 		S.fclose(f)
 	end
