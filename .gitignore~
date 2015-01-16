@@ -6,4 +6,3 @@ shadowMap.tiff
 shadowMask.png
 ben.config
 *.DS_Store
-tests/*
