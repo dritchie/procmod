@@ -59,7 +59,8 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			center = LVec3.new(0, 0, 0),
 			forward = LVec3.new(0, 1, 0),
 			up = LVec3.new(0, 0, -1),
-			radius = uniform(1.5, 2)
+			radius = uniform(1.5, 2),
+			v = 0
 		}
 		origradius = startFrame.radius
 		branch(startFrame, 0, nil)
