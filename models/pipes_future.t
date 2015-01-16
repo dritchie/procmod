@@ -14,19 +14,19 @@ local future = prob.future
 
 return S.memoize(function(makeGeoPrim, geoRes)
 
-	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double)
+	local box = makeGeoPrim(terra(mesh: &Mesh, cx: double, cy: double, cz: double, xlen: double, ylen: double, zlen: double, length: int)
 		Shapes.addBox(mesh, Vec3.create(cx, cy, cz), xlen, ylen, zlen)
 	end)
 
-	local function drop(pt,delta,r) 
-		box(pt[1]*r,pt[2]*r,pt[3]*r,delta[1]*r,delta[2]*r,delta[3]*r)
+	local function drop(pt,delta,r, length) 
+		box(pt[1]*r,pt[2]*r,pt[3]*r,delta[1]*r,delta[2]*r,delta[3]*r, length)
 	end
 
-	local thickness = .3
+	local thickness = .2
 	local root_length = 10
-	local branch_mult = .5
+	local branch_mult = .7
 	local branch_chance = .6
-	local continue_chance = .95
+	local function continue_chance(gen) return .9 + .09*math.exp(-gen/50.) end
 	local die_length = 2
 
 	local function drop_pipe(pt,length,dir)
@@ -44,7 +44,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 			if not (dir[k] == 0) then delta[k] = length end
 		end
 
-		drop(center,delta,thickness)
+		drop(center,delta,thickness, length)
 		return newpt
 	end
 
@@ -66,7 +66,7 @@ return S.memoize(function(makeGeoPrim, geoRes)
 		return ret
 	end
 
-	local upbias = 1./3.
+	local upbias = 1./3
 	local function randdiri() 
 		local u = uniform(0,1)
 		local d
@@ -95,14 +95,14 @@ return S.memoize(function(makeGeoPrim, geoRes)
 	end
 
 
-	local function genBranches(origin, length_factor, notdir) 
+	local function genBranches(origin, length_factor, notdir, gen) 
 		local length 
 		local diri 
 		local endp
 		repeat 
 			length = fake_pois(length_factor)
 			if length <= die_length then return end
-			repeat diri = randdiri() until diri ~= notdir
+			repeat diri = randdiri() until (diri ~= notdir and diri ~= ((notdir-1+3)%6)+1)
 			endp = endpt(origin,length,dir(diri))
 		until endp[2] > 5 and math.abs(endp[1]) < 20.0/thickness and math.abs(endp[3]) < 20.0/thickness
 		origin = drop_pipe(origin,length,dir(diri))
@@ -110,18 +110,18 @@ return S.memoize(function(makeGeoPrim, geoRes)
 
 		future.create(
 		function(origin, length_factor, branch_mult, notdir)
-			if flip(branch_chance) then genBranches(origin,length_factor*branch_mult, notdir) end 
+			if flip(branch_chance) then genBranches(origin,length_factor*branch_mult, notdir, gen+1) end 
 		end, origin, length_factor, branch_mult, notdir)
 
 		future.create(
 		function(origin, length_factor, notdir)
-			if flip(continue_chance) then genBranches(origin, length_factor, notdir) end 
+			if flip(continue_chance(gen)) then genBranches(origin, length_factor, notdir, gen+1) end 
 		end, origin, length_factor, notdir)
 	end
 
 	return function()
 		
-		future.create(genBranches, {0,5/thickness,0}, root_length, -1)
+		future.create(genBranches, {0,12/thickness,0}, root_length, -1, 0)
 		future.finishall()
 
 	end

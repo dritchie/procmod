@@ -321,7 +321,15 @@ if G.config.doShadowMatch then
 					for y=0,G.shadowWeightImage.height do
 						for x=0,G.shadowWeightImage.width do
 							var val = G.shadowWeightImage(x,y)(0)
-							G.shadowWeightImage(x,y)(0) = 1.0 + G.config.imageWeightMult*val
+							if G.config.imageWeightProp then
+								if val == 0 then 
+									G.shadowWeightImage(x,y)(0) = 1.0
+								else 
+									G.shadowWeightImage(x,y)(0) = G.config.imageWeightMult
+								end
+							else 
+								G.shadowWeightImage(x,y)(0) = 1.0 + G.config.imageWeightMult*val
+							end 
 						end
 					end
 				end

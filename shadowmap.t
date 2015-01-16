@@ -12,7 +12,7 @@ local renderShadowMask = S.memoize(function(saveImages)
 	local image = nil
 	if saveImages then image = terralib.require("image") end
 
-	local terra render(mesh: &Mesh, shadowMatchImage: &BinaryGrid2D,
+	local terra render(mesh: &Mesh, testnum: int, shadowMatchImage: &BinaryGrid2D,
 				 	   shadowMatchImagePixelData: &S.Vector(Vec(uint8, 4))) : {}
 		var viewport : int[4]
 		gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
@@ -92,7 +92,9 @@ local renderShadowMask = S.memoize(function(saveImages)
 						end
 					end
 					S.free(depthdata)
-					dimg:save(image.Format.TIFF, "shadowMap.tiff")
+					var filename = [rawstring](S.malloc(100))
+					S.sprintf(filename, "tests/shadowMap%i.tiff", testnum)
+					dimg:save(image.Format.TIFF, filename)
 				end
 			end
 		end
@@ -174,7 +176,9 @@ local renderShadowMask = S.memoize(function(saveImages)
 							end
 						end
 					end
-					img:save(image.Format.PNG, "shadowMask.png")
+					var filename = [rawstring](S.malloc(100))
+					S.sprintf(filename, "tests/shadowMask%i.png", testnum)
+					img:save(image.Format.PNG, filename)
 				end
 			end
 		end
@@ -185,10 +189,10 @@ local renderShadowMask = S.memoize(function(saveImages)
 		gl.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
 	end
 
-	render:adddefinition((terra(mesh: &Mesh) : {}
+	render:adddefinition((terra(mesh: &Mesh, i: int) : {}
 		var shadowMatchImage = BinaryGrid2D.salloc():init()
 		var shadowMatchImagePixelData = [S.Vector(Vec(uint8, 4))].salloc():init()
-		render(mesh, shadowMatchImage, shadowMatchImagePixelData)
+		render(mesh, i, shadowMatchImage, shadowMatchImagePixelData)
 	end):getdefinitions()[1])
 
 	return render

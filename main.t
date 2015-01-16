@@ -586,12 +586,12 @@ local terra sampleIndexScrub(x: int, y: int)
 end
 
 
-local terra renderShadowStuff()
+local terra renderShadowStuff(i: int)
 	escape
 		if globals.config.doShadowMatch then
 			emit quote
 				if displayMesh ~= nil then
-					[shadowmap.renderShadowMask(true)](displayMesh)
+					[shadowmap.renderShadowMask(true)](displayMesh,i)
 				end
 			end
 		end
@@ -639,13 +639,21 @@ local terra keyboard(key: uint8, x: int, y: int)
 	elseif key == char('c') then
 		camera:print()
 	elseif key == char('h') then
-		renderShadowStuff()
+		renderShadowStuff(0)
 	elseif key == char('j') then
 		if displayMesh ~= nil then
 			displayMesh:saveOBJ("savedMesh.obj")
 		end
 	elseif key == char('z') then
 		regenCurrMeshAtHighRes()
+	elseif key == char(' ') then 
+		S.printf("Starting\n")
+		for i=1,10 do
+			S.printf("iteration %i\n", i)
+			reloadCodeAndRegen()
+			renderShadowStuff(i)
+		end
+		S.printf("Done\n")
 	end
 end
 
