@@ -28,6 +28,23 @@ local shapes = S.memoize(function(real)
 		mesh:addIndex(i0, ni)
 	end
 
+	local terra quadTextured(mesh: &MeshT, i0: uint, i1: uint, i2: uint, i3: uint,
+							 			   uv0: int, uv1: int, uv2: int, uv3: int)
+		var ni = mesh:numNormals()
+		var v0 = mesh:getVertex(i0)
+		var v1 = mesh:getVertex(i1)
+		var v2 = mesh:getVertex(i2)
+		var n = (v2-v1):cross(v0-v1)
+		n:normalize()
+		mesh:addNormal(n)
+		mesh:addIndex(i0, ni, uv0)
+		mesh:addIndex(i1, ni, uv1)
+		mesh:addIndex(i2, ni, uv2)
+		mesh:addIndex(i2, ni, uv2)
+		mesh:addIndex(i3, ni, uv3)
+		mesh:addIndex(i0, ni, uv0)
+	end
+
 	terra shapes.addQuad(mesh: &MeshT, v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3) : {}
 		var vi = mesh:numVertices()
 		mesh:addVertex(v0)
@@ -38,6 +55,7 @@ local shapes = S.memoize(function(real)
 	end
 
 	shapes.addQuad:adddefinition(quad:getdefinitions()[1])
+	shapes.addQuad:adddefinition(quadTextured:getdefinitions()[1])
 
 	terra shapes.addBox(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real) : {}
 		var xh = xlen*0.5

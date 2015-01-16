@@ -1,5 +1,6 @@
 local Shapes = terralib.require("geometry.shapes")(double)
 local Mesh = terralib.require("geometry.mesh")(double)
+local Vec2 = terralib.require("linalg.vec")(double, 2)
 local Vec3 = terralib.require("linalg.vec")(double, 3)
 local Mat4 = terralib.require("linalg.mat")(double, 4, 4)
 local util = terralib.require("util")
@@ -18,23 +19,29 @@ return function(makeGeoPrim, geoRes)
 			   frame.radius, frame.v
 	end
 
-	local terra circleOfVertsAndNormals(mesh: &Mesh, c: Vec3, up: Vec3, fwd: Vec3, r: double, n: uint)
+	local terra circleOfVertsAndNormals(mesh: &Mesh, c: Vec3, up: Vec3, fwd: Vec3, r: double, vt: double, n: uint)
 		var v = c + r*up
 		mesh:addVertex(v)
 		mesh:addNormal((v - c):normalized())
+		mesh:addUV(Vec2.create(0.0, vt))
 		var rotamt = [2*math.pi]/n
 		var m = Mat4.rotate(fwd, rotamt, c)
-		for i=1,n do
+		-- for i=1,n do
+		for i=1,n+1 do
 			v = m:transformPoint(v)
 			mesh:addVertex(v)
 			mesh:addNormal((v - c):normalized())
+			mesh:addUV(Vec2.create(double(i)/n, vt))
 		end
+		-- return n
+		return n+1
 	end
 
 	local terra weldCircleOfVerts(mesh: &Mesh, d: Vec3, p0: Vec3, p1: Vec3, r0: double, r1: double, bvi: uint, n: uint)
 		var center = 0.5*(p0+p1)
 		var a = d:dot(d)
-		for i=0,n do
+		-- for i=0,n do
+		for i=0,n+1 do
 			var v = mesh:getVertex(bvi+i)
 			var p = v:projectToLineSeg(p0, p1)
 			var t = p:inverseLerp(p0, p1)
@@ -51,31 +58,40 @@ return function(makeGeoPrim, geoRes)
 		end
 	end
 
-	local terra cylinderSides(mesh: &Mesh, baseVertIndex: uint, baseNormIndex: uint, n: uint)
-		var bvi = baseVertIndex
-		var bni = baseNormIndex
+	local terra cylinderSides(mesh: &Mesh, bvi: uint, bni: uint, bti: int, n: uint)
 		for i=0,n do
+			-- var i0 = i
+			-- var i1 = (i+1)%n
+			-- var i2 = n + (i+1)%n
+			-- var i3 = n + i
 			var i0 = i
-			var i1 = (i+1)%n
-			var i2 = n + (i+1)%n
-			var i3 = n + i
-			mesh:addIndex(bvi+i0, bni+i0)
-			mesh:addIndex(bvi+i1, bni+i1)
-			mesh:addIndex(bvi+i2, bni+i2)
-			mesh:addIndex(bvi+i2, bni+i2)
-			mesh:addIndex(bvi+i3, bni+i3)
-			mesh:addIndex(bvi+i0, bni+i0)
+			var i1 = (i+1)
+			var i2 = (n+1) + (i+1)
+			var i3 = (n+1) + i
+			mesh:addIndex(bvi+i0, bni+i0, bti+i0)
+			mesh:addIndex(bvi+i1, bni+i1, bti+i1)
+			mesh:addIndex(bvi+i2, bni+i2, bti+i2)
+			mesh:addIndex(bvi+i2, bni+i2, bti+i2)
+			mesh:addIndex(bvi+i3, bni+i3, bti+i3)
+			mesh:addIndex(bvi+i0, bni+i0, bti+i0)
 		end
 	end
 
-	local terra cylinderCap(mesh: &Mesh, baseIndex: uint, n: uint)
-		var bvi = baseIndex
+	local terra cylinderCap(mesh: &Mesh, bvi: uint, bti: int, n: uint)
 		var nStrips = (n-2)/2
 		for i=0,nStrips/2 do
-			Shapes.addQuad(mesh, bvi + i, bvi + i+1, bvi + (n/2)-i-1, bvi + (n/2)-i)
+			Shapes.addQuad(mesh,
+						   -- bvi + i, bvi + i+1, bvi + (n/2)-i-1, bvi + (n/2)-i,
+						   -- bti + i, bti + i+1, bti + (n/2)-i-1, bti + (n/2)-i)
+						   bvi + i, bvi + i+1, bvi + (n/2)-i-1, bvi + (n/2)-i,
+						   0.0, 0.0, 0.0, 0.0)
 		end
 		for i=0,nStrips/2 do
-			Shapes.addQuad(mesh, bvi + (n/2)+i, bvi + (n/2)+i+1, bvi + n-i-1, bvi + (n-i)%n)
+			Shapes.addQuad(mesh,
+						   -- bvi + (n/2)+i, bvi + (n/2)+i+1, bvi + n-i-1, bvi + (n-i)%n,
+						   -- bti + (n/2)+i, bti + (n/2)+i+1, bti + n-i-1, bti + (n-i)%n)
+						   bvi + (n/2)+i, bvi + (n/2)+i+1, bvi + n-i-1, bvi + (n-i)%n,
+						   0.0, 0.0, 0.0, 0.0)
 		end
 	end
 
@@ -105,33 +121,37 @@ return function(makeGeoPrim, geoRes)
 		var fwd0 = Vec3.create(args.f0_fx, args.f0_fy, args.f0_fz)
 		var up0 = Vec3.create(args.f0_ux, args.f0_uy, args.f0_uz)
 		var r0 = args.f0_r
+		var v0 = args.f0_v
 		var c1 = Vec3.create(args.f1_cx, args.f1_cy, args.f1_cz)
 		var fwd1 = Vec3.create(args.f1_fx, args.f1_fy, args.f1_fz)
 		var up1 = Vec3.create(args.f1_ux, args.f1_uy, args.f1_uz)
 		var r1 = args.f1_r
+		var v1 = args.f1_v
 		var c2 = Vec3.create(args.f2_cx, args.f2_cy, args.f2_cz)
 		var fwd2 = Vec3.create(args.f2_fx, args.f2_fy, args.f2_fz)
 		var up2 = Vec3.create(args.f2_ux, args.f2_uy, args.f2_uz)
 		var r2 = args.f2_r
+		var v2 = args.f2_v
 		var nSegs = args.nSegs
 
 		var bvi = mesh:numVertices()
 		var bni = mesh:numNormals()
+		var bti = mesh:numUVs()
 
 		-- Vertices 0,nSegs are the bottom outline of the base
-		circleOfVertsAndNormals(mesh, c0, up0, fwd0, r0, nSegs)
+		var nadded = circleOfVertsAndNormals(mesh, c0, up0, fwd0, r0, v0, nSegs)
 		-- Vertices nSegs+1,2*nSegs are the outline of the split frame
-		circleOfVertsAndNormals(mesh, c1, up1, fwd1, r1, nSegs)
+		circleOfVertsAndNormals(mesh, c1, up1, fwd1, r1, v1, nSegs)
 		-- Finally, we have the vertices of the end frame
-		circleOfVertsAndNormals(mesh, c2, up2, fwd2, r2, nSegs)
+		circleOfVertsAndNormals(mesh, c2, up2, fwd2, r2, v2, nSegs)
 		-- Add quads for the outside between the base and split
-		cylinderSides(mesh, bvi, bni, nSegs)
+		cylinderSides(mesh, bvi, bni, bti, nSegs)
 		-- Add quads for the outside between the split and end
-		cylinderSides(mesh, bvi+nSegs, bni+nSegs, nSegs)
+		cylinderSides(mesh, bvi+nadded, bni+nadded, bti+nadded, nSegs)
 		-- Finally, add quads across the bottom of the cylinder
-		cylinderCap(mesh, bvi, nSegs)
+		cylinderCap(mesh, bvi, bti, nSegs)
 		-- ...and add quads across the top of the cylinder
-		cylinderCap(mesh, bvi+2*nSegs, nSegs)
+		cylinderCap(mesh, bvi+2*nadded, bti+2*nadded, nSegs)
 		-- Deal with the 'prev trunk radius' stuff by welding the first circle of verts to the parent branch
 		if args.prevRadius0 > 0.0 then
 			var d = 0.5*(p0+p1) - c0; d:normalize()
@@ -156,9 +176,7 @@ return function(makeGeoPrim, geoRes)
 	end
 
 
-	-- One unit of length in world space maps to how many units of v-length in texture space?
-	local WORLD_TO_TEX = 0.1
-
+	local WORLD_TO_TEX = 0.15
 
 	local worldup = LVec3.new(0, 1, 0)
 	-- local upblendamt = 0.25
@@ -173,7 +191,7 @@ return function(makeGeoPrim, geoRes)
 		local newfwd = (leftrotmat*uprotmat):transformVector(fwd)
 		-- newfwd = lerp(newfwd, worldup, upblendamt):normalized()
 		local newc = c + len*newfwd
-		local newv = frame.v + WORLD_TO_TEX*len
+		local newv = frame.v + (WORLD_TO_TEX/frame.radius)*len
 		return {
 			center = newc,
 			forward = newfwd,

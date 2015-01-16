@@ -73,6 +73,7 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:append(other: &Mesh)
 		var nverts = self.vertices:size()
 		var nnorms = self.normals:size()
+		var nuvs = self.uvs:size()
 		for ov in other.vertices do
 			self:addVertex(ov)
 		end
@@ -83,7 +84,7 @@ local Mesh = S.memoize(function(real)
 			self:addUV(ouv)
 		end
 		for oi in other.indices do
-			self:addIndex(oi.vertex + nverts, oi.normal + nnorms)
+			self:addIndex(oi.vertex + nverts, oi.normal + nnorms, oi.uv + nuvs)
 		end
 	end
 
@@ -109,6 +110,7 @@ local Mesh = S.memoize(function(real)
 		normalxform:transposeInPlace()
 		var nverts = self.vertices:size()
 		var nnorms = self.normals:size()
+		var nuvs = self.uvs:size()
 		for ov in other.vertices do
 			self:addVertex(xform:transformPoint(ov))
 		end
@@ -119,7 +121,7 @@ local Mesh = S.memoize(function(real)
 			self:addUV(ouv)
 		end
 		for oi in other.indices do
-			self:addIndex(oi.vertex + nverts, oi.normal + nnorms)
+			self:addIndex(oi.vertex + nverts, oi.normal + nnorms, oi.uv + nuvs)
 		end
 	end
 
