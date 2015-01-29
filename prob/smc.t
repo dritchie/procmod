@@ -190,6 +190,50 @@ function Resample.residual(particles, weights, n)
 	return newparticles
 end
 
+
+-- Experimental log-space version of multinomial resampler.
+local function logAdd(logx, logy)
+	-- Make logx the bigger of the two
+	if logy > logx then
+		local tmp = logx
+		logx = logy
+		logy = tmp
+	end
+	-- If the bigger of the two is log(0), then
+	--    they both must be log(0) and so the sum is log(0)
+	if logx == -math.huge then
+		return -math.huge
+	-- If the smaller is log(0), then the sum is equal to the
+	--    bigger
+	elseif logy == -math.huge then
+		return logx
+	end
+	-- Do neat algebra
+	return logx + math.log(1 + math.exp(logy-logx))
+end
+function multinomialSampleLogSpace(logweights, logsum)
+	local result = 1
+	local logx = math.log(math.random()) + logsum
+	local logprobAccum = -math.huge
+	repeat
+		logprobAccum = logAdd(logprobAccum, logweights[result])
+		result = result + 1
+	until logprobAccum > logx or result > #logweights
+	return result - 1
+end
+function Resample.multinomialLogSpace(particles, logweights, n)
+	local logsum = logweights[1]
+	for i=2,#logweights do
+		logsum = logAdd(logsum, logweights[i])
+	end
+	local newparticles = {}
+	for i=1,n do
+		local idx = multinomialSampleLogSpace(logweights, logsum)
+		table.insert(newparticles, particles[idx]:newcopy())
+	end
+	return newparticles
+end
+
 ---------------------------------------------------------------
 
 -- Sequential importance resampling
@@ -205,7 +249,7 @@ local function SIR(program, args, opts)
 
 	-- Extract options
 	local nParticles = opts.nParticles or 200
-	local resample = opts.resample or Resample.systematic
+	-- local resample = opts.resample or Resample.systematic
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
