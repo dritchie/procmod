@@ -162,6 +162,34 @@ function Resample.systematic(particles, weights, n)
 	return resampleStratified(particles, weights, n, true)
 end
 
+function Resample.residual(particles, weights, n)
+	local sum = 0
+	for _,w in ipairs(weights) do
+		sum = sum + w
+	end
+	local newparticles = {}
+	-- Deterministically copy in proportion to weight, keep
+	--    track of residual weight
+	local m = n
+	local mr = m
+	for i,p in ipairs(particles) do
+		local w = weights[i]/sum
+		local mw = m*w
+		local k = math.floor(mw)
+		weights[i] = mw - k
+		mr = mr - k
+		for j=1,k do
+			table.insert(newparticles, p:newcopy())
+		end
+	end
+	-- Sample from residual weights
+	for i=1,mr do
+		local idx = distrib.multinomial.sample(weights)
+		table.insert(newparticles, particles[idx]:newcopy())
+	end
+	return newparticles
+end
+
 ---------------------------------------------------------------
 
 -- Sequential importance resampling
@@ -243,6 +271,29 @@ local function SIR(program, args, opts)
 	end
 	exit(particles)
 end
+
+---------------------------------------------------------------
+
+-- -- Asynchronous SMC with the Particle Cascade algorithm
+-- -- http://arxiv.org/abs/1407.2864
+-- -- (This is a single-threaded implementation)
+-- -- Options are:
+-- --    * nParticles: How many particles to run in total
+-- --    * nMax: Maximum number of particles that can be in flight at any time
+-- --    * verbose: Verbose output?
+-- --    * onParticleFinish: Callback that does something to a finished particle
+-- local function ParticleCascade(program, args, opts)
+-- 	local function nop() end
+
+-- 	-- Extract options
+-- 	local nParticles = opts.nParticles or 200
+-- 	local nMax = opts.nParticles or 500
+-- 	local verbose = opts.verbose
+-- 	local onParticleFinish = opts.onParticleFinish or nop
+
+-- 	-- Only need the simplest trace type
+-- 	local Trace = trace.FlatValueTrace
+-- end
 
 ---------------------------------------------------------------
 
