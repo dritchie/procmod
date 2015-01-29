@@ -168,14 +168,6 @@ end
 -- Options are:
 --    * nParticles: How many particles to run
 --    * resample: Which resampling alg to use
---    * doAnneal: Do annealing
---    * nAnnealSteps: Duration of time to do annealing
---    * annealStartTemp: Start temperature for annealing
---    * annealEndTemp: Final temperature for annealing
---    * doFunnel: Funnel the number of particles from a large number to a small number over time
---    * nFunnelSteps: Duration of time to do funneling
---    * funnelStartNum: Number of particles to start with
---    * funnelEndNum: Number of particles to end with
 --    * verbose: Verbose output?
 --    * beforeResample: Callback that does something with particles before resampling
 --    * afterResample: Callback that does something with particles after resampling
@@ -186,14 +178,6 @@ local function SIR(program, args, opts)
 	-- Extract options
 	local nParticles = opts.nParticles or 200
 	local resample = opts.resample or Resample.systematic
-	local doAnneal = opts.doAnneal
-	local nAnnealSteps = opts.nAnnealSteps or 10	-- No idea...
-	local annealStartTemp = opts.annealStartTemp or 100
-	local annealEndTemp = opts.annealEndTemp or 1
-	local doFunnel = opts.doFunnel
-	local nFunnelSteps = opts.nFunnelSteps or 10  	-- No idea...
-	local funnelStartNum = opts.funnelStartNum or 1000
-	local funnelEndNum = opts.funnelEndNum or 100
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
@@ -207,7 +191,6 @@ local function SIR(program, args, opts)
 	-- Init particles
 	local particles = {}
 	local weights = {}
-	if doFunnel then nParticles = funnelStartNum end
 	for i=1,nParticles do
 		-- Each particle gets a copy of any input args
 		local argscopy = {}
@@ -231,11 +214,6 @@ local function SIR(program, args, opts)
 				numfinished = numfinished + 1
 			end
 			weights[i] = p.trace.loglikelihood
-			if doAnneal then
-				local t = math.min(generation / nAnnealSteps, 1.0)
-				local temp = (1.0-t)*annealStartTemp + t*annealEndTemp
-				weights[i] = weights[i]/temp
-			end
 		end
 		local allfinished = (numfinished == nParticles)
 		if verbose then
@@ -247,10 +225,6 @@ local function SIR(program, args, opts)
 		util.expNoUnderflow(weights)
 		-- Resampling
 		beforeResample(particles)
-		if doFunnel then
-			local t = math.min(generation / nFunnelSteps, 1.0)
-			nParticles = (1.0-t)*funnelStartNum + t*funnelEndNum
-		end
 		local newparticles = resample(particles, weights, nParticles)
 		for _,p in ipairs(particles) do p:freeMemory() end
 		particles = newparticles
@@ -270,7 +244,7 @@ local function SIR(program, args, opts)
 	exit(particles)
 end
 
-
+---------------------------------------------------------------
 
 return
 {

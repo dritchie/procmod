@@ -1,8 +1,0 @@
-*.swatches
-scratch.config
-*.csv
-*.twb
-shadowMap.tiff
-shadowMask.png
-ben.config
-*.DS_Store
