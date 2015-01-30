@@ -318,26 +318,169 @@ end
 
 ---------------------------------------------------------------
 
--- -- Asynchronous SMC with the Particle Cascade algorithm
--- -- http://arxiv.org/abs/1407.2864
--- -- (This is a single-threaded implementation)
--- -- Options are:
--- --    * nParticles: How many particles to run in total
--- --    * nMax: Maximum number of particles that can be in flight at any time
--- --    * verbose: Verbose output?
--- --    * onParticleFinish: Callback that does something to a finished particle
--- local function ParticleCascade(program, args, opts)
--- 	local function nop() end
+-- Asynchronous SMC with the Particle Cascade algorithm
+-- http://arxiv.org/abs/1407.2864
+-- (This is a single-threaded implementation)
+-- Options are:
+--    * nParticles: How many particles to run
+--    * verbose: Verbose output?
+--    * onParticleFinish: Callback that does something to a finished particle
+local function ParticleCascade(program, args, opts)
 
--- 	-- Extract options
--- 	local nParticles = opts.nParticles or 200
--- 	local nMax = opts.nParticles or 500
--- 	local verbose = opts.verbose
--- 	local onParticleFinish = opts.onParticleFinish or nop
+	-- TODO: Bound memory usage:
+	--    * Bound the maximum number of particles that can be in flight
+	--         at any time.
+	--    * Have particles only spawn one child at at time before re-entering
+	--         the queue.
 
--- 	-- Only need the simplest trace type
--- 	local Trace = trace.FlatValueTrace
--- end
+	-- Extract options
+	local nParticles = opts.nParticles or 200
+	local verbose = opts.verbose
+	local onParticleFinish = opts.onParticleFinish or function(p) end
+
+	-- Only need the simplest trace type
+	local Trace = trace.FlatValueTrace
+
+	-- Process queue, stats for resampling points
+	local pqueue = {}
+	local resamplePoints = {}
+
+	-- Resampling point statistics
+	local ResamplingPoint = LS.LObject()
+	function ResamplingPoint:init()
+		self.k = 0
+		self.logWeightAvg = 0
+		self.childCount = 0
+		return self
+	end
+	function ResamplingPoint:computeNumChildrenAndWeight(logWeight)
+		self.k = self.k + 1
+		local logx = math.log((self.k-1)/self.k) + self.logWeightAvg
+		local logy = -math.log(self.k) + logWeight
+		self.logWeightAvg = logAdd(logx, logy)
+		local logRatio = logWeight - self.logWeightAvg
+		local numChildren
+		local childLogWeight
+		if logRatio < 0 then
+			if logRatio < math.log(math.random()) then
+				numChildren = 0
+				childLogWeight = -math.huge
+			else
+				numChildren = 1
+				childLogWeight = self.logWeightAvg
+			end
+		else
+			local thresh = math.min(nParticles, self.k - 1)
+			local ratio = math.exp(logRatio)
+			if self.childCount > thresh then
+				local rfloor = math.floor(ratio)
+				numChildren = rfloor
+				childLogWeight = logWeight - math.log(rfloor)
+			else
+				local rceil = math.ceil(ratio)
+				numChildren = rceil
+				childLogWeight = logWeight - math.log(rceil)
+			end
+		end
+		self.childCount = self.childCount + numChildren
+		return numChildren, childLogWeight
+	end
+
+	-- A particle process
+	local ProcessState = { Running = 0, Killed = 1, Finished = 2 }
+	local ParticleProcess = LS.LObject()
+	function ParticleProcess:init(particle)
+		self.particle = particle
+		self.state = ProcessState.Running
+		self.logWeight = 0
+		return self
+	end
+	function ParticleProcess:copy(other)
+		self.particle = other.particle:newcopy()
+		self.state = other.state
+		self.logWeight = other.logWeight
+		return self
+	end
+	function ParticleProcess:freeMemory()
+		self.particle:freeMemory()
+	end
+	function ParticleProcess:run()
+		-- We shouldn't ever attempt to run a dead process
+		assert(self.state == ProcessState.Running)
+		self.particle:step(1)
+		if self.particle.finished then
+			self.state = ProcessState.Finished
+			return 
+		end
+		self.logWeight = self.logWeight + self.particle.trace.loglikelihood
+		local n = self.particle.stopSyncIndex
+		if n > #resamplePoints then
+			table.insert(resamplePoints, ResamplingPoint.alloc():init())
+		end
+		local rsp = resamplePoints[n]
+		local numChildren, childWeight = rsp:computeNumChildrenAndWeight(self.logWeight)
+		if numChildren == 0 then
+			self.state = ProcessState.Killed
+		else
+			self.logWeight = childWeight
+			for i=2,numChildren do
+				table.insert(pqueue, ParticleProcess.alloc():copy(self))
+			end
+		end
+	end
+
+
+	-- The control process which spawns new particles
+	local ControlProcess = LS.LObject()
+	function ControlProcess:init()
+		self.state = ProcessState.Running
+		return self
+	end
+	function ControlProcess:run()
+		-- Each particle gets a copy of any inputs args
+		local argscopy = {}
+		for _,a in ipairs(args) do
+			local newa = LS.newcopy(a)
+			table.insert(argscopy, newa)
+		end
+		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
+		table.insert(pqueue, ParticleProcess.alloc():init(p))
+	end
+
+
+	-- Go! (main loop)
+	table.insert(pqueue, ControlProcess.alloc():init())
+	local nFinished = 0
+	local t0 = terralib.currenttimeinseconds()
+	while nFinished < nParticles do
+		local idx = math.ceil(math.random() * #pqueue)
+		local proc = pqueue[idx]
+		proc:run()
+		if proc.state == ProcessState.Killed then
+			proc:freeMemory()
+			table.remove(pqueue, idx)
+		elseif proc.state == ProcessState.Finished then
+			onParticleFinish(proc.particle)
+			proc:freeMemory()
+			table.remove(pqueue, idx)
+			nFinished = nFinished + 1
+			if verbose then
+				io.write(string.format("Finished %d/%d particles (%d currently in-flight).                \r",
+					nFinished, nParticles, #pqueue))
+				io.flush()
+			end
+		end
+	end
+	if verbose then
+		local t1 = terralib.currenttimeinseconds()
+		io.write("\n")
+		print("Time:", t1 - t0)
+		local trp = getTraceReplayTime()
+		print(string.format("Time spent on trace replay: %g (%g%%)",
+			trp, 100*(trp/(t1-t0))))
+	end
+
+end
 
 ---------------------------------------------------------------
 
@@ -345,6 +488,7 @@ return
 {
 	Resample = Resample,
 	SIR = SIR,
+	ParticleCascade = ParticleCascade,
 	isReplaying = function()
 		return globalParticle and globalParticle:isReplaying()
 	end,

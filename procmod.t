@@ -483,6 +483,56 @@ end
 
 ---------------------------------------------------------------
 
+-- Run the particle cascade on a procedural modeling program
+local function ParticleCascade(module, outgenerations, opts)
+	local StateType = GetStateType()
+	local globState = globalState(StateType)
+
+	local function makeGeoPrim(geofn)
+		local args = geofnargs(geofn)
+		local terra update([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			globState:update(tmpmesh, true)
+		end
+		return function(...)
+			if not smc.isReplaying() then
+				update(...)
+			end
+			prob.likelihood(globState:get():currentScore())
+			smc.sync()
+			prob.future.yield()
+		end
+	end
+
+	local function recordSample(particle)
+		if outgenerations:size() == 0 then
+			local v = outgenerations:insert()
+			LS.luainit(v)
+		end
+		local v = outgenerations:get(0)
+		local samp = v:insert()
+		if opts.saveSampleValues then
+			samp.value:copy(particle.trace.args[1]:getMesh())
+		else
+			LS.luainit(samp.value)
+		end
+		samp.logprob = particle.trace.loglikelihood
+		if globals.config.recordTraces then
+			particle.trace.args[1] = nil   -- Allow the state to be GC'ed
+			table.insert(recordedTraces, particle.trace)
+		end
+	end
+
+	local program = prepProgram(module, makeGeoPrim, StateType)
+	local newopts = LS.copytable(opts)
+	newopts.onParticleFinish = recordSample
+	local initstate = StateType.luaalloc():luainit()
+	smc.ParticleCascade(program, {initstate}, newopts)
+end
+
+---------------------------------------------------------------
+
 -- Metropolis hastings inference
 -- IMPORTANT: Don't use this with future-ized versions of programs: the co-routine
 --    switching will mess up the address stack (this is fixable, but I don't see a
@@ -672,6 +722,7 @@ return
 {
 	Sample = terralib.require("qs").Sample(Mesh),
 	SIR = SIR,
+	ParticleCascade = ParticleCascade,
 	MH = MH,
 	ForwardSample = ForwardSample,
 	RejectionSample = RejectionSample,
