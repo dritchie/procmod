@@ -327,16 +327,16 @@ end
 --    * onParticleFinish: Callback that does something to a finished particle
 local function ParticleCascade(program, args, opts)
 
-	-- TODO: Bound memory usage:
-	--    * Bound the maximum number of particles that can be in flight
-	--         at any time.
-	--    * Have particles only spawn one child at at time before re-entering
-	--         the queue.
+	-- TODO: Bound memory usage? (see paper for how they do it)
+	-- TODO: Weight avg n incorporates weight avg of finished particles at n-1?
+	--    (puts this algorithm more in line with the synchronous version)
 
 	-- Extract options
 	local nParticles = opts.nParticles or 200
 	local verbose = opts.verbose
 	local onParticleFinish = opts.onParticleFinish or function(p) end
+
+	clearTraceReplayTime()
 
 	-- Only need the simplest trace type
 	local Trace = trace.FlatValueTrace
@@ -347,10 +347,11 @@ local function ParticleCascade(program, args, opts)
 
 	-- Resampling point statistics
 	local ResamplingPoint = LS.LObject()
-	function ResamplingPoint:init()
+	function ResamplingPoint:init(n)
 		self.k = 0
 		self.logWeightAvg = 0
 		self.childCount = 0
+		self.n = n
 		return self
 	end
 	function ResamplingPoint:computeNumChildrenAndWeight(logWeight)
@@ -415,7 +416,7 @@ local function ParticleCascade(program, args, opts)
 		self.logWeight = self.logWeight + self.particle.trace.loglikelihood
 		local n = self.particle.stopSyncIndex
 		if n > #resamplePoints then
-			table.insert(resamplePoints, ResamplingPoint.alloc():init())
+			table.insert(resamplePoints, ResamplingPoint.alloc():init(n))
 		end
 		local rsp = resamplePoints[n]
 		local numChildren, childWeight = rsp:computeNumChildrenAndWeight(self.logWeight)
@@ -434,6 +435,7 @@ local function ParticleCascade(program, args, opts)
 	local ControlProcess = LS.LObject()
 	function ControlProcess:init()
 		self.state = ProcessState.Running
+		self.nStarted = 0
 		return self
 	end
 	function ControlProcess:run()
@@ -445,6 +447,12 @@ local function ParticleCascade(program, args, opts)
 		end
 		local p = Particle(Trace).alloc():init(program, unpack(argscopy))
 		table.insert(pqueue, ParticleProcess.alloc():init(p))
+		self.nStarted = self.nStarted + 1
+		-- Terminate the control process if we've started all the
+		--    initial particles
+		if self.nStarted == nParticles then
+			self.state = ProcessState.Finished
+		end
 	end
 
 
@@ -452,23 +460,27 @@ local function ParticleCascade(program, args, opts)
 	table.insert(pqueue, ControlProcess.alloc():init())
 	local nFinished = 0
 	local t0 = terralib.currenttimeinseconds()
-	while nFinished < nParticles do
+	while nFinished < nParticles and #pqueue > 0 do
 		local idx = math.ceil(math.random() * #pqueue)
 		local proc = pqueue[idx]
 		proc:run()
 		if proc.state == ProcessState.Killed then
-			proc:freeMemory()
+			if proc.particle then
+				proc:freeMemory()
+			end
 			table.remove(pqueue, idx)
 		elseif proc.state == ProcessState.Finished then
-			onParticleFinish(proc.particle)
-			proc:freeMemory()
-			table.remove(pqueue, idx)
-			nFinished = nFinished + 1
-			if verbose then
-				io.write(string.format("Finished %d/%d particles (%d currently in-flight).                \r",
-					nFinished, nParticles, #pqueue))
-				io.flush()
+			if proc.particle then
+				onParticleFinish(proc.particle)
+				proc:freeMemory()
+				nFinished = nFinished + 1
+				if verbose then
+					io.write(string.format("Finished %d/%d particles (%d currently in-flight).                \r",
+						nFinished, nParticles, #pqueue-1))
+					io.flush()
+				end
 			end
+			table.remove(pqueue, idx)
 		end
 	end
 	if verbose then
