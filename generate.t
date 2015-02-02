@@ -26,7 +26,7 @@ local function run(generations)
 	}
 
 	local pcascadeopts = {
-		nParticles = globals.config.nSamples,		
+		nParticles = globals.config.nSamples,
 		saveSampleValues = globals.config.saveSampleValues,
 		verbose = globals.config.verbose
 	}

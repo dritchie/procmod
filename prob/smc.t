@@ -523,7 +523,7 @@ local function ParticleCascade(program, args, opts)
 		return idx, pqueue[idx]
 	end
 	local function dequeueProcessRandGreedyMix()
-		local mixparam = 0.5
+		local mixparam = 0.1
 		if math.random() < mixparam then
 			return dequeueProcessRand()
 		else
@@ -549,7 +549,7 @@ local function ParticleCascade(program, args, opts)
 
 
 	-- Go! (main loop)
-	local dequeueProcess = dequeueProcessRand
+	local dequeueProcess = dequeueProcessRandGreedyMix
 	table.insert(pqueue, ControlProcess.alloc():init())
 	local nFinished = 0
 	local t0 = terralib.currenttimeinseconds()
