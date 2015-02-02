@@ -373,6 +373,7 @@ local function ParticleCascade(program, args, opts)
 		else
 			local thresh = math.min(nParticles, self.k - 1)
 			local ratio = math.exp(logRatio)
+			-- print(string.format("ratio: %g (n = %d, k = %d)", ratio, self.n, self.k))
 			if self.childCount > thresh then
 				local rfloor = math.floor(ratio)
 				numChildren = rfloor
@@ -387,19 +388,22 @@ local function ParticleCascade(program, args, opts)
 		return numChildren, childLogWeight
 	end
 
-	-- A particle process
 	local ProcessState = { Running = 0, Killed = 1, Finished = 2 }
+
+	-- A particle process
 	local ParticleProcess = LS.LObject()
 	function ParticleProcess:init(particle)
 		self.particle = particle
 		self.state = ProcessState.Running
 		self.logWeight = 0
+		self.numChildrenToSpawn = 0
 		return self
 	end
 	function ParticleProcess:copy(other)
 		self.particle = other.particle:newcopy()
 		self.state = other.state
 		self.logWeight = other.logWeight
+		self.numChildrenToSpawn = 0
 		return self
 	end
 	function ParticleProcess:freeMemory()
@@ -408,6 +412,13 @@ local function ParticleCascade(program, args, opts)
 	function ParticleProcess:run()
 		-- We shouldn't ever attempt to run a dead process
 		assert(self.state == ProcessState.Running)
+		-- If this particle is still spawning children, continue doing that
+		if self.numChildrenToSpawn > 0 then
+			table.insert(pqueue, ParticleProcess.alloc():copy(self))
+			self.numChildrenToSpawn = self.numChildrenToSpawn - 1
+			return
+		end
+		-- Otherwise, advance to the next resample point
 		self.particle:step(1)
 		if self.particle.finished then
 			self.state = ProcessState.Finished
@@ -424,8 +435,14 @@ local function ParticleCascade(program, args, opts)
 			self.state = ProcessState.Killed
 		else
 			self.logWeight = childWeight
-			for i=2,numChildren do
+			numChildren = numChildren - 1 	-- Continue self as one child
+			if numChildren > 0 then
+				-- Only spawn one child at a time before returning to the process queue
 				table.insert(pqueue, ParticleProcess.alloc():copy(self))
+				numChildren = numChildren - 1
+				if numChildren > 0 then
+					self.numChildrenToSpawn = numChildren
+				end
 			end
 		end
 	end
