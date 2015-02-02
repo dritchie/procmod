@@ -249,7 +249,7 @@ local function SIR(program, args, opts)
 
 	-- Extract options
 	local nParticles = opts.nParticles or 200
-	-- local resample = opts.resample or Resample.systematic
+	local resample = opts.resample or Resample.systematic
 	local verbose = opts.verbose
 	local beforeResample = opts.beforeResample or nop
 	local afterResample = opts.afterResample or nop
@@ -327,7 +327,8 @@ end
 --    * onParticleFinish: Callback that does something to a finished particle
 local function ParticleCascade(program, args, opts)
 
-	-- TODO: Bound memory usage? (see paper for how they do it)
+	-- TODO: Bound memory usage? (by not spawning new particles when the system
+	--    is 'full' and instead adjusting weight to account for multiplicity)
 	-- TODO: Weight avg n incorporates weight avg of finished particles at n-1?
 	--    (puts this algorithm more in line with the synchronous version)
 
