@@ -329,8 +329,6 @@ local function ParticleCascade(program, args, opts)
 
 	-- TODO: Bound memory usage? (by not spawning new particles when the system
 	--    is 'full' and instead adjusting weight to account for multiplicity)
-	-- TODO: Weight avg n incorporates weight avg of finished particles at n-1?
-	--    (puts this algorithm more in line with the synchronous version)
 
 	-- Extract options
 	local nParticles = opts.nParticles or 200
@@ -350,16 +348,34 @@ local function ParticleCascade(program, args, opts)
 	local ResamplingPoint = LS.LObject()
 	function ResamplingPoint:init(n)
 		self.k = 0
+		self.kFinished = 0
 		self.logWeightAvg = 0
+		self.logWeightAvgFinished = 0
 		self.childCount = 0
 		self.n = n
+		-- -- If there are resampling points before this one, then inherit initial 
+		-- --    weight stats from particles that finished by the immediately
+		-- --    preceding resampling point.
+		-- if n > 1 then
+		-- 	self.k = resamplePoints[n-1].kFinished
+		-- 	self.logWeightAvg = resamplePoints[n-1].logWeightAvgFinished
+		-- end
 		return self
 	end
-	function ResamplingPoint:computeNumChildrenAndWeight(logWeight)
+	function ResamplingPoint:updateWeightAvg(logWeight)
 		self.k = self.k + 1
 		local logx = math.log((self.k-1)/self.k) + self.logWeightAvg
 		local logy = -math.log(self.k) + logWeight
 		self.logWeightAvg = logAdd(logx, logy)
+	end
+	function ResamplingPoint:updateFinishedWeightAvg(logWeight)
+		self.kFinished = self.kFinished + 1
+		local logx = math.log((self.kFinished-1)/self.kFinished) + self.logWeightAvgFinished
+		local logy = -math.log(self.kFinished) + logWeight
+		self.logWeightAvgFinished = logAdd(logx, logy)
+	end
+	function ResamplingPoint:computeNumChildrenAndWeight(logWeight)
+		self:updateWeightAvg(logWeight)
 		local logRatio = logWeight - self.logWeightAvg
 		local numChildren
 		local childLogWeight
@@ -423,6 +439,13 @@ local function ParticleCascade(program, args, opts)
 		self.particle:step(1)
 		if self.particle.finished then
 			self.state = ProcessState.Finished
+			-- -- Update finished weight averages
+			-- local n = self.particle.stopSyncIndex-1
+			-- resamplePoints[n]:updateFinishedWeightAvg(self.logWeight)
+			-- for i=n+1,#resamplePoints do
+			-- 	resamplePoints[i]:updateWeightAvg(self.logWeight)
+			-- 	resamplePoints[i]:updateFinishedWeightAvg(self.logWeight)
+			-- end
 			return 
 		end
 		self.logWeight = self.logWeight + self.particle.trace.loglikelihood
