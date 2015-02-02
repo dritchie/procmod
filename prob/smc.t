@@ -363,18 +363,26 @@ local function ParticleCascade(program, args, opts)
 		return self
 	end
 	function ResamplingPoint:updateWeightAvg(logWeight)
+		-- Slice out zero-probability states
+		if logWeight == -math.huge then return end
 		self.k = self.k + 1
 		local logx = math.log((self.k-1)/self.k) + self.logWeightAvg
 		local logy = -math.log(self.k) + logWeight
 		self.logWeightAvg = logAdd(logx, logy)
 	end
 	function ResamplingPoint:updateFinishedWeightAvg(logWeight)
+		-- Slice out zero-probability states
+		if logWeight == -math.huge then return end
 		self.kFinished = self.kFinished + 1
 		local logx = math.log((self.kFinished-1)/self.kFinished) + self.logWeightAvgFinished
 		local logy = -math.log(self.kFinished) + logWeight
 		self.logWeightAvgFinished = logAdd(logx, logy)
 	end
 	function ResamplingPoint:computeNumChildrenAndWeight(logWeight)
+		-- Slice out zero-probability states
+		if logWeight == -math.huge then
+			return 0, -math.huge
+		end
 		self:updateWeightAvg(logWeight)
 		local logRatio = logWeight - self.logWeightAvg
 		local numChildren
@@ -390,7 +398,6 @@ local function ParticleCascade(program, args, opts)
 		else
 			local thresh = math.min(nParticles, self.k - 1)
 			local ratio = math.exp(logRatio)
-			-- print(string.format("ratio: %g (n = %d, k = %d)", ratio, self.n, self.k))
 			if self.childCount > thresh then
 				local rfloor = math.floor(ratio)
 				numChildren = rfloor
@@ -477,10 +484,11 @@ local function ParticleCascade(program, args, opts)
 	function ControlProcess:init()
 		self.state = ProcessState.Running
 		self.nStarted = 0
+		self.logWeight = math.huge  	-- For greedy dequeue
 		return self
 	end
 	function ControlProcess:run()
-		-- Each particle gets a copy of any inputs args
+		-- Each particle gets a copy of any input args
 		local argscopy = {}
 		for _,a in ipairs(args) do
 			local newa = LS.newcopy(a)
@@ -497,13 +505,56 @@ local function ParticleCascade(program, args, opts)
 	end
 
 
+	-- Different ordering schemes for process dequeueing
+	local function dequeueProcessRand()
+		local idx = math.ceil(math.random() * #pqueue)
+		return idx, pqueue[idx]
+	end
+	local function dequeueProcessGreedy()
+		local maxweight = -math.huge
+		local idx = 0
+		for i=1,#pqueue do
+			local p = pqueue[i]
+			if p.logWeight >= maxweight then
+				maxweight = p.logWeight
+				idx = i
+			end
+		end
+		return idx, pqueue[idx]
+	end
+	local function dequeueProcessRandGreedyMix()
+		local mixparam = 0.5
+		if math.random() < mixparam then
+			return dequeueProcessRand()
+		else
+			return dequeueProcessGreedy()
+		end
+	end
+	local function dequeueProcessGreedyWithRandSpawn()
+		local mixparam = 0.1
+		if getmetatable(pqueue[1]) == ControlProcess then
+			if math.random() < mixparam then
+				return 1, pqueue[1]
+			else
+				-- Greedy select from everything *except* the control process
+				pqueue[1].logWeight = -math.huge
+				local idx, proc = dequeueProcessGreedy()
+				pqueue[1].logWeight = math.huge
+				return idx, proc
+			end
+		else
+			return dequeueProcessGreedy()
+		end
+	end
+
+
 	-- Go! (main loop)
+	local dequeueProcess = dequeueProcessRand
 	table.insert(pqueue, ControlProcess.alloc():init())
 	local nFinished = 0
 	local t0 = terralib.currenttimeinseconds()
 	while nFinished < nParticles and #pqueue > 0 do
-		local idx = math.ceil(math.random() * #pqueue)
-		local proc = pqueue[idx]
+		local idx, proc = dequeueProcess()
 		proc:run()
 		if proc.state == ProcessState.Killed then
 			if proc.particle then
