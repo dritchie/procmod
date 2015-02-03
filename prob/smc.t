@@ -547,11 +547,19 @@ local function ParticleCascade(program, args, opts)
 		end
 	end
 
+	-- Choose dequeue method and initialize process queue
+	local dequeueProcess = dequeueProcessRand
+	table.insert(pqueue, ControlProcess.alloc():init())
+	-- local dequeueProcess = dequeueProcessGreedy
+	-- local spawner = ControlProcess.alloc():init()
+	-- while spawner.state ~= ProcessState.Finished do
+	-- 	spawner:run()
+	-- end
 
 	-- Go! (main loop)
-	local dequeueProcess = dequeueProcessRandGreedyMix
-	table.insert(pqueue, ControlProcess.alloc():init())
+	local iters = 0
 	local nFinished = 0
+	local nKilled = 0
 	local t0 = terralib.currenttimeinseconds()
 	while nFinished < nParticles and #pqueue > 0 do
 		local idx, proc = dequeueProcess()
@@ -559,6 +567,7 @@ local function ParticleCascade(program, args, opts)
 		if proc.state == ProcessState.Killed then
 			if proc.particle then
 				proc:freeMemory()
+				nKilled = nKilled + 1
 			end
 			table.remove(pqueue, idx)
 		elseif proc.state == ProcessState.Finished then
@@ -566,14 +575,22 @@ local function ParticleCascade(program, args, opts)
 				onParticleFinish(proc.particle)
 				proc:freeMemory()
 				nFinished = nFinished + 1
-				if verbose then
-					io.write(string.format("Finished %d/%d particles (%d currently in-flight).                \r",
-						nFinished, nParticles, #pqueue-1))
-					io.flush()
-				end
 			end
 			table.remove(pqueue, idx)
 		end
+		if verbose then
+			io.write(string.format(" Iteration %d: Finished %d/%d particles (%d terminated, %d in flight).                \r",
+				iters, nFinished, nParticles, nKilled, #pqueue-1))
+			io.flush()
+		end
+		iters = iters + 1
+		-- -- TEST: Keep pipe full
+		-- if #pqueue < nParticles then
+		-- 	local gap = nParticles - #pqueue
+		-- 	for i=1,gap do
+		-- 		spawner:run()
+		-- 	end
+		-- end
 	end
 	if verbose then
 		local t1 = terralib.currenttimeinseconds()
