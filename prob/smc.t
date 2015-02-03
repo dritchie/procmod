@@ -323,15 +323,15 @@ end
 -- (This is a single-threaded implementation)
 -- Options are:
 --    * nParticles: How many particles to run
+--    * nMax: Maximum number of simultaneous particles (0 means no limit)
 --    * verbose: Verbose output?
 --    * onParticleFinish: Callback that does something to a finished particle
 local function ParticleCascade(program, args, opts)
 
-	-- TODO: Bound memory usage? (by not spawning new particles when the system
-	--    is 'full' and instead adjusting weight to account for multiplicity)
-
 	-- Extract options
 	local nParticles = opts.nParticles or 200
+	local nMax = opts.nMax or 0
+	if nMax == 0 then nMax = 1000000000 end
 	local verbose = opts.verbose
 	local onParticleFinish = opts.onParticleFinish or function(p) end
 
@@ -362,28 +362,33 @@ local function ParticleCascade(program, args, opts)
 		-- end
 		return self
 	end
-	function ResamplingPoint:updateWeightAvg(logWeight)
+	function ResamplingPoint:updateWeightAvg(particleProcess)
+		local logWeight = particleProcess.logWeight
+		local multiplicity = particleProcess.multiplicity
 		-- Slice out zero-probability states
 		if logWeight == -math.huge then return end
 		self.k = self.k + 1
-		local logx = math.log((self.k-1)/self.k) + self.logWeightAvg
-		local logy = -math.log(self.k) + logWeight
+		local logx = math.log((self.k-1)/(self.k+multiplicity-1)) + self.logWeightAvg
+		local logy = math.log(multiplicity/(self.k+multiplicity-1)) + logWeight
 		self.logWeightAvg = logAdd(logx, logy)
 	end
-	function ResamplingPoint:updateFinishedWeightAvg(logWeight)
+	function ResamplingPoint:updateFinishedWeightAvg(particleProcess)
+		local logWeight = particleProcess.logWeight
+		local multiplicity = particleProcess.multiplicity
 		-- Slice out zero-probability states
 		if logWeight == -math.huge then return end
 		self.kFinished = self.kFinished + 1
-		local logx = math.log((self.kFinished-1)/self.kFinished) + self.logWeightAvgFinished
-		local logy = -math.log(self.kFinished) + logWeight
+		local logx = math.log((self.kFinished-1)/(self.kFinished+multiplicity-1)) + self.logWeightAvgFinished
+		local logy = math.log(multiplicity/(self.kFinished+multiplicity-1)) + logWeight
 		self.logWeightAvgFinished = logAdd(logx, logy)
 	end
-	function ResamplingPoint:computeNumChildrenAndWeight(logWeight)
+	function ResamplingPoint:computeNumChildrenAndWeight(particleProcess)
+		local logWeight = particleProcess.logWeight
 		-- Slice out zero-probability states
 		if logWeight == -math.huge then
 			return 0, -math.huge
 		end
-		self:updateWeightAvg(logWeight)
+		self:updateWeightAvg(particleProcess)
 		local logRatio = logWeight - self.logWeightAvg
 		local numChildren
 		local childLogWeight
@@ -421,6 +426,7 @@ local function ParticleCascade(program, args, opts)
 		self.state = ProcessState.Running
 		self.logWeight = 0
 		self.numChildrenToSpawn = 0
+		self.multiplicity = 1
 		return self
 	end
 	function ParticleProcess:copy(other)
@@ -428,6 +434,7 @@ local function ParticleCascade(program, args, opts)
 		self.state = other.state
 		self.logWeight = other.logWeight
 		self.numChildrenToSpawn = 0
+		self.multiplicity = other.multiplicity
 		return self
 	end
 	function ParticleProcess:freeMemory()
@@ -438,8 +445,15 @@ local function ParticleCascade(program, args, opts)
 		assert(self.state == ProcessState.Running)
 		-- If this particle is still spawning children, continue doing that
 		if self.numChildrenToSpawn > 0 then
-			table.insert(pqueue, ParticleProcess.alloc():copy(self))
-			self.numChildrenToSpawn = self.numChildrenToSpawn - 1
+			-- Only insert new child particles if the process queue has space
+			if #pqueue < nMax then
+				table.insert(pqueue, ParticleProcess.alloc():copy(self))
+				self.numChildrenToSpawn = self.numChildrenToSpawn - 1
+			else
+				-- Collapse all child particles into this one and increase its multiplicity
+				self.multiplicity = self.multiplicity * self.numChildrenToSpawn
+				self.numChildrenToSpawn = 0
+			end
 			return
 		end
 		-- Otherwise, advance to the next resample point
@@ -448,10 +462,10 @@ local function ParticleCascade(program, args, opts)
 			self.state = ProcessState.Finished
 			-- -- Update finished weight averages
 			-- local n = self.particle.stopSyncIndex-1
-			-- resamplePoints[n]:updateFinishedWeightAvg(self.logWeight)
+			-- resamplePoints[n]:updateFinishedWeightAvg(self)
 			-- for i=n+1,#resamplePoints do
-			-- 	resamplePoints[i]:updateWeightAvg(self.logWeight)
-			-- 	resamplePoints[i]:updateFinishedWeightAvg(self.logWeight)
+			-- 	resamplePoints[i]:updateWeightAvg(self)
+			-- 	resamplePoints[i]:updateFinishedWeightAvg(self)
 			-- end
 			return 
 		end
@@ -461,19 +475,14 @@ local function ParticleCascade(program, args, opts)
 			table.insert(resamplePoints, ResamplingPoint.alloc():init(n))
 		end
 		local rsp = resamplePoints[n]
-		local numChildren, childWeight = rsp:computeNumChildrenAndWeight(self.logWeight)
+		local numChildren, childWeight = rsp:computeNumChildrenAndWeight(self)
 		if numChildren == 0 then
 			self.state = ProcessState.Killed
 		else
 			self.logWeight = childWeight
 			numChildren = numChildren - 1 	-- Continue self as one child
 			if numChildren > 0 then
-				-- Only spawn one child at a time before returning to the process queue
-				table.insert(pqueue, ParticleProcess.alloc():copy(self))
-				numChildren = numChildren - 1
-				if numChildren > 0 then
-					self.numChildrenToSpawn = numChildren
-				end
+				self.numChildrenToSpawn = numChildren
 			end
 		end
 	end
@@ -579,8 +588,8 @@ local function ParticleCascade(program, args, opts)
 			table.remove(pqueue, idx)
 		end
 		if verbose then
-			io.write(string.format(" Iteration %d: Finished %d/%d particles (%d terminated, %d in flight).                \r",
-				iters, nFinished, nParticles, nKilled, #pqueue-1))
+			io.write(string.format(" Iteration %d: Finished %d/%d particles (%d in flight, %d terminated).                \r",
+				iters, nFinished, nParticles, #pqueue, nKilled))
 			io.flush()
 		end
 		iters = iters + 1
