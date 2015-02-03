@@ -289,7 +289,7 @@ local function SIR(program, args, opts)
 		end
 		local allfinished = (numfinished == nParticles)
 		if verbose then
-			io.write(string.format("Generation %u: Finished %u/%u particles.        \r",
+			io.write(string.format(" Generation %u: Finished %u/%u particles.        \r",
 				generation, numfinished, nParticles))
 			io.flush()
 		end
@@ -314,6 +314,111 @@ local function SIR(program, args, opts)
 			trp, 100*(trp/(t1-t0))))
 	end
 	exit(particles)
+end
+
+---------------------------------------------------------------
+
+-- Particle Gibbs sampling
+-- Options are:
+--    * nParticles: How many particles to run per sweep
+--    * nSweeps: Number of sweeps to run
+--    * resample: Which resampling alg to use
+--    * verbose: Verbose output?
+--    * onSweep: Callback that does something with particles when a sweep has finished
+local function ParticleGibbs(program, args, opts)
+	local function nop() end
+
+	-- Extract options
+	local nSweeps = opts.nSweeps or 100
+	local nParticles = opts.nParticles or 20
+	local resample = opts.resample or Resample.systematic
+	local verbose = opts.verbose
+	local onSweep = opts.onSweep or nop
+
+	clearTraceReplayTime()
+
+	-- Only need the simplest trace
+	local Trace = trace.FlatValueTrace
+
+	-- Subroutine that performs an SMC sweep, potentially with a retained particle
+	-- Returns a list of particles and a list of weights
+	local function smcSweep(sweepNum, retainedParticle)
+		local nUncondtionedParticles = retainedParticle and nParticles - 1 or nParticles
+		-- Init particles
+		local particles = {}
+		local weights = {}
+		for i=1,nUncondtionedParticles do
+			local argscopy = {}
+			for _,a in ipairs(args) do
+				local newa = LS.newcopy(a)
+				table.insert(argscopy, newa)
+			end
+			local p = Particle(Trace).alloc():init(program, unpack(argscopy))
+			table.insert(particles, p)
+		end
+		table.insert(particles, retainedParticle)
+		-- Run sweep
+		local generation = 1
+		repeat
+			local numfinished = 0
+			-- Sample
+			weights = {}
+			for i,p in ipairs(particles) do
+				p:step(1)
+				if p.finished then numfinished = numfinished + 1 end
+				-- TODO: This won't work for retained particle...
+				weights[i] = p.trace.loglikelihood
+			end
+			local allfinished = (numfinished == nParticles)
+			if verbose then
+				io.write(string.format(" Sweep %u, Generation %u (finished %u/%u particles)              \r",
+					sweepNum, generation, numfinished, nParticles))
+				io.flush()
+			end
+			-- Resample
+			util.expNoUnderflow(weights)
+			local newparticles = resample(particles, weights, nUncondtionedParticles)
+			-- TODO: If we copied the retained particle, then we need those copies to erase any
+			--    trace/state after the current sync point.
+			if retainedParticle then
+				table.insert(newparticles, retainedParticle)
+				table.remove(particles, #particles)
+			end
+			for _,p in ipairs(particles) do p:freeMemory() end
+			particles = newparticles
+			generation = generation + 1
+		until allfinished
+		return particles, weights
+	end
+
+	-- Run sweeps
+	local t0 = terralib.currenttimeinseconds()
+	local retainedParticle = nil
+	for i=1,nSweeps do
+		local P, W
+		if retainedParticle then
+			P, W = smcSweep(i, retainedParticle)
+		else
+			P, W = smcSweep(i)
+		end
+		onSweep(P)
+		-- Sample the next retained particle
+		local idx = distrib.multinomial.sample(W)
+		retainedParticle = P[idx]
+		-- TODO: Do something to 'reset' the retained particle to run from the beginning
+		-- Free memory for all other particles (rather than wait for GC)
+		for i,p in ipairs(P) do
+			if i ~= idx then p:freeMemory() end
+		end
+	end
+	if verbose then
+		local t1 = terralib.currenttimeinseconds()
+		io.write("\n")
+		print("Time:", t1 - t0)
+		local trp = getTraceReplayTime()
+		print(string.format("Time spent on trace replay: %g (%g%%)",
+			trp, 100*(trp/(t1-t0))))
+	end
 end
 
 ---------------------------------------------------------------
