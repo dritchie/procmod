@@ -98,10 +98,113 @@ local Particle = S.memoize(function(Trace)
 	return Particle
 end)
 
+
+-- Specialized type of particle that snapshots partial traces at resampling points
+--   and can be used as a retained particle for Particle Gibbs
+local RetainableParticle = S.memoize(function(Trace)
+	local RetainableParticle = LS.LObject()
+
+	-- TODO: We could probably implement MH in terms of an object like this one,
+	--    and then remove the need for the special 'MHState' in procmod.t ...
+
+	function RetainableParticle:init(program, ...)
+		self.inittrace = Trace.alloc():init(program, ...)
+		self.traces = {}
+		self.finished = false
+		self.currSyncIndex = 1
+		self.stopSyncIndex = 0
+		self.lastStopSyncIndex = 0
+		return self
+	end
+
+	function RetainableParticle:copy(other)
+		self.finished = other.finished
+		self.currSyncIndex = other.currSyncIndex
+		self.stopSyncIndex = other.stopSyncIndex
+		self.lastStopSyncIndex = other.lastStopSyncIndex
+		-- Copy traces up to the stop sync index (any traces beyond
+		--    this correspond to the tail end of a copy of a retained
+		--     particle that should be re-simulated)
+		self.traces = {}
+		for i=1,self.stopSyncIndex do
+			table.insert(self.traces, other.traces[i]:newcopy())
+		end
+		return self
+	end
+
+	function RetainableParticle:freeMemory()
+		for _,t in ipairs(self.traces) do t:freeMemory() end
+	end
+
+	function RetainableParticle:isReplaying()
+		return self.currSyncIndex <= self.lastStopSyncIndex
+	end
+
+	function RetainableParticle:sync()
+		if self.currSyncIndex == self.stopSyncIndex then
+			error(SMC_SYNC_ERROR)
+		else
+			local wasReplaying = self:isReplaying()
+			self.currSyncIndex = self.currSyncIndex + 1
+			if wasReplaying and not self:isReplaying() then
+				stopTraceReplayTimer()
+			end
+		end
+	end
+
+	function RetainableParticle:currTrace()
+		return self.traces[self.stopSyncIndex]
+	end
+
+	function RetainableParticle:currLogWeight()
+		return self.traces[self.stopSyncIndex].loglikelihood
+	end
+
+	function RetainableParticle:step()
+		if not self.finished then
+			self.stopSyncIndex = self.stopSyncIndex + 1
+			-- We only need to simulate forward if we don't already have a 
+			--    trace recorded for the next sync point
+			if #self.traces < self.stopSyncIndex then
+				if #self.traces == 0 then
+					assert(self.inittrace)
+					table.insert(self.traces, self.inittrace)
+				else
+					table.insert(self.traces, Trace.alloc():copy(self.traces[#self.traces]))
+				end
+				local prevGlobalParticle = globalParticle
+				globalParticle = self
+				self.currSyncIndex = 1
+				if self:isReplaying() then startTraceReplayTimer() end
+				local runtrace = self.traces[#self.traces]
+				local succ, err = pcall(function() runtrace:run() end)
+				if succ then
+					self.finished = true
+				elseif err ~= SMC_SYNC_ERROR then
+					error(err)
+				end
+				self.lastStopSyncIndex = self.stopSyncIndex
+				globalParticle = prevGlobalParticle
+			else
+				self.finished = (#self.traces == self.stopSyncIndex)
+			end
+		end
+	end
+
+	-- Reset sync index so that this particle will start 'running' again from the beginning
+	function RetainableParticle:reset()
+		self.finished = false
+		self.stopSyncIndex = 0
+		self.lastStopSyncIndex = 0
+	end
+
+	return RetainableParticle
+end)
+
+
 ---------------------------------------------------------------
 
 -- Different importance resampling algorithms
--- TODO: Potentially replace these with Terra code, if it has better perf?
 
 local Resample = {}
 
@@ -353,10 +456,12 @@ local function ParticleGibbs(program, args, opts)
 				local newa = LS.newcopy(a)
 				table.insert(argscopy, newa)
 			end
-			local p = Particle(Trace).alloc():init(program, unpack(argscopy))
+			local p = RetainableParticle(Trace).alloc():init(program, unpack(argscopy))
 			table.insert(particles, p)
 		end
-		table.insert(particles, retainedParticle)
+		if retainedParticle then
+			table.insert(particles, retainedParticle)
+		end
 		-- Run sweep
 		local generation = 1
 		repeat
@@ -364,10 +469,9 @@ local function ParticleGibbs(program, args, opts)
 			-- Sample
 			weights = {}
 			for i,p in ipairs(particles) do
-				p:step(1)
+				p:step()
 				if p.finished then numfinished = numfinished + 1 end
-				-- TODO: This won't work for retained particle...
-				weights[i] = p.trace.loglikelihood
+				weights[i] = p:currLogWeight()
 			end
 			local allfinished = (numfinished == nParticles)
 			if verbose then
@@ -378,11 +482,9 @@ local function ParticleGibbs(program, args, opts)
 			-- Resample
 			util.expNoUnderflow(weights)
 			local newparticles = resample(particles, weights, nUncondtionedParticles)
-			-- TODO: If we copied the retained particle, then we need those copies to erase any
-			--    trace/state after the current sync point.
 			if retainedParticle then
-				table.insert(newparticles, retainedParticle)
 				table.remove(particles, #particles)
+				table.insert(newparticles, retainedParticle)
 			end
 			for _,p in ipairs(particles) do p:freeMemory() end
 			particles = newparticles
@@ -397,6 +499,8 @@ local function ParticleGibbs(program, args, opts)
 	for i=1,nSweeps do
 		local P, W
 		if retainedParticle then
+			-- 'Reset' the retained particle to run from the beginning
+			retainedParticle:reset()
 			P, W = smcSweep(i, retainedParticle)
 		else
 			P, W = smcSweep(i)
@@ -405,7 +509,6 @@ local function ParticleGibbs(program, args, opts)
 		-- Sample the next retained particle
 		local idx = distrib.multinomial.sample(W)
 		retainedParticle = P[idx]
-		-- TODO: Do something to 'reset' the retained particle to run from the beginning
 		-- Free memory for all other particles (rather than wait for GC)
 		for i,p in ipairs(P) do
 			if i ~= idx then p:freeMemory() end
@@ -723,6 +826,7 @@ return
 {
 	Resample = Resample,
 	SIR = SIR,
+	ParticleGibbs = ParticleGibbs,
 	ParticleCascade = ParticleCascade,
 	isReplaying = function()
 		return globalParticle and globalParticle:isReplaying()

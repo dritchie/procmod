@@ -408,7 +408,7 @@ end
 
 ---------------------------------------------------------------
 
--- Run sequential importance sampling on a procedural modeling program,
+-- Run sequential importance resampling on a procedural modeling program,
 --    saving the generated meshes
 -- 'outgenerations' is a cdata Vector(Vector(Sample(Mesh)))
 local function SIR(module, outgenerations, opts)
@@ -479,6 +479,68 @@ local function SIR(module, outgenerations, opts)
 	-- Run smc.SIR with an initial empty State object as argument
 	local initstate = StateType.luaalloc():luainit()
 	smc.SIR(program, {initstate}, newopts)
+end
+
+---------------------------------------------------------------
+
+-- Run Particle Gibbs
+local function ParticleGibbs(module, outgenerations, opts)
+	
+	local StateType = GetStateType()
+	local globState = globalState(StateType)
+
+	local function makeGeoPrim(geofn)
+		local args = geofnargs(geofn)
+		local terra update([args])
+			var tmpmesh = Mesh.salloc():init()
+			geofn(tmpmesh, [args])
+			globState:update(tmpmesh, true)
+		end
+		return function(...)
+			if not smc.isReplaying() then
+				update(...)
+			end
+			prob.likelihood(globState:get():currentScore())
+			smc.sync()
+			prob.future.yield()
+		end
+	end
+
+	local function copyMeshes(particles, outgenerations)
+		local newgeneration = outgenerations:insert()
+		LS.luainit(newgeneration)
+		for _,p in ipairs(particles) do
+			local samp = newgeneration:insert()
+			if opts.saveSampleValues then
+				samp.value:copy(p:currTrace().args[1].mesh)
+			else
+				LS.luainit(samp.value)
+			end
+			samp.logprob = p:currLogWeight()
+		end
+	end
+
+	local program = prepProgram(module, makeGeoPrim, StateType)
+	local function dorecord(particles)
+		copyMeshes(particles, outgenerations)
+	end
+	local newopts = LS.copytable(opts)
+	if globals.config.recordTraces then
+		recordedTraces = {}
+		newopts.onSweep = function(particles)
+			dorecord(particles)
+			for _,p in ipairs(particles) do
+				local t = p:currTrace()
+				t.args[1] = nil  -- Allow the state to be GC'ed
+				table.insert(recordedTraces, t)
+			end
+		end
+	else
+		newopts.onSweep = dorecord
+	end
+	local initstate = StateType.luaalloc():luainit()
+	smc.ParticleGibbs(program, {initstate}, newopts)
+
 end
 
 ---------------------------------------------------------------
@@ -722,6 +784,7 @@ return
 {
 	Sample = terralib.require("qs").Sample(Mesh),
 	SIR = SIR,
+	ParticleGibbs = ParticleGibbs,
 	ParticleCascade = ParticleCascade,
 	MH = MH,
 	ForwardSample = ForwardSample,

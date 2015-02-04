@@ -9,7 +9,7 @@ local function run(generations)
 	local progname = globals.config.program
 	assert((not string.find(progname, "_future") and (not string.find(progname, "_mh"))),
 		string.format("Config file should specify the *base* name of the model program; given name was %s", progname))
-	if globals.config.method == "smc" or globals.config.method == "pcascade" then
+	if globals.config.method == "smc" or globals.config.method == "pcascade" or globals.config.method == "pgibbs" then
 		progname = progname .. "_future"
 	elseif globals.config.method == "mh" then
 		progname = progname .. "_mh"
@@ -21,6 +21,13 @@ local function run(generations)
 	local smcopts = {
 		nParticles = globals.config.nSamples,		
 		recordHistory = globals.config.smc_recordHistory,
+		saveSampleValues = globals.config.saveSampleValues,
+		verbose = globals.config.verbose
+	}
+
+	local pgibbsopts = {
+		nParticles = globals.config.nSamples,
+		nSweeps = globals.config.pgibbs_nSweeps,
 		saveSampleValues = globals.config.saveSampleValues,
 		verbose = globals.config.verbose
 	}
@@ -46,6 +53,8 @@ local function run(generations)
 	local method = globals.config.method
 	if method == "smc" then
 		procmod.SIR(program, generations, smcopts)
+	elseif method == "pgibbs" then
+		procmod.ParticleGibbs(program, generations, pgibbsopts)
 	elseif method == "pcascade" then
 		procmod.ParticleCascade(program, generations, pcascadeopts)
 	elseif method == "mh" then
