@@ -727,6 +727,27 @@ local function ParticleCascade(program, args, opts)
 		local idx = math.ceil(math.random() * #pqueue)
 		return idx, pqueue[idx]
 	end
+	local function dequeueProcessRandPriority()
+		local spawnChance = 0.1
+		local function priosample(istart)
+			local weights = {}
+			for i=istart,#pqueue do
+				table.insert(weights, pqueue[i].logWeight)
+			end
+			util.expNoUnderflow(weights)
+			local idx = distrib.multinomial.sample(weights)
+			return idx, pqueue[idx]
+		end
+		if getmetatable(pqueue[1]) == ControlProcess then
+			if (#pqueue == 1) or (math.random() < spawnChance) then
+				return 1, pqueue[1]
+			else
+				return priosample(2)
+			end
+		else
+			return priosample(1)
+		end
+	end
 	local function dequeueProcessGreedy()
 		local maxweight = -math.huge
 		local idx = 0
@@ -747,25 +768,9 @@ local function ParticleCascade(program, args, opts)
 			return dequeueProcessGreedy()
 		end
 	end
-	local function dequeueProcessGreedyWithRandSpawn()
-		local mixparam = 0.1
-		if getmetatable(pqueue[1]) == ControlProcess then
-			if math.random() < mixparam then
-				return 1, pqueue[1]
-			else
-				-- Greedy select from everything *except* the control process
-				pqueue[1].logWeight = -math.huge
-				local idx, proc = dequeueProcessGreedy()
-				pqueue[1].logWeight = math.huge
-				return idx, proc
-			end
-		else
-			return dequeueProcessGreedy()
-		end
-	end
 
 	-- Choose dequeue method and initialize process queue
-	local dequeueProcess = dequeueProcessRand
+	local dequeueProcess = dequeueProcessRandPriority
 	table.insert(pqueue, ControlProcess.alloc():init())
 	-- local dequeueProcess = dequeueProcessGreedy
 	-- local spawner = ControlProcess.alloc():init()
