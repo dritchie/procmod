@@ -1,5 +1,5 @@
-local trace = terralib.require("prob.trace")
-local future = terralib.require("prob.future")
+local trace = require("prob.trace")
+local future = require("prob.future")
 
 local prob = {
 	-- ERPs

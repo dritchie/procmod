@@ -1,7 +1,7 @@
-local S = terralib.require("qs.lib.std")
-local procmod = terralib.require("procmod")
-local globals = terralib.require("globals")
-local future = terralib.require("prob.future")
+local S = require("qs.lib.std")
+local procmod = require("procmod")
+local globals = require("globals")
+local future = require("prob.future")
 
 
 local function run(generations)
@@ -14,7 +14,7 @@ local function run(generations)
 	elseif globals.config.method == "mh" then
 		progname = progname .. "_mh"
 	end
-	local program = terralib.require(progname)
+	local program = require(progname)
 
 	future.setImpl(globals.config.futureImpl)
 

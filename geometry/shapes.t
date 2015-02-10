@@ -1,7 +1,7 @@
-local S = terralib.require("qs.lib.std")
-local Mesh = terralib.require("geometry.mesh")
-local Vec = terralib.require("linalg.vec")
-local Mat = terralib.require("linalg.mat")
+local S = require("qs.lib.std")
+local Mesh = require("geometry.mesh")
+local Vec = require("linalg.vec")
+local Mat = require("linalg.mat")
 
 
 local shapes = S.memoize(function(real)

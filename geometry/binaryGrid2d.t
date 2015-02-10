@@ -1,6 +1,6 @@
-local S = terralib.require("qs.lib.std")
-local Vec = terralib.require("linalg.vec")
-local BBox = terralib.require("geometry.bbox")
+local S = require("qs.lib.std")
+local Vec = require("linalg.vec")
+local BBox = require("geometry.bbox")
 local C = terralib.includecstring [[
 #include <string.h>
 ]]

@@ -1,7 +1,7 @@
-local S = terralib.require("qs.lib.std")
-local LS = terralib.require("std")
-local trace = terralib.require("prob.trace")
-local util = terralib.require("util")
+local S = require("qs.lib.std")
+local LS = require("std")
+local trace = require("prob.trace")
+local util = require("util")
 
 ---------------------------------------------------------------
 

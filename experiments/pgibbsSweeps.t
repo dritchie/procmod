@@ -1,8 +1,8 @@
-local S = terralib.require("qs.lib.std")
-local LS = terralib.require("std")
-local generate = terralib.require("generate").generate
-local globals = terralib.require("globals")
-local procmod = terralib.require("procmod")
+local S = require("qs.lib.std")
+local LS = require("std")
+local generate = require("generate").generate
+local globals = require("globals")
+local procmod = require("procmod")
 
 local time = terralib.currenttimeinseconds
 
@@ -28,7 +28,7 @@ globals.config.saveSampleValues = false
 
 -- Need to boot up an OpenGL window, in case our score function needs
 --    an OpenGL context.
-local gl = terralib.require("gl.gl")
+local gl = require("gl.gl")
 local terra ogl_main()
 	var argc = 0
 	gl.safeGlutInit(&argc, nil)

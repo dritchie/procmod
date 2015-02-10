@@ -1,14 +1,14 @@
-local S = terralib.require("qs.lib.std")
-local LS = terralib.require("std")
-local Mesh = terralib.require("geometry.mesh")(double)
-local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
-local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
-local Vec = terralib.require("linalg.vec")
+local S = require("qs.lib.std")
+local LS = require("std")
+local Mesh = require("geometry.mesh")(double)
+local BinaryGrid3D = require("geometry.binaryGrid3d")
+local BinaryGrid2D = require("geometry.binaryGrid2d")
+local Vec = require("linalg.vec")
 local Vec3 = Vec(double, 3)
-local BBox3 = terralib.require("geometry.bbox")(Vec3)
-local Config = terralib.require("config")
-local gl = terralib.require("gl.gl")
-local glutils = terralib.require("gl.glutils")
+local BBox3 = require("geometry.bbox")(Vec3)
+local Config = require("config")
+local gl = require("gl.gl")
+local glutils = require("gl.glutils")
 
 
 
@@ -163,7 +163,7 @@ end
 -- Set up image matching globals
 if G.config.doImageMatch then
 	-- Delay import of image module until here, because other people have trouble getting FreeImage to work.
-	local image = terralib.require("image")
+	local image = require("image")
 	G.matchWeightImage = global(image.Image(float, 1))
 	local terra initglobals()
 		-- We assume the target image is specified as an 8-bit RGB PNG file.
@@ -299,7 +299,7 @@ end
 -- Set up shadow matching globals
 if G.config.doShadowMatch then
 	-- Delay import of image module until here, because other people have trouble getting FreeImage to work.
-	local image = terralib.require("image")
+	local image = require("image")
 	G.shadowWeightImage = global(image.Image(float, 1))
 	local terra initglobals()
 		-- We assume the target image is specified as an 8-bit RGB PNG file.

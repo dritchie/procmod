@@ -1,6 +1,6 @@
-local S = terralib.require("qs.lib.std")
-local LS = terralib.require("std")
-local Vec = terralib.require("linalg.luavec")
+local S = require("qs.lib.std")
+local LS = require("std")
+local Vec = require("linalg.luavec")
 
 
 local N = 4

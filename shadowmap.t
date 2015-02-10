@@ -1,16 +1,16 @@
-local S = terralib.require("qs.lib.std")
-local globals = terralib.require("globals")
-local gl = terralib.require("gl.gl")
-local Vec = terralib.require("linalg.vec")
+local S = require("qs.lib.std")
+local globals = require("globals")
+local gl = require("gl.gl")
+local Vec = require("linalg.vec")
 local Vec3 = Vec(double, 3)
-local Mat4 = terralib.require("linalg.mat")(double, 4, 4)
-local Mesh = terralib.require("geometry.mesh")(double)
-local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
+local Mat4 = require("linalg.mat")(double, 4, 4)
+local Mesh = require("geometry.mesh")(double)
+local BinaryGrid2D = require("geometry.binaryGrid2d")
 
 local renderShadowMask = S.memoize(function(saveImages)
 
 	local image = nil
-	if saveImages then image = terralib.require("image") end
+	if saveImages then image = require("image") end
 
 	local terra render(mesh: &Mesh, testnum: int, shadowMatchImage: &BinaryGrid2D,
 				 	   shadowMatchImagePixelData: &S.Vector(Vec(uint8, 4))) : {}

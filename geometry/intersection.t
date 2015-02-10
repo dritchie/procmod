@@ -1,6 +1,6 @@
-local S = terralib.require("qs.lib.std")
-local Vec = terralib.require("linalg.vec")
-local tmath = terralib.require("qs.lib.tmath")
+local S = require("qs.lib.std")
+local Vec = require("linalg.vec")
+local tmath = require("qs.lib.tmath")
 
 
 -- Code mostly lifted from mLib's intersection.h

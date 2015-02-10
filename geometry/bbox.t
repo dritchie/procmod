@@ -1,6 +1,6 @@
-local S = terralib.require("qs.lib.std")
-local Intersections = terralib.require("geometry.intersection")
-local Mat = terralib.require("linalg.mat")
+local S = require("qs.lib.std")
+local Intersections = require("geometry.intersection")
+local Mat = require("linalg.mat")
 
 local BBox = S.memoize(function(Vec)
 

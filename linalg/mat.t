@@ -1,6 +1,6 @@
-local S = terralib.require("qs.lib.std")
-local mlib = terralib.require("qs.lib.tmath")
-local Vec = terralib.require("linalg.vec")
+local S = require("qs.lib.std")
+local mlib = require("qs.lib.tmath")
+local Vec = require("linalg.vec")
 
 
 -- Code gen helpers

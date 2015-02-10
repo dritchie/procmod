@@ -1,5 +1,5 @@
-local S = terralib.require("qs.lib.std")
-local mlib = terralib.require("qs.lib.tmath")
+local S = require("qs.lib.std")
+local mlib = require("qs.lib.tmath")
 
 
 -- Code gen helpers

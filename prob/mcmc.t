@@ -1,6 +1,6 @@
-local LS = terralib.require("std")
-local trace = terralib.require("prob.trace")
-local distrib = terralib.require("prob.distrib")
+local LS = require("std")
+local trace = require("prob.trace")
+local distrib = require("prob.distrib")
 
 
 -- Bookkeeping to help us tell whether an MH-run is replaying still-valid trace or is

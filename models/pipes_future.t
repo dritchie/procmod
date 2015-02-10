@@ -1,10 +1,10 @@
-local S = terralib.require("qs.lib.std")
-local prob = terralib.require("prob.prob")
-local Shapes = terralib.require("geometry.shapes")(double)
-local Mesh = terralib.require("geometry.mesh")(double)
-local Vec3 = terralib.require("linalg.vec")(double, 3)
+local S = require("qs.lib.std")
+local prob = require("prob.prob")
+local Shapes = require("geometry.shapes")(double)
+local Mesh = require("geometry.mesh")(double)
+local Vec3 = require("linalg.vec")(double, 3)
 
-local globals = terralib.require("globals")
+local globals = require("globals")
 
 local flip = prob.flip
 local uniform = prob.uniform

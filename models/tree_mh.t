@@ -1,7 +1,7 @@
-local prob = terralib.require("prob.prob")
-local S = terralib.require("qs.lib.std")
-local LVec3 = terralib.require("linalg.luavec")(3)
-local treelib = terralib.require("models.treelib")
+local prob = require("prob.prob")
+local S = require("qs.lib.std")
+local LVec3 = require("linalg.luavec")(3)
+local treelib = require("models.treelib")
 
 local flip = prob.flip
 local uniform = prob.uniform

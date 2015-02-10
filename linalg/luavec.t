@@ -1,5 +1,5 @@
-local S = terralib.require("qs.lib.std")
-local LS = terralib.require("std")
+local S = require("qs.lib.std")
+local LS = require("std")
 
 
 return S.memoize(function(N)

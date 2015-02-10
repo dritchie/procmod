@@ -1,21 +1,21 @@
-local S = terralib.require("qs.lib.std")
-local LS = terralib.require("std")
-local Mesh = terralib.require("geometry.mesh")(double)
-local Vec = terralib.require("linalg.vec")
-local Mat = terralib.require("linalg.mat")
-local BBox = terralib.require("geometry.bbox")
-local BinaryGrid3D = terralib.require("geometry.binaryGrid3d")
-local BinaryGrid2D = terralib.require("geometry.binaryGrid2d")
-local prob = terralib.require("prob.prob")
-local trace = terralib.require("prob.trace")
-local smc = terralib.require("prob.smc")
-local mcmc = terralib.require("prob.mcmc")
-local distrib = terralib.require("qs.distrib")
-local globals = terralib.require("globals")
+local S = require("qs.lib.std")
+local LS = require("std")
+local Mesh = require("geometry.mesh")(double)
+local Vec = require("linalg.vec")
+local Mat = require("linalg.mat")
+local BBox = require("geometry.bbox")
+local BinaryGrid3D = require("geometry.binaryGrid3d")
+local BinaryGrid2D = require("geometry.binaryGrid2d")
+local prob = require("prob.prob")
+local trace = require("prob.trace")
+local smc = require("prob.smc")
+local mcmc = require("prob.mcmc")
+local distrib = require("qs.distrib")
+local globals = require("globals")
 
-local gl = terralib.require("gl.gl")
-local glutils = terralib.require("gl.glutils")
-local shadowmap = terralib.require("shadowmap")
+local gl = require("gl.gl")
+local glutils = require("gl.glutils")
+local shadowmap = require("shadowmap")
 
 local Vec3 = Vec(double, 3)
 local BBox3 = BBox(Vec3)
@@ -782,7 +782,7 @@ end
 
 return
 {
-	Sample = terralib.require("qs").Sample(Mesh),
+	Sample = require("qs").Sample(Mesh),
 	SIR = SIR,
 	ParticleGibbs = ParticleGibbs,
 	ParticleCascade = ParticleCascade,

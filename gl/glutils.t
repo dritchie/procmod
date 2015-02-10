@@ -1,7 +1,7 @@
-local S = terralib.require("qs.lib.std")
-local Vec = terralib.require("linalg.vec")
-local Mat = terralib.require("linalg.mat")
-local gl = terralib.require("gl.gl")
+local S = require("qs.lib.std")
+local Vec = require("linalg.vec")
+local Mat = require("linalg.mat")
+local gl = require("gl.gl")
 
 
 

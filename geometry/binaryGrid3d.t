@@ -1,6 +1,6 @@
-local S = terralib.require("qs.lib.std")
-local Vec = terralib.require("linalg.vec")
-local BBox = terralib.require("geometry.bbox")
+local S = require("qs.lib.std")
+local Vec = require("linalg.vec")
+local BBox = require("geometry.bbox")
 local C = terralib.includecstring [[
 #include <string.h>
 ]]
@@ -181,8 +181,8 @@ end
 BinaryGrid3D.toMesh = S.memoize(function(real)
 	local Vec3 = Vec(real, 3)
 	local BBox3 = BBox(Vec3)
-	local Mesh = terralib.require("geometry.mesh")(real)
-	local Shape = terralib.require("geometry.shapes")(real)
+	local Mesh = require("geometry.mesh")(real)
+	local Shape = require("geometry.shapes")(real)
 	local lerp = macro(function(lo, hi, t) return `(1.0-t)*lo + t*hi end)
 	return terra(grid: &BinaryGrid3D, mesh: &Mesh, bounds: &BBox3)
 		mesh:clear()
