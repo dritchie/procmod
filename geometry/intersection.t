@@ -266,7 +266,7 @@ local Intersection = S.memoize(function(real)
 		-- Coplanarity robustness check
 		if tmath.fabs(du0) < EPSILON then du0 = 0.0 end
 		if tmath.fabs(du1) < EPSILON then du1 = 0.0 end
-		if tmath.fabs(du2) < EPSILON then du1 = 0.0 end
+		if tmath.fabs(du2) < EPSILON then du2 = 0.0 end
 		-- Same sign on all + not equal 0 --> no intersection
 		var du0du1 = du0*du1
 		var du0du2 = du0*du2
@@ -283,7 +283,7 @@ local Intersection = S.memoize(function(real)
 		-- Coplanarity robustness check
 		if tmath.fabs(dv0) < EPSILON then dv0 = 0.0 end
 		if tmath.fabs(dv1) < EPSILON then dv1 = 0.0 end
-		if tmath.fabs(dv2) < EPSILON then du1 = 0.0 end
+		if tmath.fabs(dv2) < EPSILON then dv2 = 0.0 end
 		-- Same sign on all + not equal 0 --> no intersection
 		var dv0dv1 = dv0*dv1
 		var dv0dv2 = dv0*dv2
