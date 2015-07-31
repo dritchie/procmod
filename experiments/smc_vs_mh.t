@@ -6,6 +6,9 @@ local procmod = require("procmod")
 
 local time = terralib.currenttimeinseconds
 
+-- Seed the random number generator so we get different results per run
+math.randomseed( time() )
+
 -- Constants
 local outfilename = arg[2] or "experiments/smc_vs_mh.csv"
 local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
