@@ -1,10 +1,9 @@
 *.swatches
 scratch.config
-*.csv
-*.twb
 shadowMap.tiff
 shadowMask.png
 ben.config
 *.DS_Store
 tests/*
 scratch_ben.config
+smc_vs_mh.csv
