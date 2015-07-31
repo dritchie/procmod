@@ -10,7 +10,8 @@ local time = terralib.currenttimeinseconds
 local outfilename = arg[2] or "experiments/smc_vs_mh.csv"
 local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
 -- local sampNums = {700, 800, 900, 1000}
-local numRuns = 10
+-- local numRuns = 10
+local numRuns = 20
 
 -- Set up persistent variables we'll need
 local methods = {"smc", "smc_fixedOrder", "mh"}
