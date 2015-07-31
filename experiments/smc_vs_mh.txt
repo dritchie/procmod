@@ -1,0 +1,5 @@
+Run these commands from the repo root:
+
+terra experiments/smc_vs_mh.t configs/experiments/smc_vs_mh_spaceship.config experiments/spaceship.csv
+terra experiments/smc_vs_mh.t configs/experiments/smc_vs_mh_building.config experiments/building.csv
+terra experiments/smc_vs_mh.t configs/experiments/smc_vs_mh_tree.config experiments/tree.csv
