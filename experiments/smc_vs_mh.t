@@ -12,7 +12,8 @@ math.randomseed( time() )
 -- Constants
 local outfilename = arg[2] or "experiments/smc_vs_mh.csv"
 local sampNums = {10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000}
--- local sampNums = {700, 800, 900, 1000}
+-- local sampNums = {900, 1000}
+-- local sampNums = {700}
 -- local numRuns = 10
 local numRuns = 20
 
