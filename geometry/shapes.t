@@ -45,7 +45,7 @@ local shapes = S.memoize(function(real)
 		mesh:addIndex(i0, ni, uv0)
 	end
 
-	terra shapes.addQuad(mesh: &MeshT, v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3) : {}
+	local terra addQuad(mesh: &MeshT, v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3) : {}
 		var vi = mesh:numVertices()
 		mesh:addVertex(v0)
 		mesh:addVertex(v1)
@@ -54,8 +54,10 @@ local shapes = S.memoize(function(real)
 		quad(mesh, vi+0, vi+1, vi+2, vi+3)
 	end
 
-	shapes.addQuad:adddefinition(quad:getdefinitions()[1])
-	shapes.addQuad:adddefinition(quadTextured:getdefinitions()[1])
+	shapes.addQuad = terralib.overloadedfunction('shapes.addQuad', {})
+	shapes.addQuad:adddefinition(addQuad)
+	shapes.addQuad:adddefinition(quad)
+	shapes.addQuad:adddefinition(quadTextured)
 
 	terra shapes.addBox(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real) : {}
 		var xh = xlen*0.5
@@ -181,12 +183,6 @@ local shapes = S.memoize(function(real)
 		end
 	end)
 
-	local terra bbface(mesh: &MeshT, tmpmesh: &MeshT, xform: &Mat4, n: uint)
-		tesselatedUnitSquare(tmpmesh, n)
-		tmpmesh:transform(xform)
-		mesh:append(tmpmesh)
-		tmpmesh:clear()
-	end
 	local lerp = macro(function(lo, hi, t) return `(1.0-t)*lo + t*hi end)
 	terra shapes.addBeveledBox(mesh: &MeshT, center: Vec3, xlen: real, ylen: real, zlen: real,
 							   bevelAmt: real, n: uint)

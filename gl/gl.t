@@ -52,7 +52,7 @@ terralib.linklibrary("/System/Library/Frameworks/OpenGL.framework/Libraries/libG
 terralib.linklibrary("/System/Library/Frameworks/GLUT.framework/GLUT")
 
 -- Add a method for initializing GLUT that can be safely called multiple times
-local glutIsInitialized = global(bool, 0)
+local glutIsInitialized = global(bool, false)
 gl.safeGlutInit = macro(function(argc, argv)
 	return quote
 		if not glutIsInitialized then

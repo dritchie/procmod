@@ -15,25 +15,24 @@ local struct BinaryGrid2D(S.Object)
 	cols: uint
 }
 
-terra BinaryGrid2D:__init() : {}
-	self.rows = 0
-	self.cols = 0
-	self.data = nil
+terra BinaryGrid2D:numcells()
+	return self.rows*self.cols
 end
+BinaryGrid2D.methods.numcells:setinlined(true)
 
-terra BinaryGrid2D:__init(rows: uint, cols: uint) : {}
-	self:__init()
-	self:resize(rows, cols)
+terra BinaryGrid2D:numuints()
+	return (self:numcells() + BITS_PER_UINT - 1) / BITS_PER_UINT
 end
+BinaryGrid2D.methods.numuints:setinlined(true)
 
-terra BinaryGrid2D:__copy(other: &BinaryGrid2D)
-	self:__init(other.rows, other.cols)
-	C.memcpy(self.data, other.data, self:numuints()*sizeof(uint))
+terra BinaryGrid2D:numCellsPadded()
+	return self:numuints() * BITS_PER_UINT
 end
+BinaryGrid2D.methods.numCellsPadded:setinlined(true)
 
-terra BinaryGrid2D:__destruct()
-	if self.data ~= nil then
-		S.free(self.data)
+terra BinaryGrid2D:clear()
+	for i=0,self:numuints() do
+		self.data[i] = 0
 	end
 end
 
@@ -50,26 +49,31 @@ terra BinaryGrid2D:resize(rows: uint, cols: uint)
 	end
 end
 
-terra BinaryGrid2D:clear()
-	for i=0,self:numuints() do
-		self.data[i] = 0
+BinaryGrid2D.methods.__init = terralib.overloadedfunction('BinaryGrid2D.__init', {
+	terra(self: &BinaryGrid2D) : {}
+		self.rows = 0
+		self.cols = 0
+		self.data = nil
+	end
+})
+
+BinaryGrid2D.methods.__init:adddefinition(
+	terra(self: &BinaryGrid2D, rows: uint, cols: uint) : {}
+		self:__init()
+		self:resize(rows, cols)
+	end
+)
+
+terra BinaryGrid2D:__copy(other: &BinaryGrid2D)
+	self:__init(other.rows, other.cols)
+	C.memcpy(self.data, other.data, self:numuints()*sizeof(uint))
+end
+
+terra BinaryGrid2D:__destruct()
+	if self.data ~= nil then
+		S.free(self.data)
 	end
 end
-
-terra BinaryGrid2D:numcells()
-	return self.rows*self.cols
-end
-BinaryGrid2D.methods.numcells:setinlined(true)
-
-terra BinaryGrid2D:numuints()
-	return (self:numcells() + BITS_PER_UINT - 1) / BITS_PER_UINT
-end
-BinaryGrid2D.methods.numuints:setinlined(true)
-
-terra BinaryGrid2D:numCellsPadded()
-	return self:numuints() * BITS_PER_UINT
-end
-BinaryGrid2D.methods.numCellsPadded:setinlined(true)
 
 terra BinaryGrid2D:isPixelSet(row: uint, col: uint)
 	var linidx = row*self.cols + col
@@ -108,114 +112,132 @@ terra BinaryGrid2D:unionWith(other: &BinaryGrid2D)
 end
 
 local struct Pixel { i: uint, j: uint }
-local Vec2u = Vec(uint, 3)
+local Vec2u = Vec(uint, 2)
 local BBox2u = BBox(Vec2u)
-terra BinaryGrid2D:fillInterior(bounds: &BBox2u) : {}
-	var visited = BinaryGrid2D.salloc():copy(self)
-	var frontier = BinaryGrid2D.salloc():init(self.rows, self.cols)
-	-- Start expanding from every cell we haven't yet visited (already filled
-	--    cells count as visited)
-	for i=bounds.mins(1),bounds.maxs(1) do
-		for j=bounds.mins(0),bounds.maxs(0) do
-			if not visited:isPixelSet(i,j) then
-				var isoutside = false
-				var fringe = [S.Vector(Pixel)].salloc():init()
-				fringe:insert(Pixel{i,j})
-				while fringe:size() ~= 0 do
-					var v = fringe:remove()
-					frontier:setPixel(v.i, v.j)
-					-- If we expanded to the edge of the bounds, then this region is outside
-					if v.i == bounds.mins(1) or v.i == bounds.maxs(1)-1 or
-					   v.j == bounds.mins(0) or v.j == bounds.maxs(0)-1 then
-						isoutside = true
-					-- Otherwise, expand to the neighbors
-					else
-						visited:setPixel(v.i, v.j)
-						if not visited:isPixelSet(v.i-1, v.j) then
-							fringe:insert(Pixel{v.i-1, v.j})
-						end
-						if not visited:isPixelSet(v.i+1, v.j) then
-							fringe:insert(Pixel{v.i+1, v.j})
-						end
-						if not visited:isPixelSet(v.i, v.j-1) then
-							fringe:insert(Pixel{v.i, v.j-1})
-						end
-						if not visited:isPixelSet(v.i, v.j+1) then
-							fringe:insert(Pixel{v.i, v.j+1})
+BinaryGrid2D.methods.fillInterior = terralib.overloadedfunction('BinaryGrid2D.fillInterior', {
+	terra(self: &BinaryGrid2D, bounds: &BBox2u) : {}
+		var visited = BinaryGrid2D.salloc():copy(self)
+		var frontier = BinaryGrid2D.salloc():init(self.rows, self.cols)
+		-- Start expanding from every cell we haven't yet visited (already filled
+		--    cells count as visited)
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				if not visited:isPixelSet(i,j) then
+					var isoutside = false
+					var fringe = [S.Vector(Pixel)].salloc():init()
+					fringe:insert(Pixel{i,j})
+					while fringe:size() ~= 0 do
+						var v = fringe:remove()
+						frontier:setPixel(v.i, v.j)
+						-- If we expanded to the edge of the bounds, then this region is outside
+						if v.i == bounds.mins(1) or v.i == bounds.maxs(1)-1 or
+						   v.j == bounds.mins(0) or v.j == bounds.maxs(0)-1 then
+							isoutside = true
+						-- Otherwise, expand to the neighbors
+						else
+							visited:setPixel(v.i, v.j)
+							if not visited:isPixelSet(v.i-1, v.j) then
+								fringe:insert(Pixel{v.i-1, v.j})
+							end
+							if not visited:isPixelSet(v.i+1, v.j) then
+								fringe:insert(Pixel{v.i+1, v.j})
+							end
+							if not visited:isPixelSet(v.i, v.j-1) then
+								fringe:insert(Pixel{v.i, v.j-1})
+							end
+							if not visited:isPixelSet(v.i, v.j+1) then
+								fringe:insert(Pixel{v.i, v.j+1})
+							end
 						end
 					end
+					-- Once we've grown this region to completion, check whether it is
+					--    inside or outside. If inside, add it to self
+					if not isoutside then
+						self:unionWith(frontier)
+					end
+					frontier:clear()
 				end
-				-- Once we've grown this region to completion, check whether it is
-				--    inside or outside. If inside, add it to self
-				if not isoutside then
-					self:unionWith(frontier)
-				end
-				frontier:clear()
 			end
 		end
 	end
-end
+})
 
-terra BinaryGrid2D:fillInterior() : {}
-	var bounds = BBox2u.salloc():init(
-		Vec2u.create(0),
-		Vec2u.create(self.cols, self.rows)
-	)
-	self:fillInterior(bounds)
-end
-
-
-terra BinaryGrid2D:numFilledCells(bounds: &BBox2u) : uint
-	var num = 0
-	for i=bounds.mins(1),bounds.maxs(1) do
-		for j=bounds.mins(0),bounds.maxs(0) do
-			num = num + uint(self:isPixelSet(i,j))
-		end
+BinaryGrid2D.methods.fillInterior:adddefinition(
+	terra(self: &BinaryGrid2D) : {}
+		var bounds = BBox2u.salloc():init(
+			Vec2u.create(0),
+			Vec2u.create(self.cols, self.rows)
+		)
+		self:fillInterior(bounds)
 	end
-	return num
-end
-terra BinaryGrid2D:numFilledCells() : uint
-	var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
-	return self:numFilledCells(bounds)
-end
+)
 
-
-terra BinaryGrid2D:numCellsEqual(other: &BinaryGrid2D, bounds: &BBox2u) : uint
-	var num = 0
-	for i=bounds.mins(1),bounds.maxs(1) do
-		for j=bounds.mins(0),bounds.maxs(0) do
-			num = num + uint(self:isPixelSet(i,j) == other:isPixelSet(i,j))
+BinaryGrid2D.methods.numFilledCells = terralib.overloadedfunction('BinaryGrid2D.numFilledCells', {
+	terra(self: &BinaryGrid2D, bounds: &BBox2u) : uint
+		var num = 0
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				num = num + uint(self:isPixelSet(i,j))
+			end
 		end
+		return num
 	end
-	return num
-end
-terra BinaryGrid2D:numCellsEqual(other: &BinaryGrid2D) : uint
-	var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
-	return self:numCellsEqual(other, bounds)
-end
+})
+BinaryGrid2D.methods.numFilledCells:adddefinition(
+	terra(self: &BinaryGrid2D) : uint
+		var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
+		return self:numFilledCells(bounds)
+	end
+)
 
-terra BinaryGrid2D:percentCellsEqual(other: &BinaryGrid2D, bounds: &BBox2u) : double
-	var num = self:numCellsEqual(other, bounds)
-	return double(num)/bounds:volume()
-end
-terra BinaryGrid2D:percentCellsEqual(other: &BinaryGrid2D) : double
-	var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
-	return self:percentCellsEqual(other, bounds)
-end
-
-terra BinaryGrid2D:numFilledCellsEqual(other: &BinaryGrid2D, bounds: &BBox2u) : uint
-	var num = 0
-	for i=bounds.mins(1),bounds.maxs(1) do
-		for j=bounds.mins(0),bounds.maxs(0) do
-			num = num + uint(self:isPixelSet(i,j) and other:isPixelSet(i,j))
+BinaryGrid2D.methods.numCellsEqual = terralib.overloadedfunction('BinaryGrid2D.numCellsEqual', {
+	terra(self: &BinaryGrid2D, other: &BinaryGrid2D, bounds: &BBox2u) : uint
+		var num = 0
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				num = num + uint(self:isPixelSet(i,j) == other:isPixelSet(i,j))
+			end
 		end
+		return num
 	end
-	return num
-end
-terra BinaryGrid2D:numFilledCellsEqual(other: &BinaryGrid2D) : uint
-	var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
-	return self:numFilledCellsEqual(other, bounds)
-end
+})
+BinaryGrid2D.methods.numCellsEqual:adddefinition(
+	terra(self: &BinaryGrid2D, other: &BinaryGrid2D) : uint
+		var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
+		return self:numCellsEqual(other, bounds)
+	end
+)
+
+BinaryGrid2D.methods.percentCellsEqual = terralib.overloadedfunction('percentCellsEqual', {
+	terra(self: &BinaryGrid2D, other: &BinaryGrid2D, bounds: &BBox2u) : double
+		var num = self:numCellsEqual(other, bounds)
+		return double(num)/bounds:volume()
+	end
+})
+BinaryGrid2D.methods.percentCellsEqual:adddefinition(
+	terra(self: &BinaryGrid2D, other: &BinaryGrid2D) : double
+		var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
+		return self:percentCellsEqual(other, bounds)
+	end
+)
+
+BinaryGrid2D.methods.numFilledCellsEqual = terralib.overloadedfunction('BinaryGrid2D.numFilledCellsEqual', {
+	terra(self: &BinaryGrid2D, other: &BinaryGrid2D, bounds: &BBox2u) : uint
+		var num = 0
+		for i=bounds.mins(1),bounds.maxs(1) do
+			for j=bounds.mins(0),bounds.maxs(0) do
+				num = num + uint(self:isPixelSet(i,j) and other:isPixelSet(i,j))
+			end
+		end
+		return num
+	end
+})
+BinaryGrid2D.methods.numFilledCellsEqual:adddefinition(
+	terra(self: &BinaryGrid2D, other: &BinaryGrid2D) : uint
+		var bounds = BBox2u.salloc():init(Vec2u.create(0, 0), Vec2u.create(self.cols, self.rows))
+		return self:numFilledCellsEqual(other, bounds)
+	end
+)
 
 
 -- Fast population count, from https://github.com/BartMassey/popcount

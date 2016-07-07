@@ -23,9 +23,35 @@ function S.luaalloc(T)
 	return obj
 end
 
+function S.luacallmethod(self, methodname, ...)
+	local T = terralib.typeof(self)
+	if T:ispointertostruct() then T = T.type end
+	local method = T.methods[methodname]
+	assert(method, 'Struct type ' .. tostring(T) .. ' has no method ' .. methodname)
+	if terralib.isfunction(method) then
+		return method(self, ...)
+	elseif terralib.isoverloadedfunction(method) then
+		-- Try all versions
+		local args = {...}
+		local rets = nil
+		for i,def in ipairs(method:getdefinitions()) do
+			local tryfn = function() return def(self, unpack(args)) end
+			rets = { pcall(tryfn) }
+			if rets[1] then break end
+			-- print(rets[2])
+		end
+
+		assert(rets[1], 'Struct type ' .. tostring(T) .. ' has no appropriate overload of method '
+			.. methodname .. ' for arguments ' .. tostring(args))
+		table.remove(rets, 1)
+		return unpack(rets)
+	end
+end
+
 function doluainit(T, self, ...)
 	if T.methods.__init then
-		self:__init(...)
+		-- self:__init(...)
+		S.luacallmethod(self, '__init', ...)
 	else
 		self:initmembers()
 	end

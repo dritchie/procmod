@@ -48,15 +48,16 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:addVertex(vert: Vec3) self.vertices:insert(vert) end
 	terra Mesh:addNormal(norm: Vec3) self.normals:insert(norm) end
 	terra Mesh:addUV(uv: Vec2) self.uvs:insert(uv) end
-	terra Mesh:addIndex(vind: uint, nind: uint) self.indices:insert(Index{vind,nind,-1}) end
-	Mesh.methods.addIndex:adddefinition((terra(self: &Mesh, vind: uint, nind: uint, uvind: uint)
-		self.indices:insert(Index{vind,nind,uvind})
-	end):getdefinitions()[1])
+	Mesh.methods.addIndex = terralib.overloadedfunction('Mesh.addIndex', {
+		terra(self: &Mesh, vind: uint, nind: uint) self.indices:insert(Index{vind,nind,-1}) end,
+		terra(self: &Mesh, vind: uint, nind: uint, uvind: uint) self.indices:insert(Index{vind,nind,uvind}) end
+	})
 
 	terra Mesh:draw()
 		-- Just simple immediate mode drawing for now
 		gl.glBegin(gl.GL_TRIANGLES)
-		for i in self.indices do
+		for j = 0,self.indices:size() do
+			var i = self.indices(j)
 			glNormal(&(self.normals(i.normal).entries[0]))
 			glVertex(&(self.vertices(i.vertex).entries[0]))
 		end
@@ -74,36 +75,43 @@ local Mesh = S.memoize(function(real)
 		var nverts = self.vertices:size()
 		var nnorms = self.normals:size()
 		var nuvs = self.uvs:size()
-		for ov in other.vertices do
+		for i = 0,other.vertices:size() do
+			var ov = other.vertices(i)
 			self:addVertex(ov)
 		end
-		for on in other.normals do
+		for i = 0,other.normals:size() do
+			var on = other.normals(i)
 			self:addNormal(on)
 		end
-		for ouv in other.uvs do
+		for i = 0,other.uvs:size() do
+			var ouv = other.uvs(i)
 			self:addUV(ouv)
 		end
-		for oi in other.indices do
+		for i = 0,other.indices:size() do
+			var oi = other.indices(i)
 			self:addIndex(oi.vertex + nverts, oi.normal + nnorms, oi.uv + nuvs)
 		end
 	end
 
 	-- Transform only a subpart of the mesh
-	terra Mesh:transform(xform: &Mat4, vstarti: uint, vendi: uint, nstarti: uint, nendi: uint) : {}
-		for i=vstarti,vendi do
-			self.vertices(i) = xform:transformPoint(self.vertices(i))
+	Mesh.methods.transform = terralib.overloadedfunction('Mesh.transform', {
+		terra(self: &Mesh, xform: &Mat4, vstarti: uint, vendi: uint, nstarti: uint, nendi: uint) : {}
+			for i=vstarti,vendi do
+				self.vertices(i) = xform:transformPoint(self.vertices(i))
+			end
+			var normalxform = xform:inverse()
+			normalxform:transposeInPlace()
+			for i=nstarti,nendi do
+				self.normals(i) = normalxform:transformVector(self.normals(i))
+				self.normals(i):normalize()
+			end
 		end
-		var normalxform = xform:inverse()
-		normalxform:transposeInPlace()
-		for i=nstarti,nendi do
-			self.normals(i) = normalxform:transformVector(self.normals(i))
-			self.normals(i):normalize()
+	})
+	Mesh.methods.transform:adddefinition(
+		terra(self: &Mesh, xform: &Mat4) : {}
+			self:transform(xform, 0, self:numVertices(), 0, self:numNormals())
 		end
-	end
-
-	terra Mesh:transform(xform: &Mat4) : {}
-		self:transform(xform, 0, self:numVertices(), 0, self:numNormals())
-	end
+	)
 
 	terra Mesh:appendTransformed(other: &Mesh, xform: &Mat4)
 		var normalxform = xform:inverse()
@@ -111,16 +119,20 @@ local Mesh = S.memoize(function(real)
 		var nverts = self.vertices:size()
 		var nnorms = self.normals:size()
 		var nuvs = self.uvs:size()
-		for ov in other.vertices do
+		for i = 0,other.vertices:size() do
+			var ov = other.vertices(i)
 			self:addVertex(xform:transformPoint(ov))
 		end
-		for on in other.normals do
+		for i = 0,other.normals:size() do
+			var on = other.normals(i)
 			self:addNormal(normalxform:transformVector(on))
 		end
-		for ouv in other.uvs do
+		for i = 0,other.uvs:size() do
+			var ouv = other.uvs(i)
 			self:addUV(ouv)
 		end
-		for oi in other.indices do
+		for i = 0,other.indices:size() do
+			var oi = other.indices(i)
 			self:addIndex(oi.vertex + nverts, oi.normal + nnorms, oi.uv + nuvs)
 		end
 	end
@@ -128,8 +140,8 @@ local Mesh = S.memoize(function(real)
 	terra Mesh:bbox()
 		var bbox : BBox3
 		bbox:init()
-		for v in self.vertices do
-			bbox:expand(v)
+		for i = 0,self.vertices:size() do
+			bbox:expand(self.vertices(i))
 		end
 		return bbox
 	end
@@ -175,60 +187,63 @@ local Mesh = S.memoize(function(real)
 		end
 	end)
 	local FUDGE_FACTOR = 1e-10
-	terra Mesh:intersects(other: &Mesh) : bool
-		-- First, check that the overall bboxes of the two meshes actually intersect
-		var selfbbox = self:bbox()
-		var otherbbox = other:bbox()
-		if not selfbbox:intersects(&otherbbox) then
-			return false
-		end
-		-- Now, for every triangle in self, see if other intersects with it (checking overall bbox first)
-		-- We loop over the triangles backwards, because a frequent use case is intersecting an in-construction mesh with
-		--    a new component about to be added to it. Triangles toward the end of the list were added later, and are
-		--    thus likely to be closer to the mesh we're testing again. Intersections are more likely between closer things,
-		--    which will cause us to bail out of this function sooner and save time.
-		var numSelfTris = int(self:numTris())
-		var numOtherTris = int(other:numTris())
-		for j=numSelfTris-1,-1,-1 do
-			var u0 = self.vertices(self.indices(3*j).vertex)
-			var u1 = self.vertices(self.indices(3*j + 1).vertex)
-			var u2 = self.vertices(self.indices(3*j + 2).vertex)
-			contractTri(u0, u1, u2)
-			var selftribbox = BBox3.salloc():init()
-			selftribbox:expand(u0); selftribbox:expand(u1); selftribbox:expand(u2)
-			if selftribbox:intersects(&otherbbox) then
-				for i=0,numOtherTris do
-					var v0 = other.vertices(other.indices(3*i).vertex)
-					var v1 = other.vertices(other.indices(3*i + 1).vertex)
-					var v2 = other.vertices(other.indices(3*i + 2).vertex)
-					contractTri(v0, v1, v2)
-					var othertribbox = BBox3.salloc():init()
-					othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
-					if selftribbox:intersects(othertribbox) then
-						if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false, FUDGE_FACTOR) then
-							return true
-						end	
+	Mesh.methods.intersects = terralib.overloadedfunction('Mesh.intersects', {
+		terra(self: &Mesh, other: &Mesh) : bool
+			-- First, check that the overall bboxes of the two meshes actually intersect
+			var selfbbox = self:bbox()
+			var otherbbox = other:bbox()
+			if not selfbbox:intersects(&otherbbox) then
+				return false
+			end
+			-- Now, for every triangle in self, see if other intersects with it (checking overall bbox first)
+			-- We loop over the triangles backwards, because a frequent use case is intersecting an in-construction mesh with
+			--    a new component about to be added to it. Triangles toward the end of the list were added later, and are
+			--    thus likely to be closer to the mesh we're testing again. Intersections are more likely between closer things,
+			--    which will cause us to bail out of this function sooner and save time.
+			var numSelfTris = int(self:numTris())
+			var numOtherTris = int(other:numTris())
+			for j=numSelfTris-1,-1,-1 do
+				var u0 = self.vertices(self.indices(3*j).vertex)
+				var u1 = self.vertices(self.indices(3*j + 1).vertex)
+				var u2 = self.vertices(self.indices(3*j + 2).vertex)
+				contractTri(u0, u1, u2)
+				var selftribbox = BBox3.salloc():init()
+				selftribbox:expand(u0); selftribbox:expand(u1); selftribbox:expand(u2)
+				if selftribbox:intersects(&otherbbox) then
+					for i=0,numOtherTris do
+						var v0 = other.vertices(other.indices(3*i).vertex)
+						var v1 = other.vertices(other.indices(3*i + 1).vertex)
+						var v2 = other.vertices(other.indices(3*i + 2).vertex)
+						contractTri(v0, v1, v2)
+						var othertribbox = BBox3.salloc():init()
+						othertribbox:expand(v0); othertribbox:expand(v1); othertribbox:expand(v2)
+						if selftribbox:intersects(othertribbox) then
+							if Intersection.intersectTriangleTriangle(u0, u1, u2, v0, v1, v2, false, FUDGE_FACTOR) then
+								return true
+							end	
+						end
 					end
 				end
 			end
+			return false
 		end
-		return false
-	end
-
+	})
 	terra Mesh:selfIntersects()
 		return self:intersects(self)
 	end
 
 	-- We loop over the meshes in reverse order, for the same reason as above
-	terra Mesh:intersects(meshes: &S.Vector(Mesh)) :  bool
-		var numMeshes = int64(meshes:size())
-		for i=numMeshes-1,-1,-1 do
-			if self:intersects(meshes:get(i)) then
-				return true
+	Mesh.methods.intersects:adddefinition(
+		terra(self: &Mesh, meshes: &S.Vector(Mesh)) :  bool
+			var numMeshes = int64(meshes:size())
+			for i=numMeshes-1,-1,-1 do
+				if self:intersects(meshes:get(i)) then
+					return true
+				end
 			end
+			return false
 		end
-		return false
-	end
+	)
 
 	-- Find all triangles involved in intersection, store them in another mesh
 	terra Mesh:findAllIntersectingTris(other: &Mesh, outmesh: &Mesh) : bool
@@ -319,54 +334,62 @@ local Mesh = S.memoize(function(real)
 	end
 
 	-- Returns the number of triangles that fell outside the bounds
-	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, xres: uint, yres: uint, zres: uint, solid: bool) : uint
-		outgrid:resize(yres, xres, zres)
-		var extents = bounds:extents()
-		var xsize = extents(0)/xres
-		var ysize = extents(1)/yres
-		var zsize = extents(2)/zres
-		var worldtovox = Mat4.scale(1.0/xsize, 1.0/ysize, 1.0/zsize) * Mat4.translate(-bounds.mins)
-		var numtris = self.indices:size() / 3
-		var gridbounds = BBox3.salloc():init(
-			Vec3.create(0.0),
-			Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices))
-		)
-		var numOutsideTris = 0
-		var touchedbb = BBox3u.salloc():init()
-		for i=0,numtris do
-			var p0 = worldtovox:transformPoint(self.vertices(self.indices(3*i).vertex))
-			var p1 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 1).vertex))
-			var p2 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 2).vertex))
-			var tribb = BBox3.salloc():init()
-			tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
-			if tribb:intersects(gridbounds) then
-				var bb, nvs = voxelizeTriangle(outgrid, p0, p1, p2, tribb, solid)
-				touchedbb:unionWith(&bb)
-			else
-				numOutsideTris = numOutsideTris + 1
+	Mesh.methods.voxelize = terralib.overloadedfunction('Mesh.voxelize', {
+		terra(self: &Mesh, outgrid: &BinaryGrid, bounds: &BBox3, xres: uint, yres: uint, zres: uint, solid: bool) : uint
+			outgrid:resize(yres, xres, zres)
+			var extents = bounds:extents()
+			var xsize = extents(0)/xres
+			var ysize = extents(1)/yres
+			var zsize = extents(2)/zres
+			var worldtovox = Mat4.scale(1.0/xsize, 1.0/ysize, 1.0/zsize) * Mat4.translate(-bounds.mins)
+			var numtris = self.indices:size() / 3
+			var gridbounds = BBox3.salloc():init(
+				Vec3.create(0.0),
+				Vec3.create(real(outgrid.cols), real(outgrid.rows), real(outgrid.slices))
+			)
+			var numOutsideTris = 0
+			var touchedbb = BBox3u.salloc():init()
+			for i=0,numtris do
+				var p0 = worldtovox:transformPoint(self.vertices(self.indices(3*i).vertex))
+				var p1 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 1).vertex))
+				var p2 = worldtovox:transformPoint(self.vertices(self.indices(3*i + 2).vertex))
+				var tribb = BBox3.salloc():init()
+				tribb:expand(p0); tribb:expand(p1); tribb:expand(p2)
+				if tribb:intersects(gridbounds) then
+					var bb, nvs = voxelizeTriangle(outgrid, p0, p1, p2, tribb, solid)
+					touchedbb:unionWith(&bb)
+				else
+					numOutsideTris = numOutsideTris + 1
+				end
 			end
+			if solid then
+				outgrid:fillInterior(touchedbb)
+			end
+			return numOutsideTris
 		end
-		if solid then
-			outgrid:fillInterior(touchedbb)
-		end
-		return numOutsideTris
-	end
+	})
 
 	-- Find xres,yres,zres given a target voxel size
-	terra Mesh:voxelize(outgrid: &BinaryGrid, bounds: &BBox3, voxelSize: real, solid: bool) : uint
-		var numvox = (bounds:extents() / voxelSize):ceil()
-		return self:voxelize(outgrid, bounds, uint(numvox(0)), uint(numvox(1)), uint(numvox(2)), solid)
-	end
+	Mesh.methods.voxelize:adddefinition(
+		terra(self: &Mesh, outgrid: &BinaryGrid, bounds: &BBox3, voxelSize: real, solid: bool) : uint
+			var numvox = (bounds:extents() / voxelSize):ceil()
+			return self:voxelize(outgrid, bounds, uint(numvox(0)), uint(numvox(1)), uint(numvox(2)), solid)
+		end
+	)
 
 	-- Use mesh's bounding box as bounds for voxelization
-	terra Mesh:voxelize(outgrid: &BinaryGrid, xres: uint, yres: uint, zres: uint, solid: bool) : uint
-		var bounds = self:bbox()
-		return self:voxelize(outgrid, &bounds, xres, yres, zres, solid)
-	end
-	terra Mesh:voxelize(outgrid: &BinaryGrid, voxelSize: real, solid: bool) : uint
-		var bounds = self:bbox()
-		return self:voxelize(outgrid, &bounds, voxelSize, solid)
-	end
+	Mesh.methods.voxelize:adddefinition(
+		terra(self: &Mesh, outgrid: &BinaryGrid, xres: uint, yres: uint, zres: uint, solid: bool) : uint
+			var bounds = self:bbox()
+			return self:voxelize(outgrid, &bounds, xres, yres, zres, solid)
+		end
+	)
+	Mesh.methods.voxelize:adddefinition(
+		terra(self: &Mesh, outgrid: &BinaryGrid, voxelSize: real, solid: bool) : uint
+			var bounds = self:bbox()
+			return self:voxelize(outgrid, &bounds, voxelSize, solid)
+		end
+	)
 
 	-- Super simple: only handles triangular faces, doesn't handle UVs.
 	-- f directives are assumed to be of the form vi//ni (i.e. requires normals).

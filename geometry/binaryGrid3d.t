@@ -17,26 +17,24 @@ local struct BinaryGrid3D(S.Object)
 	slices: uint
 }
 
-terra BinaryGrid3D:__init() : {}
-	self.rows = 0
-	self.cols = 0
-	self.slices = 0
-	self.data = nil
+terra BinaryGrid3D:numcells()
+	return self.rows*self.cols*self.slices
 end
+BinaryGrid3D.methods.numcells:setinlined(true)
 
-terra BinaryGrid3D:__init(rows: uint, cols: uint, slices: uint) : {}
-	self:__init()
-	self:resize(rows, cols, slices)
+terra BinaryGrid3D:numuints()
+	return (self:numcells() + BITS_PER_UINT - 1) / BITS_PER_UINT
 end
+BinaryGrid3D.methods.numuints:setinlined(true)
 
-terra BinaryGrid3D:__copy(other: &BinaryGrid3D)
-	self:__init(other.rows, other.cols, other.slices)
-	C.memcpy(self.data, other.data, self:numuints()*sizeof(uint))
+terra BinaryGrid3D:numCellsPadded()
+	return self:numuints() * BITS_PER_UINT
 end
+BinaryGrid3D.methods.numCellsPadded:setinlined(true)
 
-terra BinaryGrid3D:__destruct()
-	if self.data ~= nil then
-		S.free(self.data)
+terra BinaryGrid3D:clear()
+	for i=0,self:numuints() do
+		self.data[i] = 0
 	end
 end
 
@@ -54,26 +52,32 @@ terra BinaryGrid3D:resize(rows: uint, cols: uint, slices: uint)
 	end
 end
 
-terra BinaryGrid3D:clear()
-	for i=0,self:numuints() do
-		self.data[i] = 0
+BinaryGrid3D.methods.__init = terralib.overloadedfunction('BinaryGrid3D.init', {
+	terra(self: &BinaryGrid3D) : {}
+		self.rows = 0
+		self.cols = 0
+		self.slices = 0
+		self.data = nil
+	end
+})
+
+BinaryGrid3D.methods.__init:adddefinition(
+	terra(self: &BinaryGrid3D, rows: uint, cols: uint, slices: uint) : {}
+		self:__init()
+		self:resize(rows, cols, slices)
+	end
+)
+
+terra BinaryGrid3D:__copy(other: &BinaryGrid3D)
+	self:__init(other.rows, other.cols, other.slices)
+	C.memcpy(self.data, other.data, self:numuints()*sizeof(uint))
+end
+
+terra BinaryGrid3D:__destruct()
+	if self.data ~= nil then
+		S.free(self.data)
 	end
 end
-
-terra BinaryGrid3D:numcells()
-	return self.rows*self.cols*self.slices
-end
-BinaryGrid3D.methods.numcells:setinlined(true)
-
-terra BinaryGrid3D:numuints()
-	return (self:numcells() + BITS_PER_UINT - 1) / BITS_PER_UINT
-end
-BinaryGrid3D.methods.numuints:setinlined(true)
-
-terra BinaryGrid3D:numCellsPadded()
-	return self:numuints() * BITS_PER_UINT
-end
-BinaryGrid3D.methods.numCellsPadded:setinlined(true)
 
 terra BinaryGrid3D:isVoxelSet(row: uint, col: uint, slice: uint)
 	var linidx = slice*self.cols*self.rows + row*self.cols + col
@@ -115,68 +119,72 @@ end
 local struct Voxel { i: uint, j: uint, k: uint }
 local Vec3u = Vec(uint, 3)
 local BBox3u = BBox(Vec3u)
-terra BinaryGrid3D:fillInterior(bounds: &BBox3u) : {}
-	var visited = BinaryGrid3D.salloc():copy(self)
-	var frontier = BinaryGrid3D.salloc():init(self.rows, self.cols, self.slices)
-	-- Start expanding from every cell we haven't yet visited (already filled
-	--    cells count as visited)
-	for k=bounds.mins(2),bounds.maxs(2) do
-		for i=bounds.mins(1),bounds.maxs(1) do
-			for j=bounds.mins(0),bounds.maxs(0) do
-				if not visited:isVoxelSet(i,j,k) then
-					var isoutside = false
-					var fringe = [S.Vector(Voxel)].salloc():init()
-					fringe:insert(Voxel{i,j,k})
-					while fringe:size() ~= 0 do
-						var v = fringe:remove()
-						frontier:setVoxel(v.i, v.j, v.k)
-						-- If we expanded to the edge of the bounds, then this region is outside
-						if v.i == bounds.mins(1) or v.i == bounds.maxs(1)-1 or
-						   v.j == bounds.mins(0) or v.j == bounds.maxs(0)-1 or
-						   v.k == bounds.mins(2) or v.k == bounds.maxs(2)-1 then
-							isoutside = true
-						-- Otherwise, expand to the neighbors
-						else
-							visited:setVoxel(v.i, v.j, v.k)
-							if not visited:isVoxelSet(v.i-1, v.j, v.k) then
-								fringe:insert(Voxel{v.i-1, v.j, v.k})
-							end
-							if not visited:isVoxelSet(v.i+1, v.j, v.k) then
-								fringe:insert(Voxel{v.i+1, v.j, v.k})
-							end
-							if not visited:isVoxelSet(v.i, v.j-1, v.k) then
-								fringe:insert(Voxel{v.i, v.j-1, v.k})
-							end
-							if not visited:isVoxelSet(v.i, v.j+1, v.k) then
-								fringe:insert(Voxel{v.i, v.j+1, v.k})
-							end
-							if not visited:isVoxelSet(v.i, v.j, v.k-1) then
-								fringe:insert(Voxel{v.i, v.j, v.k-1})
-							end
-							if not visited:isVoxelSet(v.i, v.j, v.k+1) then
-								fringe:insert(Voxel{v.i, v.j, v.k+1})
+BinaryGrid3D.methods.fillInterior = terralib.overloadedfunction('BinaryGrid3D.fillInterior', {
+	terra(self: &BinaryGrid3D, bounds: &BBox3u) : {}
+		var visited = BinaryGrid3D.salloc():copy(self)
+		var frontier = BinaryGrid3D.salloc():init(self.rows, self.cols, self.slices)
+		-- Start expanding from every cell we haven't yet visited (already filled
+		--    cells count as visited)
+		for k=bounds.mins(2),bounds.maxs(2) do
+			for i=bounds.mins(1),bounds.maxs(1) do
+				for j=bounds.mins(0),bounds.maxs(0) do
+					if not visited:isVoxelSet(i,j,k) then
+						var isoutside = false
+						var fringe = [S.Vector(Voxel)].salloc():init()
+						fringe:insert(Voxel{i,j,k})
+						while fringe:size() ~= 0 do
+							var v = fringe:remove()
+							frontier:setVoxel(v.i, v.j, v.k)
+							-- If we expanded to the edge of the bounds, then this region is outside
+							if v.i == bounds.mins(1) or v.i == bounds.maxs(1)-1 or
+							   v.j == bounds.mins(0) or v.j == bounds.maxs(0)-1 or
+							   v.k == bounds.mins(2) or v.k == bounds.maxs(2)-1 then
+								isoutside = true
+							-- Otherwise, expand to the neighbors
+							else
+								visited:setVoxel(v.i, v.j, v.k)
+								if not visited:isVoxelSet(v.i-1, v.j, v.k) then
+									fringe:insert(Voxel{v.i-1, v.j, v.k})
+								end
+								if not visited:isVoxelSet(v.i+1, v.j, v.k) then
+									fringe:insert(Voxel{v.i+1, v.j, v.k})
+								end
+								if not visited:isVoxelSet(v.i, v.j-1, v.k) then
+									fringe:insert(Voxel{v.i, v.j-1, v.k})
+								end
+								if not visited:isVoxelSet(v.i, v.j+1, v.k) then
+									fringe:insert(Voxel{v.i, v.j+1, v.k})
+								end
+								if not visited:isVoxelSet(v.i, v.j, v.k-1) then
+									fringe:insert(Voxel{v.i, v.j, v.k-1})
+								end
+								if not visited:isVoxelSet(v.i, v.j, v.k+1) then
+									fringe:insert(Voxel{v.i, v.j, v.k+1})
+								end
 							end
 						end
+						-- Once we've grown this region to completion, check whether it is
+						--    inside or outside. If inside, add it to self
+						if not isoutside then
+							self:unionWith(frontier)
+						end
+						frontier:clear()
 					end
-					-- Once we've grown this region to completion, check whether it is
-					--    inside or outside. If inside, add it to self
-					if not isoutside then
-						self:unionWith(frontier)
-					end
-					frontier:clear()
 				end
 			end
 		end
 	end
-end
+})
 
-terra BinaryGrid3D:fillInterior() : {}
-	var bounds = BBox3u.salloc():init(
-		Vec3u.create(0),
-		Vec3u.create(self.cols, self.rows, self.slices)
-	)
-	self:fillInterior(bounds)
-end
+BinaryGrid3D.methods.fillInterior:adddefinition(
+	terra(self: &BinaryGrid3D) : {}
+		var bounds = BBox3u.salloc():init(
+			Vec3u.create(0),
+			Vec3u.create(self.cols, self.rows, self.slices)
+		)
+		self:fillInterior(bounds)
+	end
+)
 
 BinaryGrid3D.toMesh = S.memoize(function(real)
 	local Vec3 = Vec(real, 3)
@@ -232,64 +240,79 @@ BinaryGrid3D.methods.paddedGridBounds = terra(targetBounds: &BBox3d, padFactor: 
 	return paddedBounds, gridres, targetGridBounds
 end
 
-
-terra BinaryGrid3D:numFilledCells(bounds: &BBox3u) : uint
-	var num = 0
-	for k=bounds.mins(2),bounds.maxs(2) do
-		for i=bounds.mins(1),bounds.maxs(1) do
-			for j=bounds.mins(0),bounds.maxs(0) do
-				num = num + uint(self:isVoxelSet(i,j,k))
+BinaryGrid3D.methods.numFilledCells = terralib.overloadedfunction('BinaryGrid3D.numFilledCells', {
+	terra(self: &BinaryGrid3D, bounds: &BBox3u) : uint
+		var num = 0
+		for k=bounds.mins(2),bounds.maxs(2) do
+			for i=bounds.mins(1),bounds.maxs(1) do
+				for j=bounds.mins(0),bounds.maxs(0) do
+					num = num + uint(self:isVoxelSet(i,j,k))
+				end
 			end
 		end
+		return num
 	end
-	return num
-end
-terra BinaryGrid3D:numFilledCells() : uint
-	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
-	return self:numFilledCells(bounds)
-end
+})
+BinaryGrid3D.methods.numFilledCells:adddefinition(
+	terra(self: &BinaryGrid3D) : uint
+		var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+		return self:numFilledCells(bounds)
+	end
+)
 
 
-terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D, bounds: &BBox3u) : uint
-	var num = 0
-	for k=bounds.mins(2),bounds.maxs(2) do
-		for i=bounds.mins(1),bounds.maxs(1) do
-			for j=bounds.mins(0),bounds.maxs(0) do
-				num = num + uint(self:isVoxelSet(i,j,k) == other:isVoxelSet(i,j,k))
+BinaryGrid3D.methods.numCellsEqual = terralib.overloadedfunction('BinaryGrid3D.numCellsEqual', {
+	terra(self: &BinaryGrid3D, other: &BinaryGrid3D, bounds: &BBox3u) : uint
+		var num = 0
+		for k=bounds.mins(2),bounds.maxs(2) do
+			for i=bounds.mins(1),bounds.maxs(1) do
+				for j=bounds.mins(0),bounds.maxs(0) do
+					num = num + uint(self:isVoxelSet(i,j,k) == other:isVoxelSet(i,j,k))
+				end
 			end
 		end
+		return num
 	end
-	return num
-end
-terra BinaryGrid3D:numCellsEqual(other: &BinaryGrid3D) : uint
-	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
-	return self:numCellsEqual(other, bounds)
-end
+})
+BinaryGrid3D.methods.numCellsEqual:adddefinition(
+	terra(self: &BinaryGrid3D, other: &BinaryGrid3D) : uint
+		var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+		return self:numCellsEqual(other, bounds)
+	end
+)
 
-terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D, bounds: &BBox3u) : double
-	var num = self:numCellsEqual(other, bounds)
-	return double(num)/bounds:volume()
-end
-terra BinaryGrid3D:percentCellsEqual(other: &BinaryGrid3D) : double
-	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
-	return self:percentCellsEqual(other, bounds)
-end
+BinaryGrid3D.methods.percentCellsEqual = terralib.overloadedfunction('BinaryGrid3D.percentCellsEqual', {
+	terra(self: &BinaryGrid3D, other: &BinaryGrid3D, bounds: &BBox3u) : double
+		var num = self:numCellsEqual(other, bounds)
+		return double(num)/bounds:volume()
+	end
+})
+BinaryGrid3D.methods.percentCellsEqual:adddefinition(
+	terra(self: &BinaryGrid3D, other: &BinaryGrid3D) : double
+		var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+		return self:percentCellsEqual(other, bounds)
+	end
+)
 
-terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D, bounds: &BBox3u) : uint
-	var num = 0
-	for k=bounds.mins(2),bounds.maxs(2) do
-		for i=bounds.mins(1),bounds.maxs(1) do
-			for j=bounds.mins(0),bounds.maxs(0) do
-				num = num + uint(self:isVoxelSet(i,j,k) and other:isVoxelSet(i,j,k))
+BinaryGrid3D.methods.numFilledCellsEqual = terralib.overloadedfunction('BinaryGrid3D.numFilledCellsEqual', {
+	terra(self: &BinaryGrid3D, other: &BinaryGrid3D, bounds: &BBox3u) : uint
+		var num = 0
+		for k=bounds.mins(2),bounds.maxs(2) do
+			for i=bounds.mins(1),bounds.maxs(1) do
+				for j=bounds.mins(0),bounds.maxs(0) do
+					num = num + uint(self:isVoxelSet(i,j,k) and other:isVoxelSet(i,j,k))
+				end
 			end
 		end
+		return num
 	end
-	return num
-end
-terra BinaryGrid3D:numFilledCellsEqual(other: &BinaryGrid3D) : uint
-	var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
-	return self:numFilledCellsEqual(other, bounds)
-end
+})
+BinaryGrid3D.methods.numFilledCellsEqual:adddefinition(
+	terra(self: &BinaryGrid3D, other: &BinaryGrid3D) : uint
+		var bounds = BBox3u.salloc():init(Vec3u.create(0, 0, 0), Vec3u.create(self.cols, self.rows, self.slices))
+		return self:numFilledCellsEqual(other, bounds)
+	end
+)
 
 
 -- Fast population count, from https://github.com/BartMassey/popcount

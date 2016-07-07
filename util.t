@@ -17,7 +17,7 @@ end
 
 function U.includecstring_path(str)
 	local cpath = os.getenv("C_INCLUDE_PATH") or "."
-	return terralib.includecstring(str, "-I", cpath)
+	return terralib.includecstring(str, {"-I", cpath})
 end
 
 function U.appendTable(t1, t2)
@@ -51,6 +51,12 @@ function U.expNoUnderflow(logweights)
 		correction = ldmn - maxweight
 	end
 	for i=1,#logweights do logweights[i] = math.exp(logweights[i] + correction) end
+end
+
+function U.setinlinedOverloaded(overloadedfn, flag)
+	for i,def in ipairs(overloadedfn:getdefinitions()) do
+		def:setinlined(flag)
+	end
 end
 
 

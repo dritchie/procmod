@@ -1,6 +1,7 @@
 local S = require("qs.lib.std")
 local mlib = require("qs.lib.tmath")
 local Vec = require("linalg.vec")
+local util = require('util')
 
 
 -- Code gen helpers
@@ -126,7 +127,7 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	MatT.methods.subInPlace:setinlined(true)
 	MatT.metamethods.__sub = terra(m1: MatT, m2: MatT)
 		var mat = MatT.salloc():copy(&m1)
-		mat:subInPlace(m2)
+		mat:subInPlace(&m2)
 		return @mat
 	end
 	MatT.metamethods.__sub:setinlined(true)
@@ -136,17 +137,18 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 			function(a) return `s*a end)]
 	end
 	MatT.methods.scaleInPlace:setinlined(true)
-	MatT.metamethods.__mul = terra(m1: MatT, s: real)
-		var mat = MatT.salloc():copy(&m1)
-		mat:scaleInPlace(s)
-		return @mat
-	end
-	MatT.metamethods.__mul:adddefinition((terra(s: real, m1: MatT)
-		var mat = MatT.salloc():copy(&m1)
-		mat:scaleInPlace(s)
-		return @mat
-	end):getdefinitions()[1])
-
+	MatT.metamethods.__mul = terralib.overloadedfunction('Mat.__mul', {
+		terra(m1: MatT, s: real)
+			var mat = MatT.salloc():copy(&m1)
+			mat:scaleInPlace(s)
+			return @mat
+		end,
+		terra(s: real, m1: MatT)
+			var mat = MatT.salloc():copy(&m1)
+			mat:scaleInPlace(s)
+			return @mat
+		end
+	})
 	terra MatT:divInPlace(s: real)
 		[entryList(self)] = [wrap(entryList(self),
 			function(a) return `a/s end)]
@@ -179,23 +181,25 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	--    square matrices
 	if rowdim == coldim then
 		local dim = rowdim
-		MatT.metamethods.__mul:adddefinition((terra(m1: MatT, m2: MatT)
-			var mout : MatT
-			[(function()
-				local stmts = {}
-				for i=0,dim-1 do
-					for j=0,dim-1 do
-						local sumexpr = `real(0.0)
-						for k=0,dim-1 do
-							sumexpr = `[sumexpr] + m1(i,k)*m2(k,j)
+		MatT.metamethods.__mul:adddefinition(
+			terra(m1: MatT, m2: MatT)
+				var mout : MatT
+				[(function()
+					local stmts = {}
+					for i=0,dim-1 do
+						for j=0,dim-1 do
+							local sumexpr = `real(0.0)
+							for k=0,dim-1 do
+								sumexpr = `[sumexpr] + m1(i,k)*m2(k,j)
+							end
+							table.insert(stmts, quote mout(i,j) = [sumexpr] end)
 						end
-						table.insert(stmts, quote mout(i,j) = [sumexpr] end)
 					end
-				end
-				return stmts
-			end)()]
-			return mout
-		end):getdefinitions()[1])
+					return stmts
+				end)()]
+				return mout
+			end
+		)
 		terra MatT:mulInPlace(m2: &MatT)
 			@self = @self * @m2
 		end
@@ -205,23 +209,25 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 	-- Matrix/vector multiply
 	local InVecT = Vec(real, coldim, GPU)
 	local OutVecT = Vec(real, rowdim, GPU)
-	MatT.metamethods.__mul:adddefinition((terra(m1: MatT, v: InVecT)
-		var vout : OutVecT
-		[(function()
-			local stmts = {}
-			for i=0,rowdim-1 do
-				local sumexpr = `real(0.0)
-				for j=0,coldim-1 do
-					sumexpr = `[sumexpr] + m1(i,j)*v(j)
+	MatT.metamethods.__mul:adddefinition(
+		terra(m1: MatT, v: InVecT)
+			var vout : OutVecT
+			[(function()
+				local stmts = {}
+				for i=0,rowdim-1 do
+					local sumexpr = `real(0.0)
+					for j=0,coldim-1 do
+						sumexpr = `[sumexpr] + m1(i,j)*v(j)
+					end
+					table.insert(stmts, quote vout(i) = [sumexpr] end)
 				end
-				table.insert(stmts, quote vout(i) = [sumexpr] end)
-			end
-			return stmts
-		end)()]
-		return vout
-	end):getdefinitions()[1])
+				return stmts
+			end)()]
+			return vout
+		end
+	)
 
-	MatT.metamethods.__mul:setinlined(true)
+	util.setinlinedOverloaded(MatT.metamethods.__mul, true)
 
 	-- Check for nans
 	terra MatT:isnan()
@@ -326,27 +332,35 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 		end
 		MatT.methods.transformVector:setinlined(true)
 
-		MatT.methods.translate = terra(tx: real, ty: real, tz: real) : MatT
-			var mat = MatT.identity()
-			mat(0, 3) = tx
-			mat(1, 3) = ty
-			mat(2, 3) = tz
-			return mat
-		end
-		MatT.methods.translate:adddefinition((terra(tv: Vec3) : MatT
-			return MatT.translate(tv(0), tv(1), tv(2))
-		end):getdefinitions()[1])
+		MatT.methods.translate = terralib.overloadedfunction('Mat.translate', {
+			terra(tx: real, ty: real, tz: real) : MatT
+				var mat = MatT.identity()
+				mat(0, 3) = tx
+				mat(1, 3) = ty
+				mat(2, 3) = tz
+				return mat
+			end
+		})
+		MatT.methods.translate:adddefinition(
+			terra(tv: Vec3) : MatT
+				return MatT.translate(tv(0), tv(1), tv(2))
+			end
+		)
 
-		MatT.methods.scale = terra(sx: real, sy: real, sz: real) : MatT
-			var mat = MatT.identity()
-			mat(0,0) = sx
-			mat(1,1) = sy
-			mat(2,2) = sz
-			return mat
-		end
-		MatT.methods.scale:adddefinition((terra(s: real) : MatT
-			return MatT.scale(s, s, s)
-		end):getdefinitions()[1])
+		MatT.methods.scale = terralib.overloadedfunction('Mat.scale', {
+			terra(sx: real, sy: real, sz: real) : MatT
+				var mat = MatT.identity()
+				mat(0,0) = sx
+				mat(1,1) = sy
+				mat(2,2) = sz
+				return mat
+			end
+		})
+		MatT.methods.scale:adddefinition(
+			terra(s: real) : MatT
+				return MatT.scale(s, s, s)
+			end
+		)
 
 		MatT.methods.rotateX = terra(r: real)
 			var mat = MatT.identity()
@@ -381,44 +395,48 @@ Mat = S.memoize(function(real, rowdim, coldim, GPU)
 			return mat
 		end
 
-		MatT.methods.rotate = terra(axis: Vec3, angle: real) : MatT
-			var c = mlib.cos(angle)
-			var s = mlib.sin(angle)
-			var t = 1.0 - c
+		MatT.methods.rotate = terralib.overloadedfunction('Mat.rotate', {
+			terra(axis: Vec3, angle: real) : MatT
+				var c = mlib.cos(angle)
+				var s = mlib.sin(angle)
+				var t = 1.0 - c
 
-			axis:normalize()
-			var x = axis(0)
-			var y = axis(1)
-			var z = axis(2)
+				axis:normalize()
+				var x = axis(0)
+				var y = axis(1)
+				var z = axis(2)
 
-			var result : MatT
+				var result : MatT
 
-			result(0,0) = 1 + t*(x*x-1)
-			result(1,0) = z*s+t*x*y
-			result(2,0) = -y*s+t*x*z
-			result(3,0) = 0.0
+				result(0,0) = 1 + t*(x*x-1)
+				result(1,0) = z*s+t*x*y
+				result(2,0) = -y*s+t*x*z
+				result(3,0) = 0.0
 
-			result(0,1) = -z*s+t*x*y
-			result(1,1) = 1+t*(y*y-1)
-			result(2,1) = x*s+t*y*z
-			result(3,1) = 0.0
+				result(0,1) = -z*s+t*x*y
+				result(1,1) = 1+t*(y*y-1)
+				result(2,1) = x*s+t*y*z
+				result(3,1) = 0.0
 
-			result(0,2) = y*s+t*x*z
-			result(1,2) = -x*s+t*y*z
-			result(2,2) = 1+t*(z*z-1)
-			result(3,2) = 0.0
+				result(0,2) = y*s+t*x*z
+				result(1,2) = -x*s+t*y*z
+				result(2,2) = 1+t*(z*z-1)
+				result(3,2) = 0.0
 
-			result(0,3) = 0.0
-			result(1,3) = 0.0
-			result(2,3) = 0.0
-			result(3,3) = 1.0
+				result(0,3) = 0.0
+				result(1,3) = 0.0
+				result(2,3) = 0.0
+				result(3,3) = 1.0
 
-			return result
-		end
+				return result
+			end
+		})
 
-		MatT.methods.rotate:adddefinition((terra(axis: Vec3, angle: real, center: Vec3) : MatT
-			return MatT.translate(center) * MatT.rotate(axis, angle) * MatT.translate(-center)
-		end):getdefinitions()[1])
+		MatT.methods.rotate:adddefinition(
+			terra(axis: Vec3, angle: real, center: Vec3) : MatT
+				return MatT.translate(center) * MatT.rotate(axis, angle) * MatT.translate(-center)
+			end
+		)
 
 		MatT.methods.face = terra(fromVec: Vec3, toVec: Vec3)
 			var axis = fromVec:cross(toVec)

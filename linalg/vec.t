@@ -1,5 +1,6 @@
 local S = require("qs.lib.std")
 local mlib = require("qs.lib.tmath")
+local util = require('util')
 
 
 -- Code gen helpers
@@ -65,17 +66,21 @@ Vec = S.memoize(function(real, dim, GPU)
 	end
 
 	-- Constructors
-	terra VecT:__init()
-		[entryList(self)] = [replicate(`0.0, dim)]
-	end
 	local ctorags = symbolList()
-	terra VecT:__init([ctorags])
-		[entryList(self)] = [ctorags]
-	end
-	if dim > 1 then
-		terra VecT:__init(val: real)
-			[entryList(self)] = [replicate(val, dim)]
+	VecT.methods.__init = terralib.overloadedfunction('Vec.__init', {
+		terra(self: &VecT)
+			[entryList(self)] = [replicate(`0.0, dim)]
+		end,
+		terra(self: &VecT, [ctorags])
+			[entryList(self)] = [ctorags]
 		end
+	})
+	if dim > 1 then
+		VecT.methods.__init:adddefinition(
+			terra(self: &VecT, val: real)
+				[entryList(self)] = [replicate(val, dim)]
+			end
+		)
 	end
 	terra VecT:__copy(other: &VecT)
 		[entryList(self)] = [entryList(other)]
@@ -107,38 +112,42 @@ Vec = S.memoize(function(real, dim, GPU)
 		return v
 	end
 	VecT.metamethods.__sub:setinlined(true)
-	VecT.metamethods.__mul = terra(v1: VecT, s: real)
-		var v : VecT
-		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
-			function(a, b) return `a*b end)]
-		return v
-	end
-	VecT.metamethods.__mul:adddefinition((terra(s: real, v1: VecT)
-		var v : VecT
-		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
-			function(a, b) return `a*b end)]
-		return v
-	end):getdefinitions()[1])
-	VecT.metamethods.__mul:adddefinition((terra(v1: VecT, v2: VecT)
-		var v : VecT
-		[entryList(v)] = [zip(entryList(v1), entryList(v2),
-			function(a, b) return `a*b end)]
-		return v
-	end):getdefinitions()[1])
-	VecT.metamethods.__mul:setinlined(true)
-	VecT.metamethods.__div = terra(v1: VecT, s: real)
-		var v : VecT
-		[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
-			function(a, b) return `a/b end)]
-		return v
-	end
-	VecT.metamethods.__div:adddefinition((terra(v1: VecT, v2: VecT)
-		var v: VecT
-		[entryList(v)] = [zip(entryList(v1), entryList(v2),
-			function(a, b) return `a/b end)]
-		return v
-	end):getdefinitions()[1])
-	VecT.metamethods.__div:setinlined(true)
+	VecT.metamethods.__mul = terralib.overloadedfunction('Vec.__mul', {
+		terra(v1: VecT, s: real)
+			var v : VecT
+			[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
+				function(a, b) return `a*b end)]
+			return v
+		end,
+		terra(s: real, v1: VecT)
+			var v : VecT
+			[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
+				function(a, b) return `a*b end)]
+			return v
+		end,
+		terra(v1: VecT, v2: VecT)
+			var v : VecT
+			[entryList(v)] = [zip(entryList(v1), entryList(v2),
+				function(a, b) return `a*b end)]
+			return v
+		end
+	})
+	util.setinlinedOverloaded(VecT.metamethods.__mul, true)
+	VecT.metamethods.__div = terralib.overloadedfunction('Vec.__div', {
+		terra(v1: VecT, s: real)
+			var v : VecT
+			[entryList(v)] = [zip(entryList(v1), replicate(s, dim),
+				function(a, b) return `a/b end)]
+			return v
+		end,
+		terra(v1: VecT, v2: VecT)
+			var v: VecT
+			[entryList(v)] = [zip(entryList(v1), entryList(v2),
+				function(a, b) return `a/b end)]
+			return v
+		end
+	})
+	util.setinlinedOverloaded(VecT.metamethods.__div, true)
 	VecT.metamethods.__unm = terra(v1: VecT)
 		var v : VecT
 		[entryList(v)] = [wrap(entryList(v1), function(e) return `-e end)]
@@ -147,79 +156,75 @@ Vec = S.memoize(function(real, dim, GPU)
 	VecT.metamethods.__unm:setinlined(true)
 
 	-- Comparison operators
-	VecT.metamethods.__eq = terra(v1: VecT, v2: VecT)
-		return [reduce(zip(entryList(v1), entryList(v2),
-						   function(a,b) return `a == b end),
-					   function(a,b) return `a and b end)]
-	end
-	VecT.metamethods.__eq:adddefinition((terra(v1: VecT, s: real)
-		return [reduce(zip(entryList(v1), replicate(s, dim),
-						   function(a,b) return `a == b end),
-					   function(a,b) return `a and b end)]
-	end):getdefinitions()[1])
-	VecT.metamethods.__gt = terra(v1: VecT, v2: VecT)
-		return [reduce(zip(entryList(v1), entryList(v2),
-						   function(a,b) return `a > b end),
-					   function(a,b) return `a and b end)]
-	end
-	VecT.metamethods.__gt:adddefinition((terra(v1: VecT, s: real)
-		return [reduce(zip(entryList(v1), replicate(s, dim),
-						   function(a,b) return `a > b end),
-					   function(a,b) return `a and b end)]
-	end):getdefinitions()[1])
-	VecT.metamethods.__ge = terra(v1: VecT, v2: VecT)
-		return [reduce(zip(entryList(v1), entryList(v2),
-						   function(a,b) return `a >= b end),
-					   function(a,b) return `a and b end)]
-	end
-	VecT.metamethods.__ge:adddefinition((terra(v1: VecT, s: real)
-		return [reduce(zip(entryList(v1), replicate(s, dim),
-						   function(a,b) return `a >= b end),
-					   function(a,b) return `a and b end)]
-	end):getdefinitions()[1])
-	VecT.metamethods.__lt = terra(v1: VecT, v2: VecT)
-		return [reduce(zip(entryList(v1), entryList(v2),
-						   function(a,b) return `a < b end),
-					   function(a,b) return `a and b end)]
-	end
-	VecT.metamethods.__lt:adddefinition((terra(v1: VecT, s: real)
-		return [reduce(zip(entryList(v1), replicate(s, dim),
-						   function(a,b) return `a < b end),
-					   function(a,b) return `a and b end)]
-	end):getdefinitions()[1])
-	VecT.metamethods.__le = terra(v1: VecT, v2: VecT)
-		return [reduce(zip(entryList(v1), entryList(v2),
-						   function(a,b) return `a <= b end),
-					   function(a,b) return `a and b end)]
-	end
-	VecT.metamethods.__le:adddefinition((terra(v1: VecT, s: real)
-		return [reduce(zip(entryList(v1), replicate(s, dim),
-						   function(a,b) return `a <= b end),
-					   function(a,b) return `a and b end)]
-	end):getdefinitions()[1])
+	VecT.metamethods.__eq = terralib.overloadedfunction('Vec.__eq', {
+		terra(v1: VecT, v2: VecT)
+			return [reduce(zip(entryList(v1), entryList(v2),
+							   function(a,b) return `a == b end),
+						   function(a,b) return `a and b end)]
+		end,
+		terra(v1: VecT, s: real)
+			return [reduce(zip(entryList(v1), replicate(s, dim),
+							   function(a,b) return `a == b end),
+						   function(a,b) return `a and b end)]
+		end
+	})
+	VecT.metamethods.__gt = terralib.overloadedfunction('Vec.__gt', {
+		terra(v1: VecT, v2: VecT)
+			return [reduce(zip(entryList(v1), entryList(v2),
+							   function(a,b) return `a > b end),
+						   function(a,b) return `a and b end)]
+		end,
+		terra(v1: VecT, s: real)
+			return [reduce(zip(entryList(v1), replicate(s, dim),
+							   function(a,b) return `a > b end),
+						   function(a,b) return `a and b end)]
+		end
+	})
+	VecT.metamethods.__ge = terralib.overloadedfunction('Vec.__ge', {
+		terra(v1: VecT, v2: VecT)
+			return [reduce(zip(entryList(v1), entryList(v2),
+							   function(a,b) return `a >= b end),
+						   function(a,b) return `a and b end)]
+		end,
+		terra(v1: VecT, s: real)
+			return [reduce(zip(entryList(v1), replicate(s, dim),
+							   function(a,b) return `a >= b end),
+						   function(a,b) return `a and b end)]
+		end
+	})
+	VecT.metamethods.__lt = terralib.overloadedfunction('Vec.__lt', {
+		terra(v1: VecT, v2: VecT)
+			return [reduce(zip(entryList(v1), entryList(v2),
+							   function(a,b) return `a < b end),
+						   function(a,b) return `a and b end)]
+		end,
+		terra(v1: VecT, s: real)
+			return [reduce(zip(entryList(v1), replicate(s, dim),
+							   function(a,b) return `a < b end),
+						   function(a,b) return `a and b end)]
+		end
+	})
+	VecT.metamethods.__le = terralib.overloadedfunction('Vec.__le', {
+		terra(v1: VecT, v2: VecT)
+			return [reduce(zip(entryList(v1), entryList(v2),
+							   function(a,b) return `a <= b end),
+						   function(a,b) return `a and b end)]
+		end,
+		terra(v1: VecT, s: real)
+			return [reduce(zip(entryList(v1), replicate(s, dim),
+							   function(a,b) return `a <= b end),
+						   function(a,b) return `a and b end)]
+		end
+	})
 
 	-- Other mathematical operations
+
 	terra VecT:dot(v: VecT)
 		return [reduce(zip(entryList(self), entryList(v), function(a,b) return `a*b end),
 					   function(a,b) return `a+b end)]
 	end
 	VecT.methods.dot:setinlined(true)
-	terra VecT:angleBetween(v: VecT)
-		var selfnorm = self:norm()
-		if selfnorm == 0.0 then return real(0.0) end
-		var vnorm = v:norm()
-		if vnorm == 0.0 then return real(0.0) end
-		var nd = self:dot(v) / selfnorm / vnorm
-		-- Floating point error may lead to values outside of the bounds we expect
-		if nd <= -1.0 then
-			return real([math.pi])
-		elseif nd >= 1.0 then
-			return real(0.0)
-		else
-			return mlib.acos(nd)
-		end
-	end
-	VecT.methods.angleBetween:setinlined(true)
+
 	terra VecT:distSq(v: VecT)
 		return [reduce(wrap(zip(entryList(self), entryList(v),
 								function(a,b) return `a-b end),
@@ -254,6 +259,23 @@ Vec = S.memoize(function(real, dim, GPU)
 		return n
 	end
 
+	terra VecT:angleBetween(v: VecT)
+		var selfnorm = self:norm()
+		if selfnorm == 0.0 then return real(0.0) end
+		var vnorm = v:norm()
+		if vnorm == 0.0 then return real(0.0) end
+		var nd = self:dot(v) / selfnorm / vnorm
+		-- Floating point error may lead to values outside of the bounds we expect
+		if nd <= -1.0 then
+			return real([math.pi])
+		elseif nd >= 1.0 then
+			return real(0.0)
+		else
+			return mlib.acos(nd)
+		end
+	end
+	VecT.methods.angleBetween:setinlined(true)
+
 	local collinearThresh = 1e-8
 	terra VecT:collinear(other: VecT)
 		var n1 = self:norm()
@@ -263,11 +285,13 @@ Vec = S.memoize(function(real, dim, GPU)
 	VecT.methods.collinear:setinlined(true)
 
 	local planeThresh = 1e-8
-	terra VecT:inPlane(p: VecT, n: VecT) : bool
-		n:normalize()
-		return mlib.fabs((@self - p):dot(n)) < planeThresh
-	end
-	VecT.methods.inPlane:setinlined(true)
+	VecT.methods.inPlane = terralib.overloadedfunction('Vec.inPlane', {
+		terra(self: &VecT, p: VecT, n: VecT) : bool
+			n:normalize()
+			return mlib.fabs((@self - p):dot(n)) < planeThresh
+		end
+	})
+	util.setinlinedOverloaded(VecT.methods.inPlane, true)
 
 	terra VecT:projectToRay(p: VecT, d: VecT) : VecT
 		d:normalize()
@@ -291,12 +315,14 @@ Vec = S.memoize(function(real, dim, GPU)
 	end
 	VecT.methods.inverseLerp:setinlined(true)
 
-	terra VecT:projectToPlane(p: VecT, n: VecT) : VecT
-		n:normalize()
-		var vec = @self - p
-		return p + (vec - vec:dot(n)*n)
-	end
-	VecT.methods.projectToPlane:setinlined(true)
+	VecT.methods.projectToPlane = terralib.overloadedfunction('VecT.projectToPlane', {
+		terra(self: &VecT, p: VecT, n: VecT) : VecT
+			n:normalize()
+			var vec = @self - p
+			return p + (vec - vec:dot(n)*n)
+		end
+	})
+	util.setinlinedOverloaded(VecT.methods.projectToPlane, true)
 
 	-- Specific stuff for 2D Vectors
 	if dim == 2 then
@@ -340,21 +366,25 @@ Vec = S.memoize(function(real, dim, GPU)
 		end
 		VecT.methods.cross:setinlined(true)
 
-		terra VecT:inPlane(p1: VecT, p2: VecT, p3: VecT) : bool
-			var v1 = p2 - p1
-			var v2 = p3 - p1
-			var n = v1:cross(v2)
-			return self:inPlane(p1, n)
-		end
-		VecT.methods.inPlane:setinlined(true)
+		VecT.methods.inPlane:adddefinition(
+			terra(self: &VecT,p1: VecT, p2: VecT, p3: VecT) : bool
+				var v1 = p2 - p1
+				var v2 = p3 - p1
+				var n = v1:cross(v2)
+				return self:inPlane(p1, n)
+			end
+		)
+		util.setinlinedOverloaded(VecT.methods.inPlane, true)
 
-		terra VecT:projectToPlane(p1: VecT, p2: VecT, p3: VecT) : VecT
-			var v1 = p2 - p1
-			var v2 = p3 - p1
-			var n = v1:cross(v2)
-			return self:projectToPlane(p1, n)
-		end
-		VecT.methods.projectToPlane:setinlined(true)
+		VecT.methods.projectToPlane:adddefinition(
+			terra(self: &VecT, p1: VecT, p2: VecT, p3: VecT) : VecT
+				var v1 = p2 - p1
+				var v2 = p3 - p1
+				var n = v1:cross(v2)
+				return self:projectToPlane(p1, n)
+			end
+		)
+		util.setinlinedOverloaded(VecT.methods.projectToPlane, true)
 	end
 
 	terra VecT:distSqToLineSeg(a: VecT, b: VecT) : real
